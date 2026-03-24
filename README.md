@@ -15,21 +15,8 @@ cd cloudbees
 make install
 ```
 
-If `bee` is not found after install, add to PATH (one time):
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-> Tip: add the line above to `~/.bashrc` or `~/.cshrc` to make it permanent.
-
-### Troubleshooting
-
-| Error | Fix |
-|-------|-----|
-| `bee: command not found` | `export PATH="$HOME/.local/bin:$PATH"` |
-| `Permission denied` on `./data/` | `export CB_DB_PATH=/tmp/bee.db` |
-| `pip` broken | `pip3 install --target=./lib click httpx cryptography` |
+> `bee` is installed to `~/.local/bin/`. If not found, run:
+> `export PATH="$HOME/.local/bin:$PATH"` (add to `~/.bashrc` to make permanent)
 
 ---
 
