@@ -1,0 +1,164 @@
+from __future__ import annotations
+"""cb node — list, get, create, copy, delete, offline, online."""
+
+import click
+from cb.cli.formatters import format_table, format_kv, format_json
+
+
+@click.group("node")
+def node_group():
+    """Manage CloudBees agent nodes."""
+
+
+def _client(ctx):
+    from cb.services.auth_service import get_client
+    return get_client(
+        profile_name=ctx.obj.get("profile"),
+        password=ctx.obj.get("password"),
+        db_path=ctx.obj.get("db_path"),
+    )
+
+
+@node_group.command("list")
+@click.option("--output", "-o", default="table", type=click.Choice(["table", "json"]))
+@click.pass_context
+def cmd_list(ctx, output):
+    """List all agent nodes with online/offline status."""
+    from cb.services.node_service import list_nodes
+    try:
+        nodes = list_nodes(_client(ctx))
+        if output == "json":
+            click.echo(format_json([n.to_dict() for n in nodes]))
+            return
+        headers = ["Name", "Status", "Executors", "Labels", "Description"]
+        rows = [
+            [
+                n.name[:28],
+                "OFFLINE" if n.offline else "ONLINE",
+                str(n.num_executors),
+                (n.labels or "")[:20],
+                (n.description or "")[:25],
+            ]
+            for n in nodes
+        ]
+        click.echo(format_table(headers, rows))
+        click.echo(f"  {len(nodes)} node(s)")
+    except Exception as exc:
+        click.echo(f"[ERROR] {exc}", err=True)
+        raise SystemExit(1)
+
+
+@node_group.command("get")
+@click.argument("name")
+@click.option("--output", "-o", default="table", type=click.Choice(["table", "json"]))
+@click.pass_context
+def cmd_get(ctx, name, output):
+    """Show node details."""
+    from cb.services.node_service import get_node
+    try:
+        node = get_node(_client(ctx), name)
+        data = {
+            "name": node.name,
+            "offline": node.offline,
+            "executors": node.num_executors,
+            "labels": node.labels,
+            "launcher": node.launcher_type,
+            "remote_dir": node.remote_dir,
+            "description": node.description,
+        }
+        if output == "json":
+            click.echo(format_json(data))
+        else:
+            click.echo(format_kv(data))
+    except Exception as exc:
+        click.echo(f"[ERROR] {exc}", err=True)
+        raise SystemExit(1)
+
+
+@node_group.command("create")
+@click.option("--name", required=True, help="Node name")
+@click.option("--remote-dir", required=True, help="Remote work directory (e.g. /home/jenkins)")
+@click.option("--executors", default=1, show_default=True, help="Number of executors")
+@click.option("--labels", default="", help="Space-separated labels")
+@click.option("--description", default="", help="Description")
+@click.pass_context
+def cmd_create(ctx, name, remote_dir, executors, labels, description):
+    """Create a new Permanent Agent (JNLP/Inbound launcher)."""
+    from cb.services.node_service import create_permanent_node
+    try:
+        create_permanent_node(
+            _client(ctx),
+            name=name,
+            remote_dir=remote_dir,
+            num_executors=executors,
+            labels=labels,
+            desc=description,
+        )
+        click.echo(f"[OK] Node '{name}' created.")
+        click.echo(f"  Connect it via: Manage Jenkins -> Nodes -> {name} -> Agent command")
+    except Exception as exc:
+        click.echo(f"[ERROR] {exc}", err=True)
+        raise SystemExit(1)
+
+
+@node_group.command("copy")
+@click.argument("source_name")
+@click.argument("new_name")
+@click.pass_context
+def cmd_copy(ctx, source_name, new_name):
+    """Copy an existing node's configuration to a new node."""
+    from cb.services.node_service import copy_node
+    try:
+        copy_node(_client(ctx), source_name, new_name)
+        click.echo(f"[OK] Node '{new_name}' created (copied from '{source_name}').")
+    except Exception as exc:
+        click.echo(f"[ERROR] {exc}", err=True)
+        raise SystemExit(1)
+
+
+@node_group.command("delete")
+@click.argument("name")
+@click.option("--yes", is_flag=True, default=False, help="Skip confirmation")
+@click.pass_context
+def cmd_delete(ctx, name, yes):
+    """Delete a node."""
+    from cb.services.node_service import delete_node
+    try:
+        if not yes:
+            click.confirm(f"Delete node '{name}'?", abort=True)
+        delete_node(_client(ctx), name)
+        click.echo(f"[OK] Node '{name}' deleted.")
+    except click.Abort:
+        click.echo("Cancelled.")
+    except Exception as exc:
+        click.echo(f"[ERROR] {exc}", err=True)
+        raise SystemExit(1)
+
+
+@node_group.command("offline")
+@click.argument("name")
+@click.option("--reason", default="", help="Reason for taking offline")
+@click.pass_context
+def cmd_offline(ctx, name, reason):
+    """Mark a node as offline."""
+    from cb.services.node_service import toggle_offline
+    try:
+        toggle_offline(_client(ctx), name, reason)
+        click.echo(f"[OK] Node '{name}' toggled offline.")
+    except Exception as exc:
+        click.echo(f"[ERROR] {exc}", err=True)
+        raise SystemExit(1)
+
+
+@node_group.command("online")
+@click.argument("name")
+@click.pass_context
+def cmd_online(ctx, name):
+    """Bring a node back online (toggle offline off)."""
+    from cb.services.node_service import toggle_offline
+    try:
+        toggle_offline(_client(ctx), name, "")
+        click.echo(f"[OK] Node '{name}' toggled online.")
+    except Exception as exc:
+        click.echo(f"[ERROR] {exc}", err=True)
+        raise SystemExit(1)

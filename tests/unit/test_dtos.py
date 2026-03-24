@@ -1,7 +1,7 @@
 """Tests for DTOs."""
 
 import pytest
-from cb.dtos.job import JobDTO, JobRunDTO
+from cb.dtos.job import JobDTO, BuildDTO
 from cb.dtos.pipeline import PipelineDTO
 from cb.dtos.user import UserDTO
 
