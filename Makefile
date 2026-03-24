@@ -20,8 +20,8 @@ install:
 	 pip3 install --target=./lib $(DEPS) -q 2>/dev/null || \
 	 echo "[WARN] pip failed — run: pip install --target=./lib $(DEPS)"
 	@mkdir -p $(BIN_DIR)
-	@printf '#!/bin/sh\n$(PYTHON) $(ABS_PATH)/run.py "$$@"\n' > beewrap
-	@chmod +x beewrap && cp beewrap $(BIN_DIR)/bee
+	@printf '#!/bin/sh\n$(PYTHON) $(ABS_PATH)/run.py "$$@"\n' > $(BIN_DIR)/bee
+	@chmod +x $(BIN_DIR)/bee
 	@echo ""
 	@echo "  [OK] bee installed to $(BIN_DIR)/bee"
 	@echo ""
@@ -30,7 +30,7 @@ install:
 	@echo ""
 
 uninstall:
-	@rm -f $(BIN_DIR)/bee beewrap && echo "[OK] Removed bee"
+	@rm -f $(BIN_DIR)/bee && echo "[OK] Removed bee"
 
 run:
 	$(PYTHON) run.py $(ARGS)
