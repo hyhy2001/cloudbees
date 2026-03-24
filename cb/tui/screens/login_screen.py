@@ -37,22 +37,16 @@ def _sep() -> str:
 
 
 def _draw_field(stdscr, y: int, cx: int, field: dict, is_active: bool) -> None:
-    """Draw a single labeled input field."""
+    """Draw a single labeled input field — same style regardless of active."""
     marker     = ">" if is_active else " "
-    label_attr = curses.color_pair(PAIR_SELECTED) | curses.A_BOLD if is_active \
-                 else curses.color_pair(PAIR_DIM)
-    box_attr   = curses.color_pair(PAIR_SELECTED) | curses.A_BOLD if is_active \
-                 else curses.color_pair(PAIR_NORMAL)
-    val_attr   = curses.color_pair(PAIR_INPUT) | (curses.A_BOLD if is_active else 0)
+    label_attr = curses.color_pair(PAIR_DIM)
+    box_attr   = curses.color_pair(PAIR_NORMAL)
+    val_attr   = curses.color_pair(PAIR_INPUT)
 
-    # Label row inside the outer box
     safe_addstr(stdscr, y,     cx, _row(f"{marker} {field['label']}:"), label_attr)
-
-    # Input field: single-line box sharing indent with BOX content
-    display = "*" * len(field["value"]) if field["secret"] else field["value"]
-    display = display[-(INNER):] if len(display) > INNER else display
-
     safe_addstr(stdscr, y + 1, cx, f"|  +{'-' * INNER}+  |", box_attr)
+    display = "*" * len(field["value"]) if field["secret"] else field["value"]
+    display = display[-INNER:] if len(display) > INNER else display
     safe_addstr(stdscr, y + 2, cx, f"|  |{display:<{INNER}}|  |", val_attr)
     safe_addstr(stdscr, y + 3, cx, f"|  +{'-' * INNER}+  |", box_attr)
 

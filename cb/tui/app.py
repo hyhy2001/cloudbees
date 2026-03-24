@@ -8,7 +8,7 @@ from pathlib import Path
 from cb.tui.colors import init_colors, PAIR_NORMAL, PAIR_STATUS
 from cb.tui.keys import (
     KEY_QUIT, KEY_TAB, SCREEN_KEYS, KEY_REFRESH, KEY_CACHE,
-    KEY_LOGIN, HINTS, SCREEN_COUNT,
+    KEY_LOGIN, KEY_LOGOUT, HINTS, SCREEN_COUNT,
     KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ENTER,
 )
 from cb.tui.widgets.widgets import draw_header, draw_sidebar, draw_statusbar
@@ -56,21 +56,22 @@ def main(
     client = None
     active_profile = None
 
-    # Try loading existing credentials
+    # Try loading existing session (no password needed)
     try:
-        import os
-        pwd = password or os.environ.get("CB_PASSWORD")
-        if pwd:
-            from cb.services.auth_service import get_client
-            from cb.db.connection import init_db
+        from cb.services.session import load_session
+        from cb.db.connection import init_db
+        init_db(db_path)
+        session = load_session(db_path)
+        if session and session.get("server_url"):
+            from cb.api.client import CloudBeesClient
+            client = CloudBeesClient(session["server_url"], session["raw_token"], db_path=db_path)
             from cb.db.repositories.profile_repo import get_default_profile
-            init_db(db_path)
-            client = get_client(profile_name=profile, password=pwd, db_path=db_path)
-            p = get_default_profile(db_path)
-            if p:
-                active_profile = p
+            active_profile = get_default_profile(db_path)
+            status_msg = f"  Logged in as {session['username']}"
+        else:
+            status_msg = "  Not logged in. Press 'L' to login."
     except Exception:
-        pass
+        status_msg = "  Not logged in. Press 'L' to login."
 
     # Screen objects
     from cb.tui.screens.screens import (
@@ -209,6 +210,15 @@ def main(
             _reload_current()
             continue
 
+        # ── Logout ────────────────────────────────────────────────
+        if ch == KEY_LOGOUT:
+            from cb.services.session import clear_session
+            clear_session(db_path)
+            client = None
+            active_profile = None
+            status_msg = "  Logged out. Session cleared."
+            continue
+
         # ── Refresh / cache clear ────────────────────────────────
         if ch == KEY_REFRESH:
             from cb.cache.manager import clear_all
@@ -230,7 +240,9 @@ def main(
             result = show_login(stdscr, existing_url=url_hint)
             if result:
                 try:
-                    from cb.services.auth_service import login, get_client
+                    from cb.services.auth_service import login
+                    from cb.services.session import load_session
+                    from cb.api.client import CloudBeesClient
                     from cb.db.repositories.profile_repo import get_default_profile
                     p = login(
                         server_url=result["url"],
@@ -239,11 +251,12 @@ def main(
                         profile_name=profile or "default",
                         db_path=db_path,
                     )
-                    client = get_client(
-                        profile_name=p.name,
-                        password=result["password"],
-                        db_path=db_path,
-                    )
+                    # Session saved by login() — load it without password
+                    session = load_session(db_path)
+                    if session:
+                        client = CloudBeesClient(
+                            session["server_url"], session["raw_token"], db_path=db_path
+                        )
                     active_profile = p
                     status_msg = f"  Logged in as {p.username}"
                     _reload_current()

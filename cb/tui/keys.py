@@ -33,8 +33,9 @@ KEY_SEARCH  = ord('/')
 KEY_REFRESH = curses.KEY_F5
 KEY_CACHE   = ord('C')
 KEY_LOGIN   = ord('L')
+KEY_LOGOUT  = ord('X')
 KEY_TAB     = ord('\t')
 KEY_HELP    = ord('?')
 
 # Status bar hints
-HINTS = "q:Quit  Tab/Arrow:Navigate  1-7:Screen  Enter:Select  F5:Refresh  L:Login"
+HINTS = "q:Quit  Tab/Arrow:Navigate  1-7:Screen  Enter:Select  L:Login  X:Logout  F5:Refresh"

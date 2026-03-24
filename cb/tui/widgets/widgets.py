@@ -59,6 +59,7 @@ MENU_ITEMS = [
     "[5] Jobs",
     "[6] Users",
     "[7] System",
+    "[-] Logout",
 ]
 
 
