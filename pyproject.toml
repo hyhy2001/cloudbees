@@ -3,8 +3,8 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cloudbees-cb"
-version = "0.1.0"
+name = "cloudbees-cli"
+version = "0.2.0"
 description = "CloudBees CLI + TUI tool — manage CloudBees from your terminal"
 readme = "README.md"
 requires-python = ">=3.8"
