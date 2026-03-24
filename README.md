@@ -10,17 +10,130 @@ Two modes: **CLI** (scriptable/automatable) and **TUI** (interactive ncurses int
 
 ## Install
 
+### Bước 1 — Clone repository
+
 ```bash
 git clone https://github.com/hyhy2001/cloudbees.git
 cd cloudbees
-pip install -e .
 ```
 
-Or with dev dependencies (pytest):
+### Bước 2 — Cài đặt dependencies
+
+> **Khuyến nghị:** Dùng virtual environment để tránh xung đột với package hệ thống.
+
+**Cách A — Dùng virtualenv (khuyến nghị, tránh lỗi permission)**
 
 ```bash
-pip install -e ".[dev]"
+# Tạo virtual environment
+python3 -m venv ~/.cb_env
+
+# Kích hoạt
+source ~/.cb_env/bin/activate   # Linux / macOS
+# hoặc: ~/.cb_env/bin/activate (nếu shell không nhận lệnh source)
+
+# Cài package
+pip install -e .
+
+# Kiểm tra
+cb --version
 ```
+
+> Mỗi lần mở terminal mới, chạy `source ~/.cb_env/bin/activate` trước khi dùng `cb`.
+
+**Cách B — Cài cho user hiện tại (không cần sudo)**
+
+```bash
+pip install --user -e .
+
+# Đảm bảo ~/.local/bin nằm trong PATH
+export PATH="$HOME/.local/bin:$PATH"
+# Thêm dòng trên vào ~/.bashrc hoặc ~/.zshrc để tự động load
+
+cb --version
+```
+
+**Cách C — Chạy trực tiếp không cần cài (mọi lúc)**
+
+```bash
+# Không cần cài gì thêm, chạy luôn bằng python3
+python3 -m cb.main --help
+python3 -m cb.main job list
+python3 -m cb.main --ui
+```
+
+> Đây là cách dùng an toàn nhất trên server công ty khi không có quyền cài package.
+
+### Bước 3 — Kiểm tra cài đặt
+
+```bash
+cb --version
+# cb, version 0.2.0
+
+cb --help
+# Hiển thị danh sách commands đầy đủ
+```
+
+---
+
+### Troubleshooting cài đặt
+
+**Lỗi: `Permission denied` khi chạy `pip install -e .`**
+
+```bash
+# Dùng --user flag thay vì cài system-wide
+pip install --user -e .
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+**Lỗi: `Permission denied` khi tạo `~/.cb/cb.db`**
+
+```bash
+# Kiểm tra quyền thư mục home
+ls -la ~/
+
+# Hoặc chỉ định DB path khác có quyền ghi
+export CB_DB_PATH="/tmp/cb.db"
+cb --version   # thử lại
+```
+
+**Lỗi: `cb: command not found` sau khi cài**
+
+```bash
+# Kiểm tra PATH
+which cb || echo "cb not in PATH"
+
+# Dùng python3 -m cb.main thay thế
+python3 -m cb.main --help
+
+# Hoặc thêm vào PATH (nếu dùng --user)
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+**Lỗi: pip hệ thống bị broken (OpenSSL conflict,...)**
+
+```bash
+# Dùng virtualenv thay thế (không phụ thuộc pip hệ thống)
+python3 -m venv ~/.cb_env
+~/.cb_env/bin/pip install -e .
+~/.cb_env/bin/cb --version
+
+# Hoặc tạo alias
+echo 'alias cb="~/.cb_env/bin/cb"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+---
+
+### Update
+
+```bash
+cd cloudbees
+git pull
+pip install -e .    # (hoặc cách đã dùng khi cài lần đầu)
+cb --version
+```
+
+---
 
 ## Quick Start
 
