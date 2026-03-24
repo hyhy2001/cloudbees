@@ -5,15 +5,33 @@ import curses
 
 from cb.tui.colors import (
     PAIR_TITLE, PAIR_ERROR, PAIR_HEADER,
-    PAIR_NORMAL, PAIR_DIM, PAIR_INPUT, PAIR_SELECTED,
+    PAIR_NORMAL, PAIR_DIM, PAIR_INPUT,
 )
 from cb.tui.widgets.widgets import safe_addstr
 from cb.tui.keys import KEY_ENTER, KEY_ESC
 
-# Total box width (including the two | walls)
-BOX_W  = 56
-# Inner content width = BOX_W - 4  (walls + 1 space padding each side)
-INNER  = BOX_W - 4
+# ── Layout constants ──────────────────────────────────────────────────────────
+BOX_W   = 58          # total box width  (includes the two | walls)
+PAD     = 2           # spaces between outer wall and content
+ROW_W   = BOX_W - 2 - 2 * PAD   # text width inside a _row()  => 52
+FIELD_W = BOX_W - 2 * PAD - 4   # inner input field width     => 50
+
+
+def _sep() -> str:
+    return "+" + "-" * (BOX_W - 2) + "+"
+
+
+def _row(text: str = "") -> str:
+    """Outer box content row, padded to BOX_W chars."""
+    return "|" + " " * PAD + f"{text:<{ROW_W}}" + " " * PAD + "|"
+
+
+def _field_sep() -> str:
+    return "|" + " " * PAD + "+" + "-" * FIELD_W + "+" + " " * PAD + "|"
+
+
+def _field_val(text: str) -> str:
+    return "|" + " " * PAD + "|" + f"{text:<{FIELD_W}}" + "|" + " " * PAD + "|"
 
 
 def _fill_bg(stdscr) -> None:
@@ -27,28 +45,63 @@ def _fill_bg(stdscr) -> None:
             pass
 
 
-def _row(content: str) -> str:
-    """Pad content to fill a full box row: |  content  |"""
-    return f"|  {content:<{INNER}}  |"
+def _draw_form(stdscr, fields: list, active: int, error: str) -> list[int]:
+    """Draw the login box. Returns list of value-row y positions for each field."""
+    rows, cols = stdscr.getmaxyx()
+    cx = max(0, cols // 2 - BOX_W // 2)
 
+    # total rows: sep + title + sep + blank + (label+sep+val+sep+blank)*3 + err + hint + sep
+    box_h = 3 + 1 + len(fields) * 5 + 2 + 1
+    cy = max(0, rows // 2 - box_h // 2)
 
-def _sep() -> str:
-    return "+" + "-" * (BOX_W - 2) + "+"
+    _fill_bg(stdscr)
 
+    ba = curses.color_pair(PAIR_HEADER) | curses.A_BOLD   # border
+    da = curses.color_pair(PAIR_DIM)                       # dim rows
+    ha = curses.color_pair(PAIR_TITLE)                     # hint
+    ea = curses.color_pair(PAIR_ERROR)  | curses.A_BOLD   # error
+    ia = curses.color_pair(PAIR_INPUT)                     # input value
+    na = curses.color_pair(PAIR_NORMAL)                    # normal
 
-def _draw_field(stdscr, y: int, cx: int, field: dict, is_active: bool) -> None:
-    """Draw a single labeled input field — same style regardless of active."""
-    marker     = ">" if is_active else " "
-    label_attr = curses.color_pair(PAIR_DIM)
-    box_attr   = curses.color_pair(PAIR_NORMAL)
-    val_attr   = curses.color_pair(PAIR_INPUT)
+    y = cy
 
-    safe_addstr(stdscr, y,     cx, _row(f"{marker} {field['label']}:"), label_attr)
-    safe_addstr(stdscr, y + 1, cx, f"|  +{'-' * INNER}+  |", box_attr)
-    display = "*" * len(field["value"]) if field["secret"] else field["value"]
-    display = display[-INNER:] if len(display) > INNER else display
-    safe_addstr(stdscr, y + 2, cx, f"|  |{display:<{INNER}}|  |", val_attr)
-    safe_addstr(stdscr, y + 3, cx, f"|  +{'-' * INNER}+  |", box_attr)
+    # Top border
+    safe_addstr(stdscr, y, cx, _sep(), ba); y += 1
+
+    # Title
+    title = "bee - Login to CloudBees"
+    safe_addstr(stdscr, y, cx, _row(title.center(ROW_W)), ba | curses.A_BOLD); y += 1
+    safe_addstr(stdscr, y, cx, _sep(), ba); y += 1
+    safe_addstr(stdscr, y, cx, _row(), da); y += 1
+
+    # Fields
+    val_rows = []
+    for i, field in enumerate(fields):
+        marker = ">" if i == active else " "
+        safe_addstr(stdscr, y, cx,
+                    _row(f"{marker} {field['label']}:"), da); y += 1
+        safe_addstr(stdscr, y, cx, _field_sep(), na); y += 1
+
+        display = "*" * len(field["value"]) if field["secret"] else field["value"]
+        display = display[-FIELD_W:] if len(display) > FIELD_W else display
+        val_rows.append(y)
+        safe_addstr(stdscr, y, cx, _field_val(display), ia); y += 1
+
+        safe_addstr(stdscr, y, cx, _field_sep(), na); y += 1
+        safe_addstr(stdscr, y, cx, _row(), da); y += 1
+
+    # Error / hint
+    if error:
+        safe_addstr(stdscr, y, cx, _row(f"[!] {error}"), ea)
+    else:
+        safe_addstr(stdscr, y, cx, _row(), da)
+    y += 1
+
+    safe_addstr(stdscr, y, cx,
+        _row("Tab=Next  Up=Prev  Enter=Login  Esc=Cancel".center(ROW_W)), ha); y += 1
+    safe_addstr(stdscr, y, cx, _sep(), ba)
+
+    return val_rows
 
 
 def show_login(stdscr, existing_url: str = "") -> dict | None:
@@ -66,65 +119,17 @@ def show_login(stdscr, existing_url: str = "") -> dict | None:
     error  = ""
 
     while True:
+        val_rows = _draw_form(stdscr, fields, active, error)
+
+        # ── Cursor ──
         rows, cols = stdscr.getmaxyx()
         cx = max(0, cols // 2 - BOX_W // 2)
-
-        # Box height: title(3) + spacer(1) + 3 fields * 5 rows + spacer(1) + hint(1) + bottom(1)
-        box_h = 3 + 1 + len(fields) * 5 + 2 + 1
-        cy = max(0, rows // 2 - box_h // 2)
-
-        # Background
-        _fill_bg(stdscr)
-
-        border_attr = curses.color_pair(PAIR_HEADER) | curses.A_BOLD
-        hint_attr   = curses.color_pair(PAIR_TITLE)
-        dim_attr    = curses.color_pair(PAIR_DIM)
-
-        y = cy
-
-        # ── Top border ──
-        safe_addstr(stdscr, y, cx, _sep(), border_attr); y += 1
-
-        # ── Title ──
-        title = "  bee - Login to CloudBees  "
-        safe_addstr(stdscr, y, cx, _row(title.center(INNER)), border_attr | curses.A_BOLD); y += 1
-        safe_addstr(stdscr, y, cx, _sep(), border_attr); y += 1
-
-        # ── Spacer ──
-        safe_addstr(stdscr, y, cx, _row(""), dim_attr); y += 1
-
-        # ── Fields ──
-        field_y_positions = []
-        for i, field in enumerate(fields):
-            field_y_positions.append(y)
-            _draw_field(stdscr, y, cx, field, is_active=(i == active))
-            safe_addstr(stdscr, y + 4, cx, _row(""), dim_attr)
-            y += 5
-
-        # ── Error / hint ──
-        if error:
-            safe_addstr(stdscr, y, cx,
-                _row(f"[!] {error}"),
-                curses.color_pair(PAIR_ERROR) | curses.A_BOLD)
-        else:
-            safe_addstr(stdscr, y, cx, _row(""), dim_attr)
-        y += 1
-
-        safe_addstr(stdscr, y, cx,
-            _row("Tab=Next  Up=Prev  Enter=Login  Esc=Cancel"),
-            hint_attr); y += 1
-
-        # ── Bottom border ──
-        safe_addstr(stdscr, y, cx, _sep(), border_attr)
-
-        # ── Cursor inside active field value ──
-        val_y = field_y_positions[active] + 2
         display = fields[active]["value"]
         if fields[active]["secret"]:
             display = "*" * len(display)
-        val_x = cx + 3 + min(len(display), INNER)
+        cursor_x = cx + PAD + 1 + min(len(display), FIELD_W)  # inside |  |...|
         try:
-            stdscr.move(val_y, val_x)
+            stdscr.move(val_rows[active], cursor_x)
         except curses.error:
             pass
 
