@@ -27,17 +27,22 @@ cd cloudbees
 # Tạo virtual environment trong thư mục hiện tại
 python3 -m venv .venv
 
-# Kích hoạt
-source .venv/bin/activate   # Linux / macOS
+# Kích hoạt — tùy theo shell
+source .venv/bin/activate        # bash / zsh (phổ biến)
+source .venv/bin/activate.csh    # csh / tcsh  (nếu bị lỗi "badly placed")
 
-# Cài package
-pip install -e .
+# Hoặc bỏ qua activate, dùng đường dẫn trực tiếp (luôn hoạt động)
+.venv/bin/pip install -e .
+.venv/bin/cb --version
 
-# Kiểm tra
-cb --version
+# Tạo alias cho tiện (thêm vào ~/.bashrc hoặc ~/.cshrc)
+alias cb="$(pwd)/.venv/bin/cb"   # bash/zsh
+alias cb '$(pwd)/.venv/bin/cb'   # csh/tcsh
 ```
 
-> Mỗi lần mở terminal mới, chạy `source .venv/bin/activate` từ thư mục `cloudbees/`.
+> Mỗi lần mở terminal mới, chạy `source .venv/bin/activate` (bash) hoặc
+> `source .venv/bin/activate.csh` (csh/tcsh) từ thư mục `cloudbees/`.
+> Hoặc dùng alias để không cần activate.
 
 **Cách B — Cài cho user hiện tại (không cần sudo)**
 
