@@ -15,51 +15,47 @@ cd cloudbees
 make install
 ```
 
-> Dependencies are installed into `./lib/` — no virtualenv, no sudo, no system changes.
+`make install` does everything automatically:
+1. Installs dependencies into `./lib/` (no virtualenv, no sudo)
+2. Creates the `bee` command in `~/.local/bin/`
+3. Adds `~/.local/bin` to your PATH in `~/.bashrc` / `~/.zshrc` / `~/.cshrc`
 
-## Run
-
-```bash
-make run ARGS="login"
-make run ARGS="job list"
-make ui                     # TUI mode
-```
-
-Or call directly:
+Then activate in the current terminal (one time only):
 
 ```bash
-python3 run.py --help
-python3 run.py login
+source ~/.bashrc      # bash
+source ~/.zshrc       # zsh
+source ~/.cshrc       # csh/tcsh
 ```
 
-Create an alias for convenience:
+**That's it — `bee` is ready to use from any directory!**
 
 ```bash
-alias bee="python3 /path/to/cloudbees/run.py"   # bash/zsh
-alias bee 'python3 /path/to/cloudbees/run.py'   # csh/tcsh
+bee --help
+bee login
+bee job list
+bee --ui
 ```
-
-Then use `bee` as normal: `bee job list`, `bee --ui`, etc.
 
 ### Troubleshooting
 
 | Error | Fix |
 |-------|-----|
-| `Permission denied` on `./data/cb.db` | `export CB_DB_PATH=/tmp/cb.db` |
-| `bee: command not found` | Use `python3 run.py` or set the alias above |
-| `source activate` → "badly placed" | Server uses csh/tcsh — use the alias approach instead |
-| `pip` broken (OpenSSL...) | Try `pip3 install --target=./lib ...` or `python3 -m pip install --target=./lib ...` |
+| `bee: command not found` | Run `source ~/.bashrc` (or `~/.cshrc`) then retry |
+| `Permission denied` on `./data/` | `export CB_DB_PATH=/tmp/cb.db` |
+| `pip` broken (OpenSSL...) | Run manually: `pip3 install --target=./lib click httpx cryptography` |
+| csh/tcsh PATH not updated | Add manually: `setenv PATH ~/.local/bin:$PATH` to `~/.cshrc` |
 
 ---
 
 ## Quick Start
 
 ```bash
-python3 run.py login                          # Login (saves encrypted token)
-python3 run.py controller list               # List controllers
-python3 run.py controller select <name>      # Set active controller
-python3 run.py job list                      # List all jobs
-python3 run.py --ui                          # Launch TUI
+bee login                          # Login (saves encrypted token)
+bee controller list                # List controllers
+bee controller select <name>       # Set active controller
+bee job list                      # List all jobs
+bee --ui                          # Launch TUI
 ```
 
 ---
@@ -150,7 +146,7 @@ bee system cache-clear --expired-only  # Purge expired entries only
 ## TUI Mode
 
 ```bash
-python3 run.py --ui
+bee --ui
 ```
 
 **Sidebar navigation:**
