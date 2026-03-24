@@ -17,115 +17,119 @@ git clone https://github.com/hyhy2001/cloudbees.git
 cd cloudbees
 ```
 
-### Bước 2 — Cài đặt dependencies
+### Bước 2 — Cài đặt dependencies vào thư mục hiện tại
 
-> **Khuyến nghị:** Dùng virtual environment để tránh xung đột với package hệ thống.
-
-**Cách A — Dùng virtualenv (khuyến nghị, tránh lỗi permission)**
+> **Cách này không cần virtualenv, không cần sudo, không ảnh hưởng Python hệ thống.**
+> Dependencies được cài vào `./lib/` ngay trong thư mục project.
 
 ```bash
-# Tạo virtual environment trong thư mục hiện tại
-python3 -m venv .venv
-
-# Kích hoạt — tùy theo shell
-source .venv/bin/activate        # bash / zsh (phổ biến)
-source .venv/bin/activate.csh    # csh / tcsh  (nếu bị lỗi "badly placed")
-
-# Hoặc bỏ qua activate, dùng đường dẫn trực tiếp (luôn hoạt động)
-.venv/bin/pip install -e .
-.venv/bin/cb --version
-
-# Tạo alias cho tiện (thêm vào ~/.bashrc hoặc ~/.cshrc)
-alias cb="$(pwd)/.venv/bin/cb"   # bash/zsh
-alias cb '$(pwd)/.venv/bin/cb'   # csh/tcsh
+pip install --target=./lib click httpx cryptography
 ```
 
-> Mỗi lần mở terminal mới, chạy `source .venv/bin/activate` (bash) hoặc
-> `source .venv/bin/activate.csh` (csh/tcsh) từ thư mục `cloudbees/`.
-> Hoặc dùng alias để không cần activate.
+> Nếu `pip` bị lỗi quyền hoặc broken, thử dùng `pip3` hoặc `python3 -m pip`:
+> ```bash
+> python3 -m pip install --target=./lib click httpx cryptography
+> pip3 install --target=./lib click httpx cryptography
+> ```
 
-**Cách B — Cài cho user hiện tại (không cần sudo)**
+### Bước 3 — Chạy tool
+
+```bash
+# Dùng run.py (tự động nhận diện ./lib/)
+python3 run.py --help
+python3 run.py login
+python3 run.py job list
+python3 run.py --ui
+```
+
+Tạo alias để dùng lệnh ngắn hơn:
+
+```bash
+# bash / zsh
+alias cb="python3 $(pwd)/run.py"
+echo 'alias cb="python3 /path/to/cloudbees/run.py"' >> ~/.bashrc
+
+# csh / tcsh
+alias cb 'python3 /path/to/cloudbees/run.py'
+echo "alias cb 'python3 /path/to/cloudbees/run.py'" >> ~/.cshrc
+```
+
+Sau đó dùng bình thường:
+
+```bash
+cb --version
+cb login
+cb job list
+```
+
+### Bước 4 — Kiểm tra
+
+```bash
+python3 run.py --version
+# cb, version 0.2.0
+```
+
+> **Ghi chú:** Data (DB, token) được lưu tại `./data/cb.db` trong thư mục project.
+> Để đổi: `export CB_DB_PATH=/your/path/cb.db`
+
+---
+
+### Cách cài đặt thay thế
+
+**Dùng virtualenv (nếu thích isolate hoàn toàn)**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate        # bash/zsh
+source .venv/bin/activate.csh    # csh/tcsh  (nếu bị lỗi "badly placed")
+pip install -e .
+cb --version
+```
+
+**Cài cho user cá nhân (nếu pip hoạt động bình thường)**
 
 ```bash
 pip install --user -e .
-
-# Đảm bảo ~/.local/bin nằm trong PATH
 export PATH="$HOME/.local/bin:$PATH"
-# Thêm dòng trên vào ~/.bashrc hoặc ~/.zshrc để tự động load
-
 cb --version
 ```
-
-**Cách C — Chạy trực tiếp không cần cài (mọi lúc)**
-
-```bash
-# Không cần cài gì thêm, chạy luôn bằng python3
-python3 -m cb.main --help
-python3 -m cb.main job list
-python3 -m cb.main --ui
-```
-
-> Đây là cách dùng an toàn nhất trên server công ty khi không có quyền cài package.
-
-### Bước 3 — Kiểm tra cài đặt
-
-```bash
-cb --version
-# cb, version 0.2.0
-
-cb --help
-# Hiển thị danh sách commands đầy đủ
-```
-
-> **Ghi chú:** Data (DB, token) được lưu tại `./data/cb.db` trong thư mục hiện tại.
-> Để đổi sang nơi khác: `export CB_DB_PATH=/your/path/cb.db`
 
 ---
 
 ### Troubleshooting cài đặt
 
-**Lỗi: `Permission denied` khi chạy `pip install -e .`**
+**Lỗi: `Permission denied` khi chạy `pip install`**
 
 ```bash
-# Dùng --user flag thay vì cài system-wide
-pip install --user -e .
-export PATH="$HOME/.local/bin:$PATH"
+# Dùng --target thay vì cài system-wide (cách khuyến nghị)
+pip install --target=./lib click httpx cryptography
+python3 run.py --help
 ```
 
 **Lỗi: `Permission denied` khi tạo `./data/cb.db`**
 
 ```bash
-# Kiểm tra quyền thư mục hiện tại
-ls -la .
-
-# Hoặc chỉ định path khác
+# Chỉ định DB path khác có quyền ghi
 export CB_DB_PATH="/tmp/cb.db"
-cb --version   # thử lại
+python3 run.py --version
 ```
 
-**Lỗi: `cb: command not found` sau khi cài**
+**Lỗi: `cb: command not found`**
 
 ```bash
-# Kiểm tra PATH
-which cb || echo "cb not in PATH"
+# Dùng python3 run.py thay cho cb
+python3 run.py --help
 
-# Dùng python3 -m cb.main thay thế
-python3 -m cb.main --help
-
-# Hoặc thêm vào PATH (nếu dùng --user)
-export PATH="$HOME/.local/bin:$PATH"
+# Hoặc tạo alias (xem Bước 3)
 ```
 
-**Lỗi: pip hệ thống bị broken (OpenSSL conflict,...)**
+**Lỗi: pip hệ thống bị broken (OpenSSL, CacheControl...)**
 
 ```bash
-# Dùng virtualenv trong thư mục hiện tại
-python3 -m venv .venv
-.venv/bin/pip install -e .
-.venv/bin/cb --version
-
-# Hoặc tạo alias tiện dùng
-alias cb="$(pwd)/.venv/bin/cb"
+# --target không dùng pip hệ thống để install, chỉ cần pip có thể resolve packages
+# Thử các lệnh pip khác nhau:
+python3 -m pip install --target=./lib click httpx cryptography
+pip3 install --target=./lib click httpx cryptography
 ```
 
 ---
@@ -135,8 +139,8 @@ alias cb="$(pwd)/.venv/bin/cb"
 ```bash
 cd cloudbees
 git pull
-pip install -e .    # (hoặc cách đã dùng khi cài lần đầu)
-cb --version
+pip install --target=./lib click httpx cryptography   # (cập nhật deps nếu cần)
+python3 run.py --version
 ```
 
 ---

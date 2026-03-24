@@ -5,10 +5,11 @@ __pycache__/
 *.egg
 dist/
 build/
+lib/
+data/
 .env
 .venv/
 venv/
-data/
 *.db
 *.db-wal
 *.db-shm
