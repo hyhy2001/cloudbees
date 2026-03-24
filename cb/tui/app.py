@@ -40,7 +40,7 @@ def main(
 
     # Setup
     curses.curs_set(0)
-    stdscr.timeout(500)
+    stdscr.timeout(100)    # 100ms tick — snappy navigation, low CPU
     stdscr.keypad(True)
     has_256 = init_colors()
 
@@ -85,10 +85,17 @@ def main(
     jobs_scr  = JobsScreen()
     users_scr = UsersScreen()
 
-    def _reload_current():
+    # Track which screens have loaded data (lazy-load on first visit)
+    _loaded: set[int] = set()
+
+    def _reload_current(force: bool = False):
         nonlocal status_msg
         if client is None:
             status_msg = "  Not logged in. Press 'L' to login."
+            return
+        # Skip if already loaded and not forced
+        if not force and active_screen in _loaded:
+            status_msg = f"  {_SCREEN_NAMES[active_screen]}"
             return
         try:
             if active_screen == 1:
@@ -101,6 +108,7 @@ def main(
                 jobs_scr.load(client)
             elif active_screen == 5:
                 users_scr.load(client)
+            _loaded.add(active_screen)
             status_msg = f"  {_SCREEN_NAMES[active_screen]}"
         except Exception as exc:
             status_msg = f"  Error: {exc}"
@@ -226,6 +234,7 @@ def main(
             clear_session(db_path)
             client = None
             active_profile = None
+            _loaded.clear()
             status_msg = "  Logged out. Session cleared."
             continue
 
@@ -233,7 +242,8 @@ def main(
         if ch == KEY_REFRESH:
             from cb.cache.manager import clear_all
             clear_all(db_path)
-            _reload_current()
+            _loaded.discard(active_screen)   # force re-fetch this screen
+            _reload_current(force=True)
             status_msg = "  Refreshed."
             continue
 
@@ -268,6 +278,7 @@ def main(
                             session["server_url"], session["raw_token"], db_path=db_path
                         )
                     active_profile = p
+                    _loaded.clear()    # force fresh data on next screen visit
                     status_msg = f"  Logged in as {p.username}"
                     _reload_current()
                 except Exception as exc:
