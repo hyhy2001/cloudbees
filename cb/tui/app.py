@@ -18,7 +18,7 @@ _MIN_ROWS, _MIN_COLS = 24, 80
 _SIDEBAR_W = 16
 
 
-def main(stdscr, *, profile: str | None, password: str | None, db_path: Path | None) -> None:
+def main(stdscr, *, profile: str | None, controller: str | None, password: str | None, db_path: "Path | None") -> None:
     """curses.wrapper entry point."""
     # Terminal size guard
     rows, cols = stdscr.getmaxyx()
