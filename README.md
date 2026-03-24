@@ -12,17 +12,24 @@ A lightweight Python tool to manage CloudBees from your terminal — CLI for scr
 ```bash
 git clone https://github.com/hyhy2001/cloudbees.git
 cd cloudbees
-pip install --target=./lib click httpx cryptography
+make install
 ```
 
-> All dependencies are installed into `./lib/` — no virtualenv, no sudo, no system changes.
+> Dependencies are installed into `./lib/` — no virtualenv, no sudo, no system changes.
 
-Run the tool via `run.py`:
+## Run
+
+```bash
+make run ARGS="login"
+make run ARGS="job list"
+make ui                     # TUI mode
+```
+
+Or call directly:
 
 ```bash
 python3 run.py --help
 python3 run.py login
-python3 run.py job list
 ```
 
 Create an alias for convenience:
@@ -32,11 +39,12 @@ alias cb="python3 /path/to/cloudbees/run.py"   # bash/zsh
 alias cb 'python3 /path/to/cloudbees/run.py'   # csh/tcsh
 ```
 
+Then use `cb` as normal: `cb job list`, `cb --ui`, etc.
+
 ### Troubleshooting
 
 | Error | Fix |
 |-------|-----|
-| `Permission denied` on `pip install` | Use `pip install --target=./lib ...` (already in the command above) |
 | `Permission denied` on `./data/cb.db` | `export CB_DB_PATH=/tmp/cb.db` |
 | `cb: command not found` | Use `python3 run.py` or set the alias above |
 | `source activate` → "badly placed" | Server uses csh/tcsh — use the alias approach instead |
