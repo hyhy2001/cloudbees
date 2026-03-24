@@ -23,12 +23,22 @@ def save_profile(
     try:
         if is_default:
             conn.execute("UPDATE profiles SET is_default = 0")
-        conn.execute(
-            """INSERT OR REPLACE INTO profiles
-               (name, server_url, username, is_default, created_at)
-               VALUES (?, ?, ?, ?, ?)""",
-            (name, server_url.rstrip("/"), username, int(is_default), now),
+
+        # UPDATE existing profile (preserves id so token FK stays valid)
+        cur = conn.execute(
+            """UPDATE profiles
+               SET server_url = ?, username = ?, is_default = ?
+               WHERE name = ?""",
+            (server_url.rstrip("/"), username, int(is_default), name),
         )
+        if cur.rowcount == 0:
+            # New profile — INSERT
+            conn.execute(
+                """INSERT INTO profiles
+                   (name, server_url, username, is_default, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (name, server_url.rstrip("/"), username, int(is_default), now),
+            )
         conn.commit()
         return get_profile(name, db_path)
     finally:

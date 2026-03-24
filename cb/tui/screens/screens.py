@@ -35,50 +35,51 @@ _DASH_MENU = [
 
 class DashboardScreen:
     def __init__(self):
-        self.selected = 0
+        self.selected = 0          # kept for compat, not used for nav
 
     def draw(self, win, client: CloudBeesClient | None) -> None:
         win.erase()
         rows, cols = win.getmaxyx()
         y = 1
 
-        # Title
-        safe_addstr(win, y, 2, "  bee - CloudBees CLI",
-                    curses.color_pair(PAIR_TITLE) | curses.A_BOLD)
-        y += 1
-        safe_addstr(win, y, 2, "  " + "-" * 30, curses.color_pair(PAIR_DIM))
-        y += 2
-
         if client is None:
-            safe_addstr(win, y, 2, "  Not logged in. Press 'L' to login.",
-                        curses.color_pair(PAIR_WARNING) | curses.A_BOLD)
-            y += 2
+            safe_addstr(win, y, 2,
+                "  Not logged in.",
+                curses.color_pair(PAIR_WARNING) | curses.A_BOLD)
+            y += 1
+            safe_addstr(win, y, 2,
+                "  Press 'L' to open the login form.",
+                curses.color_pair(PAIR_DIM))
+            return
 
-        # Menu items
-        for i, (label, _) in enumerate(_DASH_MENU):
-            if i == self.selected:
-                attr = curses.color_pair(PAIR_SELECTED) | curses.A_BOLD
-                prefix = " >> "
-            else:
-                attr = curses.color_pair(PAIR_NORMAL)
-                prefix = "    "
-            safe_addstr(win, y + i, 4, f"{prefix}{label}", attr)
+        # Logged-in welcome
+        safe_addstr(win, y, 2, "  bee - CloudBees CLI",
+                    curses.color_pair(PAIR_TITLE) | curses.A_BOLD); y += 1
+        safe_addstr(win, y, 2, "  " + "-" * 40,
+                    curses.color_pair(PAIR_DIM)); y += 2
 
-        y += len(_DASH_MENU) + 1
-        safe_addstr(win, y, 2, "  " + "-" * 30, curses.color_pair(PAIR_DIM))
-        y += 1
-        safe_addstr(win, y, 2, "  Up/Down: navigate   Enter: open   q: quit",
-                    curses.color_pair(PAIR_DIM))
+        try:
+            from cb.services.system_service import health_check
+            info = health_check(client)
+            status_color = PAIR_SUCCESS if info.get("status") == "OK" else PAIR_ERROR
+            safe_addstr(win, y, 4, f"Status      : {info.get('status','?')}",
+                        curses.color_pair(status_color) | curses.A_BOLD); y += 1
+            safe_addstr(win, y, 4, f"Mode        : {info.get('mode','?')}",
+                        curses.color_pair(PAIR_NORMAL)); y += 1
+            safe_addstr(win, y, 4, f"Executors   : {info.get('executors','?')}",
+                        curses.color_pair(PAIR_NORMAL)); y += 1
+            safe_addstr(win, y, 4, f"Description : {info.get('description','')}",
+                        curses.color_pair(PAIR_NORMAL)); y += 2
+        except Exception as e:
+            safe_addstr(win, y, 4, f"(could not fetch status: {e})",
+                        curses.color_pair(PAIR_DIM)); y += 2
+
+        safe_addstr(win, y, 2,
+            "  Use sidebar (1-7) or Tab / Left-Right to navigate.",
+            curses.color_pair(PAIR_DIM))
 
     def handle_key(self, ch: int) -> int | None:
-        """Return target screen index on Enter, None otherwise."""
-        if ch in (curses.KEY_UP, ord('k')) and self.selected > 0:
-            self.selected -= 1
-        elif ch in (curses.KEY_DOWN, ord('j')) and self.selected < len(_DASH_MENU) - 1:
-            self.selected += 1
-        elif ch in (curses.KEY_ENTER, ord('\n'), ord('\r')):
-            return _DASH_MENU[self.selected][1]
-        return None
+        return None   # dashboard no longer handles Enter-to-navigate
 
 
 # ── Controller screen ────────────────────────────────────────────────────────

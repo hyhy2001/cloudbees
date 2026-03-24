@@ -151,6 +151,16 @@ def main(
         try:
             if active_screen == 0:
                 dash_scr.draw(main_win, client)
+            elif client is None:
+                # All other screens require login
+                from cb.tui.widgets.widgets import safe_addstr
+                from cb.tui.colors import PAIR_WARNING, PAIR_DIM
+                safe_addstr(main_win, 1, 2,
+                    "  Not logged in.",
+                    curses.color_pair(PAIR_WARNING) | curses.A_BOLD)
+                safe_addstr(main_win, 2, 2,
+                    "  Press 'L' to login.",
+                    curses.color_pair(PAIR_DIM))
             elif active_screen == 1:
                 ctrl_scr.draw(main_win)
             elif active_screen == 2:
