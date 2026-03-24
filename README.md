@@ -24,12 +24,11 @@ cd cloudbees
 **Cách A — Dùng virtualenv (khuyến nghị, tránh lỗi permission)**
 
 ```bash
-# Tạo virtual environment
-python3 -m venv ~/.cb_env
+# Tạo virtual environment trong thư mục hiện tại
+python3 -m venv .venv
 
 # Kích hoạt
-source ~/.cb_env/bin/activate   # Linux / macOS
-# hoặc: ~/.cb_env/bin/activate (nếu shell không nhận lệnh source)
+source .venv/bin/activate   # Linux / macOS
 
 # Cài package
 pip install -e .
@@ -38,7 +37,7 @@ pip install -e .
 cb --version
 ```
 
-> Mỗi lần mở terminal mới, chạy `source ~/.cb_env/bin/activate` trước khi dùng `cb`.
+> Mỗi lần mở terminal mới, chạy `source .venv/bin/activate` từ thư mục `cloudbees/`.
 
 **Cách B — Cài cho user hiện tại (không cần sudo)**
 
@@ -73,6 +72,9 @@ cb --help
 # Hiển thị danh sách commands đầy đủ
 ```
 
+> **Ghi chú:** Data (DB, token) được lưu tại `./data/cb.db` trong thư mục hiện tại.
+> Để đổi sang nơi khác: `export CB_DB_PATH=/your/path/cb.db`
+
 ---
 
 ### Troubleshooting cài đặt
@@ -85,13 +87,13 @@ pip install --user -e .
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-**Lỗi: `Permission denied` khi tạo `~/.cb/cb.db`**
+**Lỗi: `Permission denied` khi tạo `./data/cb.db`**
 
 ```bash
-# Kiểm tra quyền thư mục home
-ls -la ~/
+# Kiểm tra quyền thư mục hiện tại
+ls -la .
 
-# Hoặc chỉ định DB path khác có quyền ghi
+# Hoặc chỉ định path khác
 export CB_DB_PATH="/tmp/cb.db"
 cb --version   # thử lại
 ```
@@ -112,14 +114,13 @@ export PATH="$HOME/.local/bin:$PATH"
 **Lỗi: pip hệ thống bị broken (OpenSSL conflict,...)**
 
 ```bash
-# Dùng virtualenv thay thế (không phụ thuộc pip hệ thống)
-python3 -m venv ~/.cb_env
-~/.cb_env/bin/pip install -e .
-~/.cb_env/bin/cb --version
+# Dùng virtualenv trong thư mục hiện tại
+python3 -m venv .venv
+.venv/bin/pip install -e .
+.venv/bin/cb --version
 
-# Hoặc tạo alias
-echo 'alias cb="~/.cb_env/bin/cb"' >> ~/.bashrc
-source ~/.bashrc
+# Hoặc tạo alias tiện dùng
+alias cb="$(pwd)/.venv/bin/cb"
 ```
 
 ---

@@ -11,7 +11,12 @@ _DB_PATH: Optional[Path] = None
 
 
 def get_db_path() -> Path:
-    """Return the database file path, respecting CB_DB_PATH env override."""
+    """Return the database file path, respecting CB_DB_PATH env override.
+
+    Priority:
+      1. CB_DB_PATH environment variable
+      2. ./data/cb.db  (relative to current working directory)
+    """
     global _DB_PATH
     if _DB_PATH is not None:
         return _DB_PATH
@@ -20,7 +25,8 @@ def get_db_path() -> Path:
     if env:
         _DB_PATH = Path(env)
     else:
-        data_dir = Path.home() / ".cb"
+        # Store data next to where the user cloned/runs the tool
+        data_dir = Path.cwd() / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
         _DB_PATH = data_dir / "cb.db"
 
