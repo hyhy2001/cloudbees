@@ -302,9 +302,12 @@ def main(
                     trigger_job(client, name)
                     status_msg = f"  Triggered: {name}"
                 elif isinstance(action, str) and action.startswith("select_controller:"):
-                    from cb.services.controller_service import set_active_controller
+                    from cb.services.controller_service import select_controller
                     name = action.split(":", 1)[1]
-                    set_active_controller(name, db_path)
+                    # find url from loaded items
+                    item = next((c for c in ctrl_scr.items if c.name == name), None)
+                    url  = item.url if item and item.url else ""
+                    select_controller(name, url, db_path)
                     status_msg = f"  Active controller: {name}"
                 elif isinstance(action, str) and action.startswith("toggle_node:"):
                     from cb.services.node_service import toggle_node
