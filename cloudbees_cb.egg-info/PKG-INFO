@@ -1,3 +1,21 @@
+Metadata-Version: 2.1
+Name: cloudbees-cb
+Version: 0.1.0
+Summary: CloudBees CLI + TUI tool — manage CloudBees from your terminal
+Author: CloudBees Team
+License: MIT
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: click>=8.1
+Requires-Dist: httpx>=0.27
+Requires-Dist: cryptography>=42.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-httpx>=0.21; extra == "dev"
+Requires-Dist: ruff>=0.4; extra == "dev"
+Requires-Dist: mypy>=1.0; extra == "dev"
+
 # CloudBees CLI + TUI (`cb`)
 
 A lightweight Python tool to manage CloudBees from your terminal.
