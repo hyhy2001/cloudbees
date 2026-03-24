@@ -105,7 +105,7 @@ def main(
             elif active_screen == 3:
                 node_scr.load(client)
             elif active_screen == 4:
-                jobs_scr.load(client)
+                jobs_scr.load(client, db_path=db_path)
             elif active_screen == 5:
                 users_scr.load(client)
             _loaded.add(active_screen)

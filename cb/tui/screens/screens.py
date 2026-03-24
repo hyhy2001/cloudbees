@@ -210,11 +210,11 @@ class JobsScreen:
         self.offset = 0
         self.loading = False
 
-    def load(self, client: CloudBeesClient) -> None:
+    def load(self, client: CloudBeesClient, db_path=None) -> None:
         from cb.services.job_service import list_jobs
         self.loading = True
         try:
-            self.jobs = list_jobs(client)
+            self.jobs = list_jobs(client, db_path=db_path)
         finally:
             self.loading = False
 

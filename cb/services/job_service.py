@@ -13,8 +13,34 @@ from cb.dtos.job import JobDTO, BuildDTO
 _JOB_TREE = "jobs[_class,name,url,color,description,buildable,lastBuild[number,result,url]]"
 
 
-def list_jobs(client: CloudBeesClient) -> List[JobDTO]:
-    data = client.get(f"/api/json?tree={_JOB_TREE}", cache_key="jobs.list")
+def list_jobs(
+    client: CloudBeesClient,
+    db_path=None,
+    controller_name: str | None = None,
+) -> List[JobDTO]:
+    """
+    List jobs. On Operations Center, jobs live inside a controller.
+    If an active controller is set (or controller_name passed), scope to it.
+    Falls back to root for standalone Jenkins.
+    """
+    from pathlib import Path
+    from cb.services.controller_service import get_active_controller
+
+    # Resolve controller scope
+    ctrl = controller_name
+    if ctrl is None:
+        active = get_active_controller(db_path)
+        if active:
+            ctrl = active[0]   # (name, url) tuple
+
+    if ctrl:
+        endpoint = f"/job/{ctrl}/api/json?tree={_JOB_TREE}"
+        cache_key = f"jobs.list.{ctrl}"
+    else:
+        endpoint  = f"/api/json?tree={_JOB_TREE}"
+        cache_key = "jobs.list"
+
+    data = client.get(endpoint, cache_key=cache_key)
     return [JobDTO.from_dict(j) for j in (data or {}).get("jobs", [])]
 
 
