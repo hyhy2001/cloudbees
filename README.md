@@ -15,8 +15,9 @@ cd cloudbees
 make install
 ```
 
-> `bee` is installed to `~/.local/bin/`. If not found, run:
-> `export PATH="$HOME/.local/bin:$PATH"` (add to `~/.bashrc` to make permanent)
+> `bee` is installed to `~/.local/bin/`. If not found, add to PATH:
+> - **bash/zsh:** `export PATH="$HOME/.local/bin:$PATH"`
+> - **csh/tcsh:** `setenv PATH ~/.local/bin:$PATH`
 
 ---
 

@@ -26,7 +26,8 @@ install:
 	@echo "  [OK] bee installed to $(BIN_DIR)/bee"
 	@echo ""
 	@echo "  If 'bee' is not found, add to PATH:"
-	@echo "    export PATH=\"$(BIN_DIR):\$$PATH\""
+	@echo "    bash/zsh : export PATH=\"$(BIN_DIR):\$$PATH\""
+	@echo "    csh/tcsh : setenv PATH $(BIN_DIR):\$$PATH"
 	@echo ""
 
 uninstall:
