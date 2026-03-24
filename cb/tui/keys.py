@@ -1,6 +1,6 @@
-from __future__ import annotations
 """Keyboard constants."""
 
+from __future__ import annotations
 import curses
 
 # Navigation
@@ -12,27 +12,29 @@ KEY_ENTER = [curses.KEY_ENTER, ord('\n'), ord('\r')]
 KEY_ESC   = [27]
 KEY_QUIT  = [ord('q'), ord('Q')]
 
-# Screen shortcuts
+# Screen shortcuts: 1=Dashboard, 2=Controller, 3=Credentials, 4=Nodes, 5=Jobs, 6=Users, 7=System
 SCREEN_KEYS = {
-    ord('1'): 0,  # Dashboard
-    ord('2'): 1,  # Jobs
-    ord('3'): 2,  # Pipelines
-    ord('4'): 3,  # Users
-    ord('5'): 4,  # System
+    ord('1'): 0,
+    ord('2'): 1,
+    ord('3'): 2,
+    ord('4'): 3,
+    ord('5'): 4,
+    ord('6'): 5,
+    ord('7'): 6,
 }
+SCREEN_COUNT = 7
 
 # Actions
 KEY_RUN     = ord('r')
 KEY_STOP    = ord('s')
-KEY_DETAIL  = ord('d')
+KEY_CREATE  = ord('c')
+KEY_DELETE  = ord('d')
 KEY_SEARCH  = ord('/')
 KEY_REFRESH = curses.KEY_F5
 KEY_CACHE   = ord('C')
-KEY_LOGIN   = ord('l')
-KEY_LOGOUT  = ord('L')
-KEY_PROFILE = ord('p')
+KEY_LOGIN   = ord('L')
 KEY_TAB     = ord('\t')
 KEY_HELP    = ord('?')
 
 # Status bar hints
-HINTS = "q:Quit  Tab:Menu  1-5:Screen  r:Run  d:Detail  F5:Refresh  C:ClearCache  ?:Help"
+HINTS = "q:Quit  Tab/Arrow:Navigate  1-7:Screen  Enter:Select  F5:Refresh  L:Login"

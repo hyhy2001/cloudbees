@@ -51,7 +51,15 @@ def draw_header(win, server_url: str, username: str) -> None:
 
 # ── Sidebar ───────────────────────────────────────────────────
 
-MENU_ITEMS = ["[1] Dashboard", "[2] Jobs", "[3] Pipelines", "[4] Users", "[5] System"]
+MENU_ITEMS = [
+    "[1] Dashboard",
+    "[2] Controller",
+    "[3] Credentials",
+    "[4] Nodes",
+    "[5] Jobs",
+    "[6] Users",
+    "[7] System",
+]
 
 
 def draw_sidebar(win, active_idx: int) -> None:
