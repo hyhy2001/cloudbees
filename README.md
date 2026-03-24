@@ -15,43 +15,28 @@ cd cloudbees
 make install
 ```
 
-`make install` does everything automatically:
-1. Installs dependencies into `./lib/` (no virtualenv, no sudo)
-2. Creates the `bee` command in `~/.local/bin/`
-3. Adds `~/.local/bin` to your PATH in `~/.bashrc` / `~/.zshrc` / `~/.cshrc`
-
-Then activate in the current terminal (one time only):
+If `bee` is not found after install, add to PATH (one time):
 
 ```bash
-source ~/.bashrc      # bash
-source ~/.zshrc       # zsh
-source ~/.cshrc       # csh/tcsh
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-**That's it — `bee` is ready to use from any directory!**
-
-```bash
-bee --help
-bee login
-bee job list
-bee --ui
-```
+> Tip: add the line above to `~/.bashrc` or `~/.cshrc` to make it permanent.
 
 ### Troubleshooting
 
 | Error | Fix |
 |-------|-----|
-| `bee: command not found` | Run `source ~/.bashrc` (or `~/.cshrc`) then retry |
-| `Permission denied` on `./data/` | `export CB_DB_PATH=/tmp/cb.db` |
-| `pip` broken (OpenSSL...) | Run manually: `pip3 install --target=./lib click httpx cryptography` |
-| csh/tcsh PATH not updated | Add manually: `setenv PATH ~/.local/bin:$PATH` to `~/.cshrc` |
+| `bee: command not found` | `export PATH="$HOME/.local/bin:$PATH"` |
+| `Permission denied` on `./data/` | `export CB_DB_PATH=/tmp/bee.db` |
+| `pip` broken | `pip3 install --target=./lib click httpx cryptography` |
 
 ---
 
 ## Quick Start
 
 ```bash
-bee login                          # Login (saves encrypted token)
+bee login                          # Login
 bee controller list                # List controllers
 bee controller select <name>       # Set active controller
 bee job list                      # List all jobs
