@@ -107,11 +107,11 @@ class ControllerScreen:
         draw_table(win, headers, rows, self.selected, self.offset)
 
     def handle_key(self, ch: int) -> str | None:
-        if ch == ord("j") and self.selected < len(self.items) - 1:
+        if ch == ord('j') and self.selected < len(self.items) - 1:
             self.selected += 1
             if self.selected >= self.offset + 15:
                 self.offset += 1
-        elif ch == ord("k") and self.selected > 0:
+        elif ch == ord('k') and self.selected > 0:
             self.selected -= 1
             if self.selected < self.offset:
                 self.offset -= 1
@@ -145,11 +145,11 @@ class CredentialsScreen:
         draw_table(win, headers, rows, self.selected, self.offset)
 
     def handle_key(self, ch: int) -> str | None:
-        if ch == ord("j") and self.selected < len(self.items) - 1:
+        if ch == ord('j') and self.selected < len(self.items) - 1:
             self.selected += 1
             if self.selected >= self.offset + 15:
                 self.offset += 1
-        elif ch == ord("k") and self.selected > 0:
+        elif ch == ord('k') and self.selected > 0:
             self.selected -= 1
             if self.selected < self.offset:
                 self.offset -= 1
@@ -186,11 +186,11 @@ class NodesScreen:
         draw_table(win, headers, rows, self.selected, self.offset)
 
     def handle_key(self, ch: int) -> str | None:
-        if ch == ord("j") and self.selected < len(self.items) - 1:
+        if ch == ord('j') and self.selected < len(self.items) - 1:
             self.selected += 1
             if self.selected >= self.offset + 15:
                 self.offset += 1
-        elif ch == ord("k") and self.selected > 0:
+        elif ch == ord('k') and self.selected > 0:
             self.selected -= 1
             if self.selected < self.offset:
                 self.offset -= 1
@@ -236,11 +236,11 @@ class JobsScreen:
         draw_table(win, headers, rows, self.selected, self.offset)
 
     def handle_key(self, ch: int) -> str | None:
-        if ch == ord("j") and self.selected < len(self.jobs) - 1:
+        if ch == ord('j') and self.selected < len(self.jobs) - 1:
             self.selected += 1
             if self.selected >= self.offset + 15:
                 self.offset += 1
-        elif ch == ord("k") and self.selected > 0:
+        elif ch == ord('k') and self.selected > 0:
             self.selected -= 1
             if self.selected < self.offset:
                 self.offset -= 1
@@ -278,11 +278,11 @@ class UsersScreen:
         draw_table(win, headers, rows, self.selected, self.offset)
 
     def handle_key(self, ch: int) -> str | None:
-        if ch == ord("j") and self.selected < len(self.users) - 1:
+        if ch == ord('j') and self.selected < len(self.users) - 1:
             self.selected += 1
             if self.selected >= self.offset + 15:
                 self.offset += 1
-        elif ch == ord("k") and self.selected > 0:
+        elif ch == ord('k') and self.selected > 0:
             self.selected -= 1
             if self.selected < self.offset:
                 self.offset -= 1

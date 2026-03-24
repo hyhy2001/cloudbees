@@ -38,4 +38,4 @@ KEY_TAB     = ord('\t')
 KEY_HELP    = ord('?')
 
 # Status bar hints
-HINTS = "q:Quit  Up/Down:Sidebar  Enter:Open  ←/→:Prev/Next  Tab:Cursor  1-7:Jump  L:Login  X:Logout"
+HINTS = "q:Quit  ↑↓:Sidebar  Enter:Open  j/k:List  1-7:Jump  Tab:Cursor  L:Login  X:Logout  F5:Refresh"

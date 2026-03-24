@@ -205,47 +205,33 @@ def main(
         if ch in KEY_QUIT:
             break
 
-        # ── Up/Down: move sidebar cursor ──────────────────────────────
-        # Content list navigation uses j / k (vim keys)
-        if ch in KEY_UP:
+        # ── Sidebar: Up/Down moves cursor (no content change) ─────────────
+        if ch == curses.KEY_UP:
             sidebar_cursor = (sidebar_cursor - 1) % SCREEN_COUNT
             continue
 
-        if ch in KEY_DOWN:
+        if ch == curses.KEY_DOWN:
             sidebar_cursor = (sidebar_cursor + 1) % SCREEN_COUNT
             continue
 
-        # ── Enter: sidebar cursor → active screen ─────────────────────
+        # ── Enter: open the screen cursor is pointing to ────────────────
         if ch in KEY_ENTER:
             if sidebar_cursor != active_screen:
                 active_screen = sidebar_cursor
                 _reload_current()
             continue
 
-        # ── Left/Right: cycle active screen directly ──────────────────
-        if ch in KEY_LEFT:
-            active_screen  = (active_screen - 1) % SCREEN_COUNT
-            sidebar_cursor = active_screen
-            _reload_current()
+        # ── Tab: move sidebar cursor forward (no content change) ──────────
+        if ch == KEY_TAB:
+            sidebar_cursor = (sidebar_cursor + 1) % SCREEN_COUNT
             continue
 
-        if ch in KEY_RIGHT:
-            active_screen  = (active_screen + 1) % SCREEN_COUNT
-            sidebar_cursor = active_screen
-            _reload_current()
-            continue
-
-        # ── Number shortcuts: direct jump ──────────────────────────
+        # ── Number shortcuts: jump + open immediately ──────────────────
         if ch in SCREEN_KEYS:
             new_screen = SCREEN_KEYS[ch]
             active_screen  = new_screen
             sidebar_cursor = new_screen
             _reload_current()
-            continue
-
-        # ── Tab: move sidebar cursor forward ────────────────────────
-        if ch == KEY_TAB:
-            sidebar_cursor = (sidebar_cursor + 1) % SCREEN_COUNT
             continue
 
         # ── Logout ────────────────────────────────────────────────
