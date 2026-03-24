@@ -1,4 +1,4 @@
-"""cb — CloudBees CLI + TUI entry point."""
+"""bee — CloudBees CLI + TUI entry point."""
 
 from __future__ import annotations
 import os
@@ -20,7 +20,7 @@ __version__ = "0.2.0"
 
 
 @click.group(invoke_without_command=True)
-@click.version_option(__version__, prog_name="cb")
+@click.version_option(__version__, prog_name="bee")
 @click.option("--ui", is_flag=True, default=False, help="Launch the TUI interface")
 @click.option("--profile", "-p", default=None, envvar="CB_PROFILE", help="Profile name to use")
 @click.option("--controller", "-c", default=None, envvar="CB_CONTROLLER",
@@ -31,18 +31,18 @@ __version__ = "0.2.0"
               help="Override database path (for testing)")
 @click.pass_context
 def cli(ctx, ui, profile, controller, password, db):
-    """cb — CloudBees command-line tool.
+    """bee — CloudBees command-line tool.
 
     \b
     Usage:
-      cb login                        # Interactive login
-      cb controller list              # List controllers
-      cb controller select <name>     # Select active controller
-      cb job list                     # List jobs
-      cb job create freestyle <name>  # Create a Freestyle job
-      cb cred create --id x --username u  # Create credential
-      cb node list                    # List agent nodes
-      cb --ui                         # Launch TUI interface
+      bee login                        # Interactive login
+      bee controller list              # List controllers
+      bee controller select <name>     # Select active controller
+      bee job list                     # List jobs
+      bee job create freestyle <name>  # Create a Freestyle job
+      bee cred create --id x --username u  # Create credential
+      bee node list                    # List agent nodes
+      bee --ui                         # Launch TUI interface
 
     \b
     Environment variables:

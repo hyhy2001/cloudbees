@@ -1,4 +1,4 @@
-# CloudBees CLI + TUI (`cb`)
+# CloudBees CLI + TUI (`bee`) 🐝
 
 A lightweight Python tool to manage CloudBees from your terminal — CLI for scripting, TUI for interactive use.
 
@@ -35,18 +35,18 @@ python3 run.py login
 Create an alias for convenience:
 
 ```bash
-alias cb="python3 /path/to/cloudbees/run.py"   # bash/zsh
-alias cb 'python3 /path/to/cloudbees/run.py'   # csh/tcsh
+alias bee="python3 /path/to/cloudbees/run.py"   # bash/zsh
+alias bee 'python3 /path/to/cloudbees/run.py'   # csh/tcsh
 ```
 
-Then use `cb` as normal: `cb job list`, `cb --ui`, etc.
+Then use `bee` as normal: `bee job list`, `bee --ui`, etc.
 
 ### Troubleshooting
 
 | Error | Fix |
 |-------|-----|
 | `Permission denied` on `./data/cb.db` | `export CB_DB_PATH=/tmp/cb.db` |
-| `cb: command not found` | Use `python3 run.py` or set the alias above |
+| `bee: command not found` | Use `python3 run.py` or set the alias above |
 | `source activate` → "badly placed" | Server uses csh/tcsh — use the alias approach instead |
 | `pip` broken (OpenSSL...) | Try `pip3 install --target=./lib ...` or `python3 -m pip install --target=./lib ...` |
 
@@ -69,33 +69,33 @@ python3 run.py --ui                          # Launch TUI
 ### Auth
 
 ```bash
-cb login                    # Interactive login
-cb auth profiles            # List saved profiles
-cb auth logout              # Remove stored token
+bee login                    # Interactive login
+bee auth profiles            # List saved profiles
+bee auth logout              # Remove stored token
 ```
 
 ### Controller
 
 ```bash
-cb controller list               # List all controllers
-cb controller info <name>        # Controller details
-cb controller select <name>      # Set active controller
-cb controller current            # Show active controller
+bee controller list               # List all controllers
+bee controller info <name>        # Controller details
+bee controller select <name>      # Set active controller
+bee controller current            # Show active controller
 ```
 
 ### Jobs
 
 ```bash
-cb job list [-o json|table]                      # List jobs (FS/PL/FD type column)
-cb job get <name>                                # Job details + last build
-cb job create freestyle <name> [--shell "cmd"]   # Create Freestyle project
-cb job create pipeline <name> [--script-file F]  # Create Pipeline job
-cb job create folder <name>                      # Create Folder
-cb job delete <name> [--yes]                     # Delete job/folder
-cb job run <name> [--wait] [--timeout 120]       # Trigger build
-cb job stop <name> <build#>                      # Stop a running build
-cb job log <name> [build#] [--follow]            # Print / stream console log
-cb job status <name> [--count 10]               # Recent build history
+bee job list [-o json|table]                      # List jobs (FS/PL/FD type column)
+bee job get <name>                                # Job details + last build
+bee job create freestyle <name> [--shell "cmd"]   # Create Freestyle project
+bee job create pipeline <name> [--script-file F]  # Create Pipeline job
+bee job create folder <name>                      # Create Folder
+bee job delete <name> [--yes]                     # Delete job/folder
+bee job run <name> [--wait] [--timeout 120]       # Trigger build
+bee job stop <name> <build#>                      # Stop a running build
+bee job log <name> [build#] [--follow]            # Print / stream console log
+bee job status <name> [--count 10]               # Recent build history
 ```
 
 **Job type symbols:**
@@ -109,10 +109,10 @@ cb job status <name> [--count 10]               # Recent build history
 ### Credentials
 
 ```bash
-cb cred list [-o json|table]                          # List credentials
-cb cred get <id>                                      # Show details (secret masked)
-cb cred create --id <id> --username <u> [--password]  # Create Username+Password
-cb cred delete <id> [--yes]                           # Delete credential
+bee cred list [-o json|table]                          # List credentials
+bee cred get <id>                                      # Show details (secret masked)
+bee cred create --id <id> --username <u> [--password]  # Create Username+Password
+bee cred delete <id> [--yes]                           # Delete credential
 ```
 
 > Password is always prompted with hidden input if not provided via flag.
@@ -120,29 +120,29 @@ cb cred delete <id> [--yes]                           # Delete credential
 ### Nodes
 
 ```bash
-cb node list [-o json|table]                           # List nodes + online/offline
-cb node get <name>                                     # Node details
-cb node create --name <n> --remote-dir /home/jenkins   # Create Permanent Agent (JNLP)
-cb node copy <source> <new-name>                       # Clone a node's config
-cb node delete <name> [--yes]                          # Delete node
-cb node offline <name> [--reason "msg"]                # Mark offline
-cb node online <name>                                  # Bring back online
+bee node list [-o json|table]                           # List nodes + online/offline
+bee node get <name>                                     # Node details
+bee node create --name <n> --remote-dir /home/jenkins   # Create Permanent Agent (JNLP)
+bee node copy <source> <new-name>                       # Clone a node's config
+bee node delete <name> [--yes]                          # Delete node
+bee node offline <name> [--reason "msg"]                # Mark offline
+bee node online <name>                                  # Bring back online
 ```
 
 ### Users
 
 ```bash
-cb users list [-o json|table]    # List users
-cb users get <user-id>           # User details
+bee users list [-o json|table]    # List users
+bee users get <user-id>           # User details
 ```
 
 ### System
 
 ```bash
-cb system health                      # Server health check
-cb system version                     # CloudBees version
-cb system cache-clear                 # Clear API cache
-cb system cache-clear --expired-only  # Purge expired entries only
+bee system health                      # Server health check
+bee system version                     # CloudBees version
+bee system cache-clear                 # Clear API cache
+bee system cache-clear --expired-only  # Purge expired entries only
 ```
 
 ---
@@ -193,8 +193,8 @@ python3 run.py --ui
 
 - Tokens encrypted with **Fernet (AES-128-CBC)** + **PBKDF2HMAC-SHA256** (390k iterations)
 - Derived key lives only in RAM — never written to disk
-- `cb cred create` always uses hidden input — password never in shell history
-- `cb cred get` always shows `[HIDDEN]` for secret fields
+- `bee cred create` always uses hidden input — password never in shell history
+- `bee cred get` always shows `[HIDDEN]` for secret fields
 
 ---
 
@@ -211,7 +211,7 @@ All `GET` responses are cached in SQLite:
 | `users.list` | 300 s |
 | `system.health` | 15 s |
 
-> Bypass: `F5` in TUI or `cb system cache-clear`
+> Bypass: `F5` in TUI or `bee system cache-clear`
 
 ---
 

@@ -7,12 +7,12 @@ BIN_DIR  := $(HOME)/.local/bin
 
 help:
 	@echo ""
-	@echo "  CloudBees CLI"
+	@echo "  CloudBees CLI (bee)"
 	@echo ""
-	@echo "    make install       First time setup (deps + cb command)"
+	@echo "    make install       First time setup (deps + bee command)"
 	@echo "    make run           Run: make run ARGS='job list'"
 	@echo "    make ui            Launch TUI"
-	@echo "    make uninstall     Remove cb from PATH"
+	@echo "    make uninstall     Remove bee from PATH"
 	@echo "    make clean         Remove cache files"
 	@echo ""
 
@@ -28,16 +28,16 @@ _install_deps:
 	@echo "  [OK] Dependencies ready"
 
 _install_cmd:
-	@echo ">> Setting up 'cb' command ..."
-	@printf '#!/bin/sh\n$(PYTHON) $(ABS_PATH)/run.py "$$@"\n' > cbwrap
-	@chmod +x cbwrap
+	@echo ">> Setting up 'bee' command ..."
+	@printf '#!/bin/sh\n$(PYTHON) $(ABS_PATH)/run.py "$$@"\n' > beewrap
+	@chmod +x beewrap
 	@mkdir -p $(BIN_DIR)
-	@cp cbwrap $(BIN_DIR)/cb
+	@cp beewrap $(BIN_DIR)/bee
 	@echo ""
 	@echo "  [OK] Done!"
 	@echo ""
 	@if echo ":$$PATH:" | grep -q ":$(BIN_DIR):"; then \
-		echo "  Type: cb --help"; \
+		echo "  Type: bee --help"; \
 	else \
 		echo "  One-time PATH setup:"; \
 		echo ""; \
@@ -45,13 +45,13 @@ _install_cmd:
 		echo "    csh/tcsh : setenv PATH $(BIN_DIR):\$$PATH"; \
 		echo ""; \
 		echo "  Add it to ~/.bashrc or ~/.cshrc to make it permanent."; \
-		echo "  Then run: cb --help"; \
+		echo "  Then run: bee --help"; \
 	fi
 	@echo ""
 
 uninstall:
-	@rm -f $(BIN_DIR)/cb cbwrap
-	@echo "[OK] Removed cb command"
+	@rm -f $(BIN_DIR)/bee beewrap
+	@echo "[OK] Removed bee command"
 
 run:
 	$(PYTHON) run.py $(ARGS)
