@@ -51,7 +51,8 @@ def main(
     signal.signal(signal.SIGWINCH, _on_resize)
 
     # App state
-    active_screen = 0
+    active_screen  = 0   # screen shown in content area
+    sidebar_cursor = 0   # highlighted row in sidebar (may differ from active_screen)
     status_msg = f"  256-color: {'YES' if has_256 else 'no (8-color fallback)'}"
     client = None
     active_profile = None
@@ -152,7 +153,8 @@ def main(
         username   = active_profile.username   if active_profile else "-"
 
         draw_header(header_win, server_url, username)
-        draw_sidebar(sidebar_win, active_screen)
+        # Sidebar: highlight cursor row, mark active_screen differently
+        draw_sidebar(sidebar_win, active_screen, cursor=sidebar_cursor)
 
         main_win.bkgd(" ", curses.color_pair(PAIR_NORMAL))
         main_win.erase()
@@ -203,29 +205,47 @@ def main(
         if ch in KEY_QUIT:
             break
 
-        # ── Global: Left/Right arrow = prev/next screen ──────────
+        # ── Up/Down: move sidebar cursor ──────────────────────────────
+        # Content list navigation uses j / k (vim keys)
+        if ch in KEY_UP:
+            sidebar_cursor = (sidebar_cursor - 1) % SCREEN_COUNT
+            continue
+
+        if ch in KEY_DOWN:
+            sidebar_cursor = (sidebar_cursor + 1) % SCREEN_COUNT
+            continue
+
+        # ── Enter: sidebar cursor → active screen ─────────────────────
+        if ch in KEY_ENTER:
+            if sidebar_cursor != active_screen:
+                active_screen = sidebar_cursor
+                _reload_current()
+            continue
+
+        # ── Left/Right: cycle active screen directly ──────────────────
         if ch in KEY_LEFT:
-            active_screen = (active_screen - 1) % SCREEN_COUNT
+            active_screen  = (active_screen - 1) % SCREEN_COUNT
+            sidebar_cursor = active_screen
             _reload_current()
             continue
 
         if ch in KEY_RIGHT:
-            active_screen = (active_screen + 1) % SCREEN_COUNT
+            active_screen  = (active_screen + 1) % SCREEN_COUNT
+            sidebar_cursor = active_screen
             _reload_current()
             continue
 
-        # ── Number shortcuts ─────────────────────────────────────
+        # ── Number shortcuts: direct jump ──────────────────────────
         if ch in SCREEN_KEYS:
             new_screen = SCREEN_KEYS[ch]
-            if new_screen != active_screen:
-                active_screen = new_screen
-                _reload_current()
+            active_screen  = new_screen
+            sidebar_cursor = new_screen
+            _reload_current()
             continue
 
-        # ── Tab = next screen ────────────────────────────────────
+        # ── Tab: move sidebar cursor forward ────────────────────────
         if ch == KEY_TAB:
-            active_screen = (active_screen + 1) % SCREEN_COUNT
-            _reload_current()
+            sidebar_cursor = (sidebar_cursor + 1) % SCREEN_COUNT
             continue
 
         # ── Logout ────────────────────────────────────────────────

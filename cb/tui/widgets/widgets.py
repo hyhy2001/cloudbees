@@ -63,15 +63,31 @@ MENU_ITEMS = [
 ]
 
 
-def draw_sidebar(win, active_idx: int) -> None:
+def draw_sidebar(win, active_idx: int, cursor: int | None = None) -> None:
     rows, cols = win.getmaxyx()
     win.bkgd(" ", curses.color_pair(PAIR_SIDEBAR))
     win.erase()
 
     for i, label in enumerate(MENU_ITEMS):
-        attr = curses.color_pair(PAIR_ACTIVE) | curses.A_BOLD if i == active_idx \
-               else curses.color_pair(PAIR_SIDEBAR)
-        prefix = "> " if i == active_idx else "  "
+        is_active = (i == active_idx)
+        is_cursor = (cursor is not None and i == cursor)
+
+        if is_active and is_cursor:
+            # cursor ON the active screen
+            attr   = curses.color_pair(PAIR_ACTIVE) | curses.A_BOLD
+            prefix = "> "
+        elif is_active:
+            # this screen is showing in content, but cursor is elsewhere
+            attr   = curses.color_pair(PAIR_ACTIVE) | curses.A_BOLD
+            prefix = "> "
+        elif is_cursor:
+            # cursor hovering here (not yet confirmed with Enter)
+            attr   = curses.color_pair(PAIR_SELECTED)
+            prefix = "> "
+        else:
+            attr   = curses.color_pair(PAIR_SIDEBAR)
+            prefix = "  "
+
         safe_addstr(win, i + 1, 0, f"{prefix}{label:<{cols - 3}}", attr)
 
     # Separator line
