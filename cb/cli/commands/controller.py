@@ -74,6 +74,8 @@ def cmd_select(ctx, name):
         # Follow the CJOC redirect to obtain the public Ingress real URL
         real_url = client.resolve_redirect(url)
         if real_url:
+            if "operations-center-sso-navigate" in real_url:
+                real_url = real_url.split("operations-center-sso-navigate")[0]
             url = real_url
             
         select_controller(match.name, url, ctx.obj.get("db_path"))
