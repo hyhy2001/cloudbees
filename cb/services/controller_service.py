@@ -111,36 +111,39 @@ def get_controller_capabilities(
     else:
         # Dynamic Permission Probing
         from cb.api.exceptions import AuthError, NotFoundError, APIError
+        # Use a dedicated client bound to the controller's real URL, not the CJOC proxy interface
+        ctrl_client = CloudBeesClient(dto.url, client._token)
 
-        # 1. Job Probe (read root or job list to see if we have access)
+        # 1. Job Probe 
         try:
-            client.get(f"/{name}/api/json?tree=jobs[name]")
+            ctrl_client.post("/createItem?name=probe_test")
             job = True
-        except (AuthError, NotFoundError, APIError):
+        except (AuthError, NotFoundError):
             job = False
+        except APIError as e:
+            # 400 Bad Request indicates we are allowed to hit the endpoint but missing the XML payload
+            job = getattr(e, "status_code", 404) == 400
 
-        # 2. Node Probe (read computer api)
+        # 2. Node Probe
         try:
-            client.get(f"/{name}/computer/api/json?tree=computer[displayName]")
+            ctrl_client.post("/computer/doCreateItem?name=probe_tester&type=hudson.slaves.DumbSlave")
             node = True
-        except (AuthError, NotFoundError, APIError):
+        except (AuthError, NotFoundError):
             node = False
+        except APIError as e:
+            node = getattr(e, "status_code", 404) == 400
 
-        # 3. Credential Probe (read user credential store)
+        # 3. Credential Probe
         try:
-            # We don't have username passed in directly here, so we try the system domain or a simple endpoint
-            # Actually, standard CloudBees client has session info if we access via active profile.
-            # But we can try hitting the basic credential store plugin endpoint.
-            # Even a 404 means the plugin exists and we aren't completely 403.
-            # However, testing /credentials/store/system/domain/_/api/json works.
-            client.get(f"/{name}/credentials/store/system/domain/_/api/json")
+            from cb.services.credential_service import _get_user_seg
+            user_seg = _get_user_seg("")
+            ctrl_client.post(f"{user_seg}/createCredentials")
             cred = True
-        except AuthError:
+        except (AuthError, NotFoundError):
             cred = False
-        except (NotFoundError, APIError):
-            # If 404, we have read access to the controller but maybe no system creds.
-            # Still means we passed the 403 test.
-            cred = True
+        except APIError as e:
+            # allow 405 Method Not Allowed as it also proves endpoint visibility
+            cred = getattr(e, "status_code", 404) in (400, 405)
 
     return CapabilityInfo(
         name=dto.name,
