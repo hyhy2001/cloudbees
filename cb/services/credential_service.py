@@ -16,14 +16,9 @@ from cb.dtos.credential import CredentialDTO
 
 def _get_user_seg(username: str = "") -> str:
     """Return the REST path segment for either the user or system credential store."""
-    if not username:
-        from cb.services.session import load_session
-        session = load_session()
-        if session and session.get("username"):
-            username = session["username"]
-
-    if username:
+    if username and username.lower() != "system":
         return f"/user/{username}/credentials/store/user/domain/_"
+    # Mặc định luôn lưu vào system store thay vì load_session(user) để đảm bảo Node và Job có thể xài được.
     return "/credentials/store/system/domain/_"
 
 
