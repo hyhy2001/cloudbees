@@ -63,6 +63,9 @@ def get_active_controller(db_path: Optional[Path] = None, client: Optional[Cloud
         else:
             url = f"/cjoc/job/{name}/"
 
+    import re
+    url = re.sub(rf"/cjoc/job/{re.escape(name)}/?", f"/{name}/", url)
+
     return (name, url)
 
 
