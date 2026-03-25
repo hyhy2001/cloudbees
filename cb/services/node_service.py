@@ -73,7 +73,7 @@ def create_permanent_node(
         "remoteFS": remote_dir,
         "labelString": labels,
         "mode": "NORMAL",
-        "type": "hudson.slaves.DumbSlave$DescriptorImpl",
+        "type": "hudson.slaves.DumbSlave",
         "retentionStrategy": {
             "stapler-class": "hudson.slaves.RetentionStrategy$Always",
             "$class": "hudson.slaves.RetentionStrategy$Always"
@@ -84,7 +84,7 @@ def create_permanent_node(
 
     data = {
         "name": name,
-        "type": "hudson.slaves.DumbSlave$DescriptorImpl",
+        "type": "hudson.slaves.DumbSlave",
         "json": json.dumps(json_payload)
     }
 
