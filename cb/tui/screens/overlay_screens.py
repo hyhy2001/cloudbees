@@ -44,12 +44,12 @@ def _draw_overlay_box(win, title: str, lines: list[str], scroll: int) -> None:
     hint = "  Esc / same key to close  "
     safe_addstr(win, y0 + h - 1, x0 + 2, hint, curses.color_pair(PAIR_DIM))
 
-    # Content area
     content_h = h - 2
     content_w = w - 4
-    visible   = lines[scroll: scroll + content_h]
-
-    for i, line in enumerate(visible):
+    
+    import textwrap
+    wrapped_items = []
+    for line in lines:
         if "ERROR" in line or "CRITICAL" in line:
             attr = curses.color_pair(PAIR_ERROR)
         elif "WARNING" in line:
@@ -58,15 +58,32 @@ def _draw_overlay_box(win, title: str, lines: list[str], scroll: int) -> None:
             attr = curses.color_pair(PAIR_SUCCESS)
         else:
             attr = curses.color_pair(PAIR_DIM)
-        safe_addstr(win, y0 + 1 + i, x0 + 2, line[:content_w], attr)
+            
+        if not line:
+            wrapped_items.append(("", attr))
+        else:
+            # Drop_whitespace=False to preserve indentations, though textwrap defaults are usually fine
+            subs = textwrap.wrap(line, width=max(10, content_w))
+            if not subs:
+                wrapped_items.append(("", attr))
+            for sub in subs:
+                wrapped_items.append((sub, attr))
+
+    visible = wrapped_items[scroll: scroll + content_h]
+
+    for i, (text, attr) in enumerate(visible):
+        safe_addstr(win, y0 + 1 + i, x0 + 2, text, attr)
 
     # Scroll indicator
-    total = len(lines)
+    total = len(wrapped_items)
+    scroll = max(0, min(scroll, total - content_h))
     if total > content_h:
         pct       = int(scroll / max(1, total - content_h) * 100)
         indicator = f" {scroll + 1}-{min(scroll + content_h, total)}/{total} ({pct}%) "
         safe_addstr(win, y0 + h - 1, x0 + w - len(indicator) - 2,
                     indicator, curses.color_pair(PAIR_DIM))
+    return scroll
+
 
 
 # -- Debug overlay (F2) -------------------------------------------------------
@@ -76,7 +93,7 @@ class DebugOverlay:
     """Live tail of /tmp/bee.log."""
 
     def __init__(self):
-        self.scroll  = 0
+        self.scroll  = 999999
         self._lines: list[str] = []
 
     def _load(self) -> None:
@@ -85,12 +102,10 @@ class DebugOverlay:
             self._lines = text.splitlines() or ["(log is empty)"]
         except OSError as e:
             self._lines = [f"Cannot read log: {e}"]
-        rows_visible = 20
-        self.scroll = max(0, len(self._lines) - rows_visible)
 
     def draw(self, win) -> None:
         self._load()
-        _draw_overlay_box(win, "[DEBUG] /tmp/bee.log", self._lines, self.scroll)
+        self.scroll = _draw_overlay_box(win, "[DEBUG] /tmp/bee.log", self._lines, self.scroll)
 
     def handle_key(self, ch: int) -> bool:
         """Return True to keep overlay open, False to close."""
@@ -100,13 +115,13 @@ class DebugOverlay:
         if ch in (curses.KEY_UP, ord('k')):
             self.scroll = max(0, self.scroll - 1)
         elif ch in (curses.KEY_DOWN, ord('j')):
-            self.scroll = min(max(0, len(self._lines) - rows_visible), self.scroll + 1)
+            self.scroll += 1
         elif ch == curses.KEY_PPAGE:
             self.scroll = max(0, self.scroll - rows_visible)
         elif ch == curses.KEY_NPAGE:
-            self.scroll = min(max(0, len(self._lines) - rows_visible), self.scroll + rows_visible)
+            self.scroll += rows_visible
         elif ch in (ord('G'),):
-            self.scroll = max(0, len(self._lines) - rows_visible)
+            self.scroll = 999999
         elif ch in (ord('g'),):
             self.scroll = 0
         return True
