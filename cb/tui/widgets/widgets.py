@@ -313,4 +313,6 @@ def show_info_modal(
     _put(row, x0, hint_line[:box_w], border_attr); row += 1
 
     stdscr.refresh()
-    stdscr.getch()  # block until any key
+    stdscr.timeout(-1)  # block until keypress (disable the 100ms tick)
+    stdscr.getch()
+    stdscr.timeout(100)  # restore normal tick rate

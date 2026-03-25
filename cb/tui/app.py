@@ -131,7 +131,8 @@ def main(
             if active_screen == SCR_CONTROLLER:
                 ctrl_scr.load(client)
             elif active_screen == SCR_CREDENTIALS:
-                cred_scr.load(client, db_path=db_path)
+                _uname = active_profile.username if active_profile else ""
+                cred_scr.load(client, db_path=db_path, username=_uname)
             elif active_screen == SCR_NODES:
                 node_scr.load(client, db_path=db_path)
             elif active_screen == SCR_JOBS:
@@ -431,12 +432,8 @@ def main(
                 try:
                     if isinstance(action, str) and action.startswith("run_job:"):
                         from cb.services.job_service import trigger_job
-                        from cb.services.controller_service import get_active_controller
                         name = action.split(":", 1)[1]
-                        # Scope to active controller if on CloudBees OC
-                        _active_ctrl = get_active_controller(db_path)
-                        scoped_name = f"{_active_ctrl[0]}/job/{name}" if _active_ctrl else name
-                        trigger_job(client, scoped_name)
+                        trigger_job(client, name, db_path=db_path)
                         status_msg = f"  Triggered: {name}"
                         console_overlay.log_cmd(f"bee job run {name}", "Job triggered")
                     elif isinstance(action, str) and action.startswith("select_controller:"):

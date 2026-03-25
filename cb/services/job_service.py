@@ -19,26 +19,24 @@ def list_jobs(
     controller_name: str | None = None,
 ) -> List[JobDTO]:
     """
-    List jobs. On Operations Center, jobs live inside a controller.
-    If an active controller is set (or controller_name passed), scope to it.
-    Falls back to root for standalone Jenkins.
+    List jobs scoped to active controller on CloudBees OC.
+
+    No controller -> /cjoc/api/json   (OC default context)
+    Controller    -> /job/<ctrl>/api/json
     """
-    from pathlib import Path
     from cb.services.controller_service import get_active_controller
 
-    # Resolve controller scope
     ctrl = controller_name
     if ctrl is None:
         active = get_active_controller(db_path)
-        if active:
-            ctrl = active[0]   # (name, url) tuple
+        ctrl   = active[0] if active else None
 
     if ctrl:
-        endpoint = f"/job/{ctrl}/api/json?tree={_JOB_TREE}"
+        endpoint  = f"/job/{ctrl}/api/json?tree={_JOB_TREE}"
         cache_key = f"jobs.list.{ctrl}"
     else:
-        endpoint  = f"/api/json?tree={_JOB_TREE}"
-        cache_key = "jobs.list"
+        endpoint  = f"/cjoc/api/json?tree={_JOB_TREE}"
+        cache_key = "jobs.list.cjoc"
 
     data = client.get(endpoint, cache_key=cache_key)
     return [JobDTO.from_dict(j) for j in (data or {}).get("jobs", [])]
@@ -52,8 +50,22 @@ def get_job(client: CloudBeesClient, name: str) -> JobDTO:
     return JobDTO.from_dict(data or {})
 
 
-def trigger_job(client: CloudBeesClient, name: str) -> None:
-    client.post(f"/job/{name}/build", invalidate="jobs.")
+def trigger_job(
+    client: CloudBeesClient,
+    name: str,
+    controller_name: Optional[str] = None,
+    db_path=None,
+) -> None:
+    """Trigger a job build scoped to the active controller."""
+    from cb.services.controller_service import get_active_controller
+    ctrl = controller_name
+    if ctrl is None and db_path is not None:
+        active = get_active_controller(db_path)
+        ctrl   = active[0] if active else None
+    if ctrl:
+        client.post(f"/job/{ctrl}/job/{name}/build", invalidate="jobs.")
+    else:
+        client.post(f"/cjoc/job/{name}/build", invalidate="jobs.")
 
 
 def trigger_job_with_params(client: CloudBeesClient, name: str, params: dict) -> None:
