@@ -140,8 +140,14 @@ class CloudBeesClient:
         """Send a GET request without following redirects, returning the Location header if 301/302. Returns None otherwise."""
         url = path if path.startswith("http") else f"{self.base_url}{path}"
         try:
-            resp = self._req.get(url, allow_redirects=False, timeout=5)
-            if resp.status_code in (301, 302):
+            import httpx
+            # Support both `follow_redirects` (httpx >= 0.20.0) and `allow_redirects`
+            try:
+                resp = httpx.get(url, headers=self._headers(), timeout=5.0, follow_redirects=False, verify=False)
+            except TypeError:
+                resp = httpx.get(url, headers=self._headers(), timeout=5.0, allow_redirects=False, verify=False)
+            
+            if resp.status_code in (301, 302, 303, 307, 308):
                 return resp.headers.get("Location")
         except Exception as exc:
             _log.debug("Failed to resolve redirect for %s: %s", url, exc)
