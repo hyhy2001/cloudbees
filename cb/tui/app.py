@@ -141,7 +141,8 @@ def main(
             status_msg = f"  {_SCREEN_NAMES[active_screen]}"
         except Exception as exc:
             _log.exception("Screen load failed (screen=%d)", active_screen)
-            status_msg = f"  Error: {exc}"
+            status_msg = f"  Error loading {_SCREEN_NAMES[active_screen]}: {exc}"
+            console_overlay.log_cmd(f"# load error: {_SCREEN_NAMES[active_screen]}", str(exc))
 
     _reload_current()
 
@@ -430,8 +431,12 @@ def main(
                 try:
                     if isinstance(action, str) and action.startswith("run_job:"):
                         from cb.services.job_service import trigger_job
+                        from cb.services.controller_service import get_active_controller
                         name = action.split(":", 1)[1]
-                        trigger_job(client, name)
+                        # Scope to active controller if on CloudBees OC
+                        _active_ctrl = get_active_controller(db_path)
+                        scoped_name = f"{_active_ctrl[0]}/job/{name}" if _active_ctrl else name
+                        trigger_job(client, scoped_name)
                         status_msg = f"  Triggered: {name}"
                         console_overlay.log_cmd(f"bee job run {name}", "Job triggered")
                     elif isinstance(action, str) and action.startswith("select_controller:"):
@@ -444,9 +449,9 @@ def main(
                         active_ctrl_name = name
                         console_overlay.log_cmd(f"bee controller select {name}", "Active controller set")
                     elif isinstance(action, str) and action.startswith("toggle_node:"):
-                        from cb.services.node_service import toggle_node
+                        from cb.services.node_service import toggle_offline
                         name = action.split(":", 1)[1]
-                        toggle_node(client, name)
+                        toggle_offline(client, name)
                         node_scr.load(client)
                         status_msg = f"  Toggled node: {name}"
                         console_overlay.log_cmd(f"bee node toggle {name}", "Node toggled")

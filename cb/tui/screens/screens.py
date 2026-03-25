@@ -80,20 +80,26 @@ class ControllerScreen:
 
 class CredentialsScreen:
     def __init__(self):
-        self.items = []
-        self.selected = 0
-        self.offset   = 0
+        self.items       = []
+        self.selected    = 0
+        self.offset      = 0
         self.detail_mode = False
         self.detail_item = None
+        self.error: str  = ""
 
     def load(self, client: CloudBeesClient) -> None:
+        self.error = ""
         try:
             from cb.services.credential_service import list_credentials
             self.items = list_credentials(client)
-        except Exception:
+        except Exception as exc:
             self.items = []
+            self.error = str(exc)
 
     def draw(self, win) -> None:
+        if self.error:
+            safe_addstr(win, 1, 2, f"Error: {self.error}", curses.color_pair(PAIR_ERROR))
+            return
         if self.detail_mode and self.detail_item:
             c = self.detail_item
             _draw_detail_panel(win, "Credential Detail", [
@@ -136,19 +142,25 @@ class CredentialsScreen:
 
 class NodesScreen:
     def __init__(self):
-        self.items         = []
-        self.selected      = 0
-        self.offset        = 0
-        self.pending_toggle: str | None = None   # node name awaiting confirm
+        self.items          = []
+        self.selected       = 0
+        self.offset         = 0
+        self.pending_toggle: str | None = None
+        self.error: str     = ""
 
     def load(self, client: CloudBeesClient) -> None:
+        self.error = ""
         try:
             from cb.services.node_service import list_nodes
             self.items = list_nodes(client)
-        except Exception:
+        except Exception as exc:
             self.items = []
+            self.error = str(exc)
 
     def draw(self, win) -> None:
+        if self.error:
+            safe_addstr(win, 1, 2, f"Error: {self.error}", curses.color_pair(PAIR_ERROR))
+            return
         headers = ["Name", "Status", "Executors", "Labels"]
         rows = [
             [
@@ -227,21 +239,29 @@ _JOB_STATUS_PAIR = {
 
 class JobsScreen:
     def __init__(self):
-        self.jobs          = []
-        self.selected      = 0
-        self.offset        = 0
-        self.loading       = False
-        self.pending_run: str | None = None   # job name awaiting confirm
+        self.jobs           = []
+        self.selected       = 0
+        self.offset         = 0
+        self.loading        = False
+        self.pending_run: str | None = None
+        self.error: str     = ""
 
     def load(self, client: CloudBeesClient, db_path=None) -> None:
         from cb.services.job_service import list_jobs
         self.loading = True
+        self.error   = ""
         try:
             self.jobs = list_jobs(client, db_path=db_path)
+        except Exception as exc:
+            self.jobs  = []
+            self.error = str(exc)
         finally:
             self.loading = False
 
     def draw(self, win) -> None:
+        if self.error:
+            safe_addstr(win, 1, 2, f"Error: {self.error}", curses.color_pair(PAIR_ERROR))
+            return
         if self.loading:
             safe_addstr(win, 1, 2, f"Loading {spinner_char()}",
                         curses.color_pair(PAIR_DIM))
