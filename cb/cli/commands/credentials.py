@@ -51,7 +51,7 @@ def cmd_get(ctx, cred_id):
 
 
 @cred_group.command("create")
-@click.option("--id", "cred_id", required=True, help="Unique credential ID")
+@click.option("--id", "cred_id", default=None, help="Unique credential ID (auto-generated if omitted)")
 @click.option("--username", required=True, help="Username")
 @click.option("--password", default=None, help="Password (prompted if omitted)")
 @click.option("--description", default="", help="Description")
@@ -60,7 +60,10 @@ def cmd_get(ctx, cred_id):
 def cmd_create(ctx, cred_id, username, password, description, scope):
     """Create a Username+Password credential."""
     from cb.services.credential_service import create_username_password
+    import uuid
     try:
+        if not cred_id:
+            cred_id = str(uuid.uuid4())
         if not password:
             password = click.prompt(
                 f"Password for '{username}'",
