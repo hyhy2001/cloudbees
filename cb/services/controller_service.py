@@ -96,6 +96,13 @@ def get_controller_capabilities(
     name: str,
 ) -> CapabilityInfo:
     """Fetch controller detail and derive create permissions from _class."""
+    
+    from cb.cache.manager import get_cached, set_cache
+    cache_key = f"controllers.capabilities.{name}"
+    cached = get_cached(cache_key, db_path=client._db_path)
+    if cached:
+        return CapabilityInfo(**cached)
+
     dto = get_controller(client, name)
     cls = dto.class_name
 
@@ -157,7 +164,7 @@ def get_controller_capabilities(
             # allow 405 Method Not Allowed as it also proves endpoint visibility
             cred = getattr(e, "status_code", 404) in (400, 405)
 
-    return CapabilityInfo(
+    caps = CapabilityInfo(
         name=dto.name,
         url=dto.url,
         description=dto.description or "",
@@ -167,3 +174,6 @@ def get_controller_capabilities(
         can_create_node=node,
         can_create_cred=cred,
     )
+    
+    set_cache(cache_key, dataclasses.asdict(caps), db_path=client._db_path)
+    return caps
