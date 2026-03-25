@@ -31,8 +31,9 @@ from cb.tui.screens.overlay_screens import DebugOverlay, ConsoleOverlay
 
 _SCREEN_NAMES = ["Controller", "Credentials", "Nodes", "Jobs", "Settings"]
 _MIN_ROWS, _MIN_COLS = 24, 80
-_SIDEBAR_W = 18
-_MENU_SIZE = SCREEN_COUNT + 1   # 5 screens + 1 Logout item
+_SIDEBAR_W  = 18
+_MENU_SIZE  = SCREEN_COUNT + 1   # 5 screens + 1 Logout item
+_CONSOLE_H  = 7                  # height of bottom console panel (rows)
 
 
 def main(
@@ -155,19 +156,27 @@ def main(
             continue
 
         # ── Layout ──────────────────────────────────────────────
-        header_h    = 1
-        statusbar_h = 1
-        content_h   = rows - header_h - statusbar_h
-        # Reserve 1 row for content panel title bar (focus indicator)
-        panel_title_h = 1
+        header_h      = 1
+        statusbar_h   = 1
+        panel_title_h = 1   # content panel title bar
+        # Console bottom panel takes _CONSOLE_H rows + 1 divider row
+        console_total = (_CONSOLE_H + 1) if show_console else 0
+        content_h     = rows - header_h - statusbar_h - console_total
         panel_body_h  = content_h - panel_title_h
 
         try:
-            header_win    = stdscr.derwin(header_h,       cols,              0,          0)
-            sidebar_win   = stdscr.derwin(content_h,      _SIDEBAR_W,        header_h,   0)
-            title_win     = stdscr.derwin(panel_title_h,  cols - _SIDEBAR_W, header_h,   _SIDEBAR_W)
-            main_win      = stdscr.derwin(panel_body_h,   cols - _SIDEBAR_W, header_h + panel_title_h, _SIDEBAR_W)
-            status_win    = stdscr.derwin(statusbar_h,    cols,              rows - 1,   0)
+            header_win  = stdscr.derwin(header_h,       cols,              0,                                  0)
+            sidebar_win = stdscr.derwin(content_h,      _SIDEBAR_W,        header_h,                           0)
+            title_win   = stdscr.derwin(panel_title_h,  cols - _SIDEBAR_W, header_h,                           _SIDEBAR_W)
+            main_win    = stdscr.derwin(panel_body_h,   cols - _SIDEBAR_W, header_h + panel_title_h,           _SIDEBAR_W)
+            status_win  = stdscr.derwin(statusbar_h,    cols,              rows - 1,                           0)
+            if show_console:
+                divider_y   = header_h + content_h
+                divider_win = stdscr.derwin(1,           cols,              divider_y,                          0)
+                console_win = stdscr.derwin(_CONSOLE_H,  cols,              divider_y + 1,                      0)
+            else:
+                divider_win = None
+                console_win = None
         except curses.error:
             stdscr.refresh()
             continue
@@ -225,11 +234,25 @@ def main(
         hints = HINTS_SIDEBAR if focus == "sidebar" else HINTS_CONTENT
         draw_statusbar(status_win, hints, status_msg)
 
-        # ── Overlay rendering (drawn on top of main_win) ─────────────
+        # ── F2 debug overlay (modal, drawn over main_win) ─────────
         if show_debug:
             debug_overlay.draw(main_win)
-        elif show_console:
-            console_overlay.draw(main_win)
+
+        # ── F3 console panel (bottom, VS Code style) ──────────────
+        if show_console and divider_win and console_win:
+            from cb.tui.widgets.widgets import safe_addstr as _csa
+            from cb.tui.colors import PAIR_TITLE as _PT, PAIR_DIM as _CD
+            # Divider line
+            _div = ("─" * 3 + "  📋 CLI Command Log  " +
+                    "─" * max(0, cols - 28) + " F3:close")
+            divider_win.bkgd(" ", curses.color_pair(_PT) | curses.A_BOLD)
+            divider_win.erase()
+            _csa(divider_win, 0, 0, _div[:cols - 1],
+                 curses.color_pair(_PT) | curses.A_BOLD)
+            divider_win.refresh()
+            # Console panel content
+            console_overlay.draw_panel(console_win)
+            console_win.refresh()
 
         header_win.refresh()
         sidebar_win.refresh()

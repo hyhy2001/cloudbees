@@ -236,3 +236,47 @@ class ConsoleOverlay:
         elif ch == curses.KEY_NPAGE:
             self.scroll = min(max(0, total - content_h), self.scroll + content_h)
         return True
+
+    # ── bottom panel rendering (VS Code style) ────────────────────────
+
+    def draw_panel(self, win) -> None:
+        """Render as a compact bottom panel — one line per command.
+
+        Each line:  HH:MM:SS  $  bee <command>   ✓ result
+        Shows the most recent entries that fit in the window height.
+        """
+        rows, cols = win.getmaxyx()
+        win.bkgd(" ", curses.color_pair(PAIR_NORMAL))
+        win.erase()
+
+        if not self.entries:
+            safe_addstr(win, 0, 2,
+                "  (no commands yet — perform an action to populate)",
+                curses.color_pair(PAIR_DIM))
+            return
+
+        # Build compact single-line-per-entry list (newest last)
+        panel_lines: list[tuple[str, str, str]] = list(self.entries)
+        visible = panel_lines[max(0, len(panel_lines) - rows):]
+
+        for i, (ts, cmd, result) in enumerate(visible):
+            if i >= rows:
+                break
+            col = 2
+            # Timestamp  (dim)
+            safe_addstr(win, i, col, ts, curses.color_pair(PAIR_DIM))
+            col += len(ts)
+            # $  (green bold)
+            safe_addstr(win, i, col, "  $  ",
+                        curses.color_pair(PAIR_SUCCESS) | curses.A_BOLD)
+            col += 5
+            # command  (bold)
+            cmd_max = cols - col - (len(result) + 5 if result else 0) - 2
+            safe_addstr(win, i, col, cmd[:max(0, cmd_max)],
+                        curses.color_pair(PAIR_NORMAL) | curses.A_BOLD)
+            # result inline  (dim, right-aligned after command)
+            if result:
+                result_str = f"   ✓ {result}"
+                safe_addstr(win, i, cols - len(result_str) - 1,
+                            result_str[:cols - 2], curses.color_pair(PAIR_DIM))
+
