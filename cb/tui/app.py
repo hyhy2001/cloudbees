@@ -451,7 +451,7 @@ def main(
                         # Show capability info modal
                         try:
                             caps = get_controller_capabilities(client, name)
-                            show_info_modal(stdscr, f"Controller: {name}", [
+                            show_info_modal(main_win, f"Controller: {name}", [
                                 ("Status",      "ONLINE" if caps.online else "OFFLINE"),
                                 ("Type",         caps.type_label),
                                 ("URL",          (caps.url or "")[:48]),
@@ -460,7 +460,7 @@ def main(
                                 ("Create Node",  "YES" if caps.can_create_node else "NO"),
                                 ("",             ""),
                                 ("Description",  (caps.description or "-")[:44]),
-                            ])
+                            ], stdscr=stdscr)
                         except Exception:
                             pass  # capability fetch failed - skip modal silently
                     elif isinstance(action, str) and action.startswith("toggle_node:"):

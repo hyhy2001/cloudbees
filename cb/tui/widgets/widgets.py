@@ -230,89 +230,85 @@ def spinner_char() -> str:
 
 
 def show_info_modal(
-    stdscr,
+    win,
     title: str,
     rows: list[tuple[str, str]],
+    stdscr=None,
 ) -> None:
-    """Draw a blocking ASCII modal info box over stdscr.
+    """Draw a blocking ASCII overlay info box on win (e.g. main_win).
 
-    rows: list of (label, value) pairs.
-          Use ("", "") for a blank separator line.
-    Blocks until any key is pressed.
+    rows: list of (label, value) pairs. Use ("", "") for a blank separator.
+    stdscr: root window used for getch blocking (pass when win is a sub-window).
+    No background dimming - renders as a clean overlay on the given window.
     """
-    max_h, max_w = stdscr.getmaxyx()
-    inner_rows   = [r for r in rows]          # all rows including blanks
-    content_h    = len(inner_rows) + 2        # rows + top/bottom padding
-    box_h        = content_h + 4              # title bar + divider + hint + borders
-    box_w        = min(62, max_w - 4)
-    y0           = max(0, (max_h - box_h) // 2)
-    x0           = max(0, (max_w - box_w) // 2)
+    max_h, max_w = win.getmaxyx()
+    content_h = len(rows) + 2     # rows + top/bottom blank padding
+    box_h     = content_h + 4     # title + sub-divider + hint + 2 borders
+    box_w     = min(62, max_w - 4)
+    y0        = max(0, (max_h - box_h) // 2)
+    x0        = max(0, (max_w - box_w) // 2)
 
-    # Dim background
-    for r in range(max_h):
-        try:
-            stdscr.chgat(r, 0, max_w, curses.A_DIM)
-        except curses.error:
-            pass
-
-    # Border helpers
-    top    = "+" + "-" * (box_w - 2) + "+"
-    mid    = "|" + " " * (box_w - 2) + "|"
-    bottom = "+" + "-" * (box_w - 2) + "+"
     border_attr = curses.color_pair(PAIR_TITLE) | curses.A_BOLD
+    bg_attr     = curses.color_pair(PAIR_NORMAL)
+    mid         = "|" + " " * (box_w - 2) + "|"
 
     def _put(y, x, text, attr=0):
-        safe_addstr(stdscr, y, x, text[:box_w], attr)
+        safe_addstr(win, y, x, text[:box_w], attr)
 
-    row = y0
-    _put(row, x0, top, border_attr); row += 1
+    def _bg(y, x, w):
+        safe_addstr(win, y, x, " " * w, bg_attr)
+
+    r = y0
+    # Top border
+    _bg(r, x0, box_w); _put(r, x0, "+" + "-" * (box_w - 2) + "+", border_attr); r += 1
 
     # Title bar
-    title_str = f"  {title}  "
-    gap       = box_w - 2 - len(title_str)
-    title_line = "|" + title_str + " " * max(gap, 0) + "|"
-    _put(row, x0, title_line[:box_w], curses.color_pair(PAIR_TITLE) | curses.A_BOLD | curses.A_REVERSE)
-    row += 1
+    _bg(r, x0, box_w)
+    ts   = f"  {title}  "
+    gap  = box_w - 2 - len(ts)
+    _put(r, x0, "|" + ts + " " * max(gap, 0) + "|",
+         curses.color_pair(PAIR_TITLE) | curses.A_BOLD | curses.A_REVERSE); r += 1
 
-    # Divider below title
-    _put(row, x0, "+" + "-" * (box_w - 2) + "+", border_attr); row += 1
+    # Sub-divider
+    _bg(r, x0, box_w); _put(r, x0, "+" + "-" * (box_w - 2) + "+", border_attr); r += 1
 
-    # Blank top padding
-    _put(row, x0, mid, border_attr); row += 1
+    # Top blank row
+    _bg(r, x0, box_w); _put(r, x0, mid, border_attr); r += 1
 
     # Content rows
     lbl_w = 14
-    for label, value in inner_rows:
+    for label, value in rows:
+        _bg(r, x0, box_w)
         if not label and not value:
-            _put(row, x0, mid, border_attr)
+            _put(r, x0, mid, border_attr)
         else:
-            # Choose colour for value
-            v_upper = value.upper()
-            if v_upper in ("ONLINE", "YES", "ALLOWED"):
-                val_attr = curses.color_pair(PAIR_SUCCESS) | curses.A_BOLD
-            elif v_upper in ("OFFLINE", "NO", "NOT ALLOWED"):
-                val_attr = curses.color_pair(PAIR_ERROR)   | curses.A_BOLD
+            v = value.upper()
+            if v in ("ONLINE", "YES", "ALLOWED"):
+                va = curses.color_pair(PAIR_SUCCESS) | curses.A_BOLD
+            elif v in ("OFFLINE", "NO", "NOT ALLOWED"):
+                va = curses.color_pair(PAIR_ERROR)   | curses.A_BOLD
             else:
-                val_attr = curses.color_pair(PAIR_NORMAL)  | curses.A_BOLD
+                va = curses.color_pair(PAIR_NORMAL)  | curses.A_BOLD
+            inner     = f"  {label:<{lbl_w}}: "
+            val_str   = value[:max(0, box_w - 2 - len(inner) - 2)]
+            _put(r, x0, mid, border_attr)
+            _put(r, x0, "|" + inner, border_attr)
+            _put(r, x0 + 1 + len(inner), val_str, va)
+            _put(r, x0 + box_w - 1, "|", border_attr)
+        r += 1
 
-            inner = f"  {label:<{lbl_w}}: "
-            available = box_w - 2 - len(inner) - 2
-            val_str   = value[:max(0, available)]
-            line_txt  = "|" + inner + " " * (box_w - 2 - len(inner) - len(val_str)) + " " * 2 + "|"
-            _put(row, x0, "|" + inner, border_attr)
-            _put(row, x0 + 1 + len(inner), val_str, val_attr)
-            _put(row, x0 + box_w - 1, "|", border_attr)
-        row += 1
+    # Bottom blank row
+    _bg(r, x0, box_w); _put(r, x0, mid, border_attr); r += 1
 
-    # Blank bottom padding
-    _put(row, x0, mid, border_attr); row += 1
-
-    # Hint in bottom border
+    # Bottom border with hint
+    _bg(r, x0, box_w)
     hint      = "  Press any key to continue  "
     hint_line = "+" + hint + "-" * max(0, box_w - 2 - len(hint)) + "+"
-    _put(row, x0, hint_line[:box_w], border_attr); row += 1
+    _put(r, x0, hint_line[:box_w], border_attr); r += 1
 
-    stdscr.refresh()
-    stdscr.timeout(-1)  # block until keypress (disable the 100ms tick)
-    stdscr.getch()
-    stdscr.timeout(100)  # restore normal tick rate
+    win.refresh()
+    root = stdscr if stdscr is not None else win
+    root.timeout(-1)    # block until keypress
+    root.getch()
+    root.timeout(100)   # restore 100ms tick
+
