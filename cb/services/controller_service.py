@@ -46,24 +46,31 @@ def select_controller(name: str, url: str, db_path: Optional[Path] = None) -> No
 
 
 def get_active_controller(db_path: Optional[Path] = None, client: Optional[CloudBeesClient] = None) -> Optional[Tuple[str, str]]:
-    """Return (name, url) of the active controller, or None. Sanitizes URL to remove /cjoc prefix."""
+    """Return (name, url) of the active controller, or None. Resolves 302 redirects to find the true isolated URL."""
     from cb.db.repositories.settings_repo import get_setting
     name = get_setting("active_controller", db_path)
     if not name:
         return None
 
     url = get_setting("active_controller_url", db_path)
-    if url:
-        return (name, url)
-    else:
+    if not url:
         # Fallback if DB didn't have URL, or Jenkins didn't return one.
         # We manually construct absolute URL via the OC proxy path.
         if client:
             base = client.base_url.rstrip("/")
             if base.endswith("/cjoc"):
                 base = base[:-5]
-            return (name, f"{base}/cjoc/job/{name}/")
-        return (name, f"/cjoc/job/{name}/")
+            url = f"{base}/cjoc/job/{name}/"
+        else:
+            url = f"/cjoc/job/{name}/"
+
+    # VITAL: Follow the proxy item to its true standalone URL
+    if client:
+        resolved = client.resolve_redirect(url)
+        if resolved:
+            return (name, resolved)
+
+    return (name, url)
 
 
 # -- Controller capability info -----------------------------------------------

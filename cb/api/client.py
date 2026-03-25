@@ -132,6 +132,17 @@ class CloudBeesClient:
                     return self._request(method, path, **kwargs)
             raise
 
+    def resolve_redirect(self, path: str) -> Optional[str]:
+        """Send a GET request without following redirects, returning the Location header if 301/302. Returns None otherwise."""
+        url = path if path.startswith("http") else f"{self.base_url}{path}"
+        try:
+            resp = self._req.get(url, allow_redirects=False, timeout=5)
+            if resp.status_code in (301, 302):
+                return resp.headers.get("Location")
+        except Exception as exc:
+            _log.debug("Failed to resolve redirect for %s: %s", url, exc)
+        return None
+
     # ── Public API ────────────────────────────────────────────
 
     def get(self, path: str, cache_key: Optional[str] = None, **kwargs: Any) -> Any:
