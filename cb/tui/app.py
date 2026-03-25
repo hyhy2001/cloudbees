@@ -279,7 +279,7 @@ def main(
             _loaded.clear()
             focus = "sidebar"
             status_msg = "  Logged out. Session cleared."
-            console_overlay.log("Logged out")
+            console_overlay.log_cmd("bee auth logout", "Session cleared")
             continue
 
         if ch == KEY_LOGIN:
@@ -307,7 +307,10 @@ def main(
                     active_profile = p
                     _loaded.clear()
                     status_msg = f"  Logged in as {p.username}"
-                    console_overlay.log(f"Logged in as {p.username} @ {result['url']}")
+                    console_overlay.log_cmd(
+                        f"bee auth login --url {result['url']} --username {result['username']}",
+                        f"Logged in as {p.username}"
+                    )
                     _reload_current()
                 except Exception as exc:
                     status_msg = f"  Login error: {exc}"
@@ -338,7 +341,6 @@ def main(
                     if sidebar_cursor != active_screen:
                         active_screen = sidebar_cursor
                         _reload_current()
-                        console_overlay.log(f"Opened screen: {_SCREEN_NAMES[active_screen]}")
                     focus = "content"
                 continue
 
@@ -348,7 +350,6 @@ def main(
                 active_screen  = new_screen
                 sidebar_cursor = new_screen
                 _reload_current()
-                console_overlay.log(f"Jump to: {_SCREEN_NAMES[active_screen]}")
                 focus = "content"
                 continue
 
@@ -356,7 +357,10 @@ def main(
             if ch == KEY_REFRESH:
                 _loaded.discard(active_screen)
                 _reload_current(force=True)
-                console_overlay.log(f"Refreshed: {_SCREEN_NAMES[active_screen]}")
+                console_overlay.log_cmd(
+                    f"bee {_SCREEN_NAMES[active_screen].lower()} list --refresh",
+                    "Screen refreshed"
+                )
                 status_msg = "  Screen refreshed."
                 continue
 
@@ -365,7 +369,7 @@ def main(
                 from cb.cache.manager import clear_all
                 clear_all(db_path)
                 _loaded.clear()
-                console_overlay.log("Cache cleared (all)")
+                console_overlay.log_cmd("bee cache clear", "All cache cleared")
                 status_msg = "  Cache cleared."
                 continue
 
@@ -405,7 +409,7 @@ def main(
                         name = action.split(":", 1)[1]
                         trigger_job(client, name)
                         status_msg = f"  Triggered: {name}"
-                        console_overlay.log(f"Triggered job: {name}")
+                        console_overlay.log_cmd(f"bee job run {name}", "Job triggered")
                     elif isinstance(action, str) and action.startswith("select_controller:"):
                         from cb.services.controller_service import select_controller
                         name = action.split(":", 1)[1]
@@ -413,14 +417,14 @@ def main(
                         url  = item.url if item and item.url else ""
                         select_controller(name, url, db_path)
                         status_msg = f"  Active controller: {name}"
-                        console_overlay.log(f"Selected controller: {name} ({url})")
+                        console_overlay.log_cmd(f"bee controller select {name}", "Active controller set")
                     elif isinstance(action, str) and action.startswith("toggle_node:"):
                         from cb.services.node_service import toggle_node
                         name = action.split(":", 1)[1]
                         toggle_node(client, name)
                         node_scr.load(client)
                         status_msg = f"  Toggled node: {name}"
-                        console_overlay.log(f"Toggled node: {name}")
+                        console_overlay.log_cmd(f"bee node toggle {name}", "Node toggled")
                 except Exception as exc:
                     status_msg = f"  Error: {exc}"
-                    console_overlay.log(f"ERROR: {exc}")
+                    console_overlay.log_cmd(f"# error during action", str(exc))

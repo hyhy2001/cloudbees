@@ -118,35 +118,121 @@ class DebugOverlay:
 
 
 class ConsoleOverlay:
-    """In-session action log — records every user action during the TUI run."""
+    """CLI command log — shows the bee CLI equivalent of each TUI action."""
 
     def __init__(self):
-        self.scroll = 0
-        self.entries: list[str] = []    # populated by app.py via .log()
+        self.scroll  = 0
+        # Each entry: (timestamp, bee_command, result_text)
+        self.entries: list[tuple[str, str, str]] = []
 
-    def log(self, message: str) -> None:
-        """Append a timestamped entry (called from app.py)."""
+    def log_cmd(self, command: str, result: str = "") -> None:
+        """Append a bee CLI command with an optional result line."""
         import time
         ts = time.strftime("%H:%M:%S")
-        self.entries.append(f"[{ts}] {message}")
-        # Auto-scroll to newest
-        self.scroll = max(0, len(self.entries) - 20)
+        self.entries.append((ts, command, result))
+        self.scroll = max(0, self._line_count() - 18)
+
+    # ── rendering helpers ────────────────────────────────────────────
+
+    def _render_lines(self) -> list[tuple[str, str]]:
+        """Expand entries into (text, kind) pairs ready for drawing.
+
+        kind values: 'ts+cmd' | 'result' | 'blank' | 'empty'
+        """
+        if not self.entries:
+            return [("  (no commands yet — perform actions to populate)", "empty")]
+
+        lines: list[tuple[str, str]] = []
+        for ts, cmd, result in self.entries:
+            lines.append((f"  {ts}  $  {cmd}", "ts+cmd"))
+            if result:
+                lines.append((f"              ✓  {result}", "result"))
+            lines.append(("", "blank"))
+        return lines
+
+    def _line_count(self) -> int:
+        return len(self._render_lines())
+
+    # ── draw ─────────────────────────────────────────────────────────
 
     def draw(self, win) -> None:
-        lines = self.entries if self.entries else ["(no actions yet — navigate around to populate)"]
-        _draw_overlay_box(win, "📋 Console  — session action log", lines, self.scroll)
+        rows, cols = win.getmaxyx()
+        h  = rows - _OVERLAY_MARGIN_Y * 2
+        w  = cols - _OVERLAY_MARGIN_X * 2
+        y0 = _OVERLAY_MARGIN_Y
+        x0 = _OVERLAY_MARGIN_X
+
+        # Background
+        for r in range(h):
+            safe_addstr(win, y0 + r, x0, " " * w, curses.color_pair(PAIR_NORMAL))
+
+        # Border
+        border_attr = curses.color_pair(PAIR_TITLE) | curses.A_BOLD
+        top    = "╔" + "═" * (w - 2) + "╗"
+        mid    = "║" + " " * (w - 2) + "║"
+        bottom = "╚" + "═" * (w - 2) + "╝"
+        safe_addstr(win, y0,         x0, top,    border_attr)
+        for r in range(1, h - 1):
+            safe_addstr(win, y0 + r, x0, mid, border_attr)
+        safe_addstr(win, y0 + h - 1, x0, bottom, border_attr)
+
+        # Title / close hint
+        safe_addstr(win, y0,         x0 + 2, "  📋  CLI Command Log  ",
+                    curses.color_pair(PAIR_TITLE) | curses.A_BOLD)
+        safe_addstr(win, y0 + h - 1, x0 + 2, "  Esc / F3 to close  ",
+                    curses.color_pair(PAIR_DIM))
+
+        # Content
+        content_h = h - 2
+        content_w = w - 4
+        all_lines = self._render_lines()
+        visible   = all_lines[self.scroll: self.scroll + content_h]
+
+        for i, (text, kind) in enumerate(visible):
+            row = y0 + 1 + i
+            if kind == "ts+cmd" and "  $  " in text:
+                # Split into: timestamp  |  $  |  command
+                ts_part, cmd_part = text.split("  $  ", 1)
+                col = x0 + 2
+                safe_addstr(win, row, col, ts_part,
+                            curses.color_pair(PAIR_DIM))
+                col += len(ts_part)
+                safe_addstr(win, row, col, "  $  ",
+                            curses.color_pair(PAIR_SUCCESS) | curses.A_BOLD)
+                col += 5
+                safe_addstr(win, row, col,
+                            cmd_part[: content_w - (col - x0 - 2)],
+                            curses.color_pair(PAIR_NORMAL) | curses.A_BOLD)
+            elif kind == "result":
+                safe_addstr(win, row, x0 + 2, text[:content_w],
+                            curses.color_pair(PAIR_DIM))
+            elif kind == "empty":
+                safe_addstr(win, row, x0 + 2, text[:content_w],
+                            curses.color_pair(PAIR_DIM))
+            # "blank" → leave the row empty (already cleared)
+
+        # Scroll indicator
+        total = len(all_lines)
+        if total > content_h:
+            pct       = int(self.scroll / max(1, total - content_h) * 100)
+            indicator = f" {self.scroll + 1}-{min(self.scroll + content_h, total)}/{total} ({pct}%) "
+            safe_addstr(win, y0 + h - 1, x0 + w - len(indicator) - 2,
+                        indicator, curses.color_pair(PAIR_DIM))
+
+    # ── key handler ──────────────────────────────────────────────────
 
     def handle_key(self, ch: int) -> bool:
         """Return True to keep overlay open, False to close."""
-        if ch in (curses.KEY_F3, 27):   # F3 or Esc → close
+        if ch in (curses.KEY_F3, 27):
             return False
-        rows_visible = 20
-        if ch in (curses.KEY_UP, ord('k')):
+        content_h = 18
+        total     = self._line_count()
+        if ch == curses.KEY_UP:
             self.scroll = max(0, self.scroll - 1)
-        elif ch in (curses.KEY_DOWN, ord('j')):
-            self.scroll = min(max(0, len(self.entries) - rows_visible), self.scroll + 1)
+        elif ch == curses.KEY_DOWN:
+            self.scroll = min(max(0, total - content_h), self.scroll + 1)
         elif ch == curses.KEY_PPAGE:
-            self.scroll = max(0, self.scroll - rows_visible)
+            self.scroll = max(0, self.scroll - content_h)
         elif ch == curses.KEY_NPAGE:
-            self.scroll = min(max(0, len(self.entries) - rows_visible), self.scroll + rows_visible)
+            self.scroll = min(max(0, total - content_h), self.scroll + content_h)
         return True
