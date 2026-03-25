@@ -14,11 +14,24 @@ from cb.api.xml_builder import build_username_password_cred_xml
 from cb.dtos.credential import CredentialDTO
 
 
+def _get_user_seg(username: str = "") -> str:
+    """Return the REST path segment for either the user or system credential store."""
+    if not username:
+        from cb.services.session import load_session
+        session = load_session()
+        if session and session.get("username"):
+            username = session["username"]
+
+    if username:
+        return f"/user/{username}/credentials/store/user/domain/_"
+    return "/credentials/store/system/domain/_"
+
+
 def list_credentials(
     client: CloudBeesClient,
     username: str = "",
 ) -> List[CredentialDTO]:
-    user_seg  = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
+    user_seg = _get_user_seg(username)
     cache_key = f"credentials.list.{client.base_url}"
     data = client.get(
         f"{user_seg}/api/json",
@@ -32,7 +45,7 @@ def get_credential(
     cred_id: str,
     username: str = "",
 ) -> CredentialDTO:
-    user_seg = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
+    user_seg = _get_user_seg(username)
     data = client.get(
         f"{user_seg}/credential/{cred_id}/api/json",
         cache_key=f"credentials.detail.{cred_id}",
@@ -49,7 +62,7 @@ def create_username_password(
     scope: str = "GLOBAL",
     username: str = "",
 ) -> None:
-    user_seg = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
+    user_seg = _get_user_seg(username)
     xml = build_username_password_cred_xml(
         cred_id=cred_id,
         username=username_cred,
@@ -71,7 +84,7 @@ def delete_credential(
     cred_id: str,
     username: str = "",
 ) -> None:
-    user_seg = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
+    user_seg = _get_user_seg(username)
     client.post(
         f"{user_seg}/credential/{cred_id}/doDelete",
         invalidate="credentials.",
@@ -84,7 +97,7 @@ def update_credential(
     xml_str: str,
     username: str = "",
 ) -> None:
-    user_seg = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
+    user_seg = _get_user_seg(username)
     client.post_xml(
         f"{user_seg}/credential/{cred_id}/config.xml",
         xml_str=xml_str,
