@@ -11,6 +11,10 @@ import httpx
 from cb.api.exceptions import APIError, AuthError, NotFoundError, ConnectionError
 from cb.cache.manager import get_cached, set_cache, invalidate_prefix
 from cb.cache.policy import get_ttl
+import logging
+
+_log = logging.getLogger(__name__)
+
 
 _RETRY_DELAYS = [1, 2, 4]  # exponential backoff seconds
 
