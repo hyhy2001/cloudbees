@@ -43,11 +43,11 @@ class ControllerScreen:
         draw_table(win, headers, rows, self.selected, self.offset)
 
     def handle_key(self, ch: int) -> str | None:
-        if ch == ord('j') and self.selected < len(self.items) - 1:
+        if ch == curses.KEY_DOWN and self.selected < len(self.items) - 1:
             self.selected += 1
             if self.selected >= self.offset + 15:
                 self.offset += 1
-        elif ch == ord('k') and self.selected > 0:
+        elif ch == curses.KEY_UP and self.selected > 0:
             self.selected -= 1
             if self.selected < self.offset:
                 self.offset -= 1
@@ -81,11 +81,11 @@ class CredentialsScreen:
         draw_table(win, headers, rows, self.selected, self.offset)
 
     def handle_key(self, ch: int) -> str | None:
-        if ch == ord('j') and self.selected < len(self.items) - 1:
+        if ch == curses.KEY_DOWN and self.selected < len(self.items) - 1:
             self.selected += 1
             if self.selected >= self.offset + 15:
                 self.offset += 1
-        elif ch == ord('k') and self.selected > 0:
+        elif ch == curses.KEY_UP and self.selected > 0:
             self.selected -= 1
             if self.selected < self.offset:
                 self.offset -= 1
@@ -122,15 +122,15 @@ class NodesScreen:
         draw_table(win, headers, rows, self.selected, self.offset)
 
     def handle_key(self, ch: int) -> str | None:
-        if ch == ord('j') and self.selected < len(self.items) - 1:
+        if ch == curses.KEY_DOWN and self.selected < len(self.items) - 1:
             self.selected += 1
             if self.selected >= self.offset + 15:
                 self.offset += 1
-        elif ch == ord('k') and self.selected > 0:
+        elif ch == curses.KEY_UP and self.selected > 0:
             self.selected -= 1
             if self.selected < self.offset:
                 self.offset -= 1
-        elif ch == ord('o') and self.items:
+        elif ch in (curses.KEY_ENTER, ord('\n'), ord('\r')) and self.items:
             node = self.items[self.selected]
             return f"toggle_node:{node.name}"
         return None
@@ -172,18 +172,16 @@ class JobsScreen:
         draw_table(win, headers, rows, self.selected, self.offset)
 
     def handle_key(self, ch: int) -> str | None:
-        if ch == ord('j') and self.selected < len(self.jobs) - 1:
+        if ch == curses.KEY_DOWN and self.selected < len(self.jobs) - 1:
             self.selected += 1
             if self.selected >= self.offset + 15:
                 self.offset += 1
-        elif ch == ord('k') and self.selected > 0:
+        elif ch == curses.KEY_UP and self.selected > 0:
             self.selected -= 1
             if self.selected < self.offset:
                 self.offset -= 1
-        elif ch == ord('r') and self.jobs:
-            return f"run_job:{self.jobs[self.selected].name}"
         elif ch in (curses.KEY_ENTER, ord('\n'), ord('\r')) and self.jobs:
-            return f"detail_job:{self.jobs[self.selected].name}"
+            return f"run_job:{self.jobs[self.selected].name}"
         return None
 
     def selected_job(self):

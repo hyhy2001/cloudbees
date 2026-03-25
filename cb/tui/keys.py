@@ -39,4 +39,4 @@ KEY_HELP    = ord('?')
 
 # Context-aware status bar hints
 HINTS_SIDEBAR = "q:Quit  ↑↓:Move  Enter/→:Open  1-5:Jump  L:Login  X:Logout  F2:Debug  F3:Console  F5:Refresh"
-HINTS_CONTENT = "↑↓:Scroll  ←/Esc:Back  r:Run  j/k:Move  q:Quit  F2:Debug  F3:Console  F5:Refresh"
+HINTS_CONTENT = "↑↓:Scroll  Enter:Action  ←/Esc:Back  q:Quit  F2:Debug  F3:Console  F5:Refresh"

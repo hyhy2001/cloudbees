@@ -383,15 +383,8 @@ def main(
                 status_msg = "  Screen refreshed."
                 continue
 
-            # Translate arrow keys → j/k so screens respond to both ↑↓ and j/k
-            # Translate curses.KEY_ENTER → \n so Enter triggers screen actions
-            _ch = ch
-            if ch == curses.KEY_DOWN:
-                _ch = ord('j')
-            elif ch == curses.KEY_UP:
-                _ch = ord('k')
-            elif ch == curses.KEY_ENTER:
-                _ch = ord('\n')
+            # Normalise Enter key variants → \n so screens handle it consistently
+            _ch = ord('\n') if ch == curses.KEY_ENTER else ch
 
             # Delegate to the active screen
             action = None
