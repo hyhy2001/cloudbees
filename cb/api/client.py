@@ -69,6 +69,10 @@ class CloudBeesClient:
             url = f"{self.base_url}{path}"
         last_err: Optional[Exception] = None
 
+        merged_headers = self._headers()
+        if "headers" in kwargs:
+            merged_headers.update(kwargs.pop("headers"))
+
         for attempt, delay in enumerate([0] + _RETRY_DELAYS):
             if delay:
                 time.sleep(delay)
@@ -76,7 +80,7 @@ class CloudBeesClient:
                 resp = httpx.request(
                     method,
                     url,
-                    headers=self._headers(),
+                    headers=merged_headers,
                     timeout=self._timeout,
                     **kwargs,
                 )
@@ -180,10 +184,15 @@ class CloudBeesClient:
             url = path
         else:
             url = f"{self.base_url}{path}"
+            
+        merged_headers = self._headers()
+        if "headers" in kwargs:
+            merged_headers.update(kwargs.pop("headers"))
+            
         try:
             resp = httpx.get(
                 url,
-                headers=self._headers(),
+                headers=merged_headers,
                 timeout=self._timeout,
                 **kwargs,
             )
