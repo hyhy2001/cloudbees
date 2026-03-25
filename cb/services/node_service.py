@@ -23,10 +23,7 @@ def _computer_base(db_path: Optional[Path] = None, controller_name: Optional[str
         active = get_active_controller(db_path)
         ctrl   = active[0] if active else None
     
-    # User specified routing is <controller>/computer/...
-    # Default is cjoc/computer/...
-    prefix = ctrl if ctrl else "cjoc"
-    return f"/{prefix}/computer"
+    return f"/{ctrl}/computer" if ctrl else "/computer"
 
 
 def list_nodes(

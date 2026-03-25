@@ -25,8 +25,7 @@ def _cred_base(
         active = get_active_controller(db_path)
         ctrl   = active[0] if active else None
     
-    prefix = ctrl if ctrl else "cjoc"
-    return f"/{prefix}"
+    return f"/{ctrl}" if ctrl else ""
 
 
 def list_credentials(

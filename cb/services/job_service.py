@@ -31,9 +31,8 @@ def list_jobs(
         active = get_active_controller(db_path)
         ctrl   = active[0] if active else None
 
-    prefix = ctrl if ctrl else "cjoc"
-    endpoint  = f"/{prefix}/api/json?tree={_JOB_TREE}"
-    cache_key = f"jobs.list.{prefix}"
+    endpoint  = f"/{ctrl}/api/json?tree={_JOB_TREE}" if ctrl else f"/api/json?tree={_JOB_TREE}"
+    cache_key = f"jobs.list.{ctrl}" if ctrl else "jobs.list"
 
     data = client.get(endpoint, cache_key=cache_key)
     return [JobDTO.from_dict(j) for j in (data or {}).get("jobs", [])]
@@ -60,8 +59,10 @@ def trigger_job(
         active = get_active_controller(db_path)
         ctrl   = active[0] if active else None
     
-    prefix = ctrl if ctrl else "cjoc"
-    client.post(f"/{prefix}/job/{name}/build", invalidate="jobs.")
+    if ctrl:
+        client.post(f"/{ctrl}/job/{name}/build", invalidate="jobs.")
+    else:
+        client.post(f"/job/{name}/build", invalidate="jobs.")
 
 
 def trigger_job_with_params(client: CloudBeesClient, name: str, params: dict) -> None:
