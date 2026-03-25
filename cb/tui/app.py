@@ -158,12 +158,16 @@ def main(
         header_h    = 1
         statusbar_h = 1
         content_h   = rows - header_h - statusbar_h
+        # Reserve 1 row for content panel title bar (focus indicator)
+        panel_title_h = 1
+        panel_body_h  = content_h - panel_title_h
 
         try:
-            header_win  = stdscr.derwin(header_h,            cols,             0,          0)
-            sidebar_win = stdscr.derwin(content_h,            _SIDEBAR_W,       header_h,   0)
-            main_win    = stdscr.derwin(content_h,  cols - _SIDEBAR_W, header_h,  _SIDEBAR_W)
-            status_win  = stdscr.derwin(statusbar_h,          cols,             rows - 1,   0)
+            header_win    = stdscr.derwin(header_h,       cols,              0,          0)
+            sidebar_win   = stdscr.derwin(content_h,      _SIDEBAR_W,        header_h,   0)
+            title_win     = stdscr.derwin(panel_title_h,  cols - _SIDEBAR_W, header_h,   _SIDEBAR_W)
+            main_win      = stdscr.derwin(panel_body_h,   cols - _SIDEBAR_W, header_h + panel_title_h, _SIDEBAR_W)
+            status_win    = stdscr.derwin(statusbar_h,    cols,              rows - 1,   0)
         except curses.error:
             stdscr.refresh()
             continue
@@ -174,6 +178,21 @@ def main(
 
         draw_header(header_win, server_url, username)
         draw_sidebar(sidebar_win, active_screen, cursor=sidebar_cursor, focus=focus)
+
+        # Content panel title bar — bright when focused, dim when sidebar is active
+        from cb.tui.widgets.widgets import safe_addstr as _sa
+        from cb.tui.colors import PAIR_ACTIVE, PAIR_DIM as _DIM
+        _panel_name = _SCREEN_NAMES[active_screen] if active_screen < len(_SCREEN_NAMES) else ""
+        if focus == "content":
+            _title_attr = curses.color_pair(PAIR_ACTIVE) | curses.A_BOLD | curses.A_REVERSE
+            _title_txt  = f"  ▶  {_panel_name}  {'─' * (cols - _SIDEBAR_W - len(_panel_name) - 8)}"
+        else:
+            _title_attr = curses.color_pair(_DIM)
+            _title_txt  = f"  ·  {_panel_name}  {'─' * (cols - _SIDEBAR_W - len(_panel_name) - 8)}"
+        title_win.bkgd(" ", _title_attr)
+        title_win.erase()
+        _sa(title_win, 0, 0, _title_txt[:cols - _SIDEBAR_W - 1], _title_attr)
+        title_win.noutrefresh()
 
         main_win.bkgd(" ", curses.color_pair(PAIR_NORMAL))
         main_win.erase()
@@ -214,8 +233,10 @@ def main(
 
         header_win.refresh()
         sidebar_win.refresh()
+        title_win.refresh()
         main_win.refresh()
         status_win.refresh()
+
 
         # ── Input ─────────────────────────────────────────────────
         ch = stdscr.getch()
