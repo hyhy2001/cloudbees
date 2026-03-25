@@ -6,7 +6,7 @@ import logging
 import signal
 from pathlib import Path
 
-# File-based debug log — doesn't pollute the TUI terminal
+# File-based debug log - doesn't pollute the TUI terminal
 logging.basicConfig(
     filename="/tmp/bee.log",
     level=logging.DEBUG,
@@ -22,7 +22,7 @@ from cb.tui.keys import (
     KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ENTER, KEY_ESC,
 )
 from cb.tui.widgets.widgets import draw_header, draw_sidebar, draw_statusbar
-# Screen index constants — single source of truth from screens module
+# Screen index constants - single source of truth from screens module
 from cb.tui.screens.screens import (
     SCR_CONTROLLER, SCR_CREDENTIALS,
     SCR_NODES, SCR_JOBS, SCR_SETTINGS,
@@ -55,17 +55,17 @@ def main(
 
     # Setup
     curses.curs_set(0)
-    stdscr.timeout(100)    # 100ms tick — snappy navigation, low CPU
+    stdscr.timeout(100)    # 100ms tick - snappy navigation, low CPU
     stdscr.keypad(True)
     has_256 = init_colors()
 
-    # SIGWINCH — terminal resize
+    # SIGWINCH - terminal resize
     _resize_flag = [False]
     def _on_resize(sig, frame):
         _resize_flag[0] = True
     signal.signal(signal.SIGWINCH, _on_resize)
 
-    # ── App state ────────────────────────────────────────────────
+    # -- App state ------------------------------------------------
     active_screen  = SCR_CONTROLLER   # open on Controller by default
     sidebar_cursor = 0
     focus          = "sidebar"        # "sidebar" | "content"
@@ -116,7 +116,7 @@ def main(
     jobs_scr = JobsScreen()
 
     # Track which screens have loaded data (lazy-load on first visit).
-    # Settings (SCR_SETTINGS) renders live on each draw — no load step.
+    # Settings (SCR_SETTINGS) renders live on each draw - no load step.
     _loaded: set[int] = set()
 
     def _reload_current(force: bool = False):
@@ -164,11 +164,11 @@ def main(
                 break
             continue
 
-        # ── Layout ──────────────────────────────────────────────
+        # -- Layout ----------------------------------------------
         header_h      = 1
         statusbar_h   = 1
         panel_title_h = 1   # content panel title bar
-        # Console panel is always visible — fixed height at bottom
+        # Console panel is always visible - fixed height at bottom
         console_total = _CONSOLE_H + 1   # divider + content rows
         content_h     = rows - header_h - statusbar_h - console_total
         panel_body_h  = content_h - panel_title_h
@@ -186,23 +186,23 @@ def main(
             stdscr.refresh()
             continue
 
-        # ── Draw ─────────────────────────────────────────────────
+        # -- Draw -------------------------------------------------
         server_url = active_profile.server_url if active_profile else "not connected"
         username   = active_profile.username   if active_profile else "-"
 
         draw_header(header_win, server_url, username, active_ctrl=active_ctrl_name)
         draw_sidebar(sidebar_win, active_screen, cursor=sidebar_cursor, focus=focus)
 
-        # Content panel title bar — bright when focused, dim when sidebar is active
+        # Content panel title bar - bright when focused, dim when sidebar is active
         from cb.tui.widgets.widgets import safe_addstr as _sa
         from cb.tui.colors import PAIR_ACTIVE, PAIR_DIM as _DIM
         _panel_name = _SCREEN_NAMES[active_screen] if active_screen < len(_SCREEN_NAMES) else ""
         if focus == "content":
             _title_attr = curses.color_pair(PAIR_ACTIVE) | curses.A_BOLD | curses.A_REVERSE
-            _title_txt  = f"  ▶  {_panel_name}  {'─' * (cols - _SIDEBAR_W - len(_panel_name) - 8)}"
+            _title_txt  = f"  >  {_panel_name}  {'-' * max(0, cols - _SIDEBAR_W - len(_panel_name) - 8)}"
         else:
             _title_attr = curses.color_pair(_DIM)
-            _title_txt  = f"  ·  {_panel_name}  {'─' * (cols - _SIDEBAR_W - len(_panel_name) - 8)}"
+            _title_txt  = f"  .  {_panel_name}  {'-' * max(0, cols - _SIDEBAR_W - len(_panel_name) - 8)}"
         title_win.bkgd(" ", _title_attr)
         title_win.erase()
         _sa(title_win, 0, 0, _title_txt[:cols - _SIDEBAR_W - 1], _title_attr)
@@ -239,14 +239,14 @@ def main(
         hints = HINTS_SIDEBAR if focus == "sidebar" else HINTS_CONTENT
         draw_statusbar(status_win, hints, status_msg)
 
-        # ── F2 debug overlay (modal, drawn over main_win) ─────────
+        # -- F2 debug overlay (modal, drawn over main_win) ---------
         if show_debug:
             debug_overlay.draw(main_win)
 
-        # ── F3 console panel — always visible at bottom ──────────────
+        # -- F3 console panel - always visible at bottom --------------
         from cb.tui.widgets.widgets import safe_addstr as _csa
         from cb.tui.colors import PAIR_TITLE as _PT
-        _div = "───  📋 CLI Command Log  " + "─" * max(0, cols - 24)
+        _div = "---  [CLI Command Log]  " + "-" * max(0, cols - 24)
         divider_win.bkgd(" ", curses.color_pair(_PT) | curses.A_BOLD)
         divider_win.erase()
         _csa(divider_win, 0, 0, _div[:cols - 1], curses.color_pair(_PT) | curses.A_BOLD)
@@ -261,18 +261,18 @@ def main(
         status_win.refresh()
 
 
-        # ── Input ─────────────────────────────────────────────────
+        # -- Input -------------------------------------------------
         ch = stdscr.getch()
         if ch == -1:
             if status_msg and not status_msg.startswith("  "):
                 status_msg = ""
             continue
 
-        # ── Global keys (work in any focus + any overlay) ─────────
+        # -- Global keys (work in any focus + any overlay) ---------
         if ch in KEY_QUIT:
             break
 
-        # F2 — toggle debug overlay
+        # F2 - toggle debug overlay
         if ch == KEY_DEBUG:
             show_debug = not show_debug
             continue
@@ -329,9 +329,9 @@ def main(
                     status_msg = f"  Login error: {exc}"
             continue
 
-        # ── Sidebar focus ──────────────────────────────────────────
+        # -- Sidebar focus ------------------------------------------
         if focus == "sidebar":
-            # ↑ / ↓ / Tab → move cursor through all menu items (screens + Logout)
+            # Up / Dn / Tab -> move cursor through all menu items (screens + Logout)
             if ch == curses.KEY_UP:
                 sidebar_cursor = (sidebar_cursor - 1) % _MENU_SIZE
                 continue
@@ -340,7 +340,7 @@ def main(
                 sidebar_cursor = (sidebar_cursor + 1) % _MENU_SIZE
                 continue
 
-            # Enter / → → activate item
+            # Enter / -> -> activate item
             if ch in KEY_ENTER or ch == curses.KEY_RIGHT:
                 if sidebar_cursor == SCREEN_COUNT:
                     # Cursor is on Logout item
@@ -357,7 +357,7 @@ def main(
                     focus = "content"
                 continue
 
-            # Number shortcuts 1-5 → jump + enter content immediately
+            # Number shortcuts 1-5 -> jump + enter content immediately
             if ch in SCREEN_KEYS:
                 new_screen = SCREEN_KEYS[ch]
                 active_screen  = new_screen
@@ -386,9 +386,9 @@ def main(
                 status_msg = "  Cache cleared."
                 continue
 
-        # ── Content focus ──────────────────────────────────────────
+        # -- Content focus ------------------------------------------
         elif focus == "content":
-            # ← / Esc → return to sidebar (or close detail/confirm in screens)
+            # <- / Esc -> return to sidebar (or close detail/confirm in screens)
             if ch == curses.KEY_LEFT or ch in KEY_ESC:
                 # Give the active screen a chance to close its own sub-state first
                 _consumed = False
@@ -412,7 +412,7 @@ def main(
                 status_msg = "  Screen refreshed."
                 continue
 
-            # Normalise Enter key variants → \n so screens handle it consistently
+            # Normalise Enter key variants -> \n so screens handle it consistently
             _ch = ord('\n') if ch == curses.KEY_ENTER else ch
 
             # Delegate to the active screen
@@ -440,14 +440,32 @@ def main(
                         status_msg = f"  Triggered: {name}"
                         console_overlay.log_cmd(f"bee job run {name}", "Job triggered")
                     elif isinstance(action, str) and action.startswith("select_controller:"):
-                        from cb.services.controller_service import select_controller
+                        from cb.services.controller_service import (
+                            select_controller, get_controller_capabilities,
+                        )
+                        from cb.tui.widgets.widgets import show_info_modal
                         name = action.split(":", 1)[1]
                         item = next((c for c in ctrl_scr.items if c.name == name), None)
                         url  = item.url if item and item.url else ""
                         select_controller(name, url, db_path)
-                        status_msg = f"  Active controller: {name}"
+                        status_msg       = f"  Active controller: {name}"
                         active_ctrl_name = name
                         console_overlay.log_cmd(f"bee controller select {name}", "Active controller set")
+                        # Show capability info modal
+                        try:
+                            caps = get_controller_capabilities(client, name)
+                            show_info_modal(stdscr, f"Controller: {name}", [
+                                ("Status",      "ONLINE" if caps.online else "OFFLINE"),
+                                ("Type",         caps.type_label),
+                                ("URL",          (caps.url or "")[:48]),
+                                ("",             ""),
+                                ("Create Job",   "YES" if caps.can_create_job  else "NO"),
+                                ("Create Node",  "YES" if caps.can_create_node else "NO"),
+                                ("",             ""),
+                                ("Description",  (caps.description or "-")[:44]),
+                            ])
+                        except Exception:
+                            pass  # capability fetch failed - skip modal silently
                     elif isinstance(action, str) and action.startswith("toggle_node:"):
                         from cb.services.node_service import toggle_offline
                         name = action.split(":", 1)[1]

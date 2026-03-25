@@ -1,4 +1,4 @@
-"""Overlay screens: Debug log viewer (F2) and Console/action log (F3)."""
+"""Overlay screens: Debug log viewer (F2) and Console/action log (always-on panel)."""
 
 from __future__ import annotations
 import curses
@@ -14,10 +14,10 @@ _OVERLAY_MARGIN_Y = 2
 
 
 def _draw_overlay_box(win, title: str, lines: list[str], scroll: int) -> None:
-    """Draw a bordered overlay with scrollable content inside ``win``."""
+    """Draw a bordered overlay with scrollable content inside win. ASCII-only."""
     rows, cols = win.getmaxyx()
-    h = rows - _OVERLAY_MARGIN_Y * 2
-    w = cols - _OVERLAY_MARGIN_X * 2
+    h  = rows - _OVERLAY_MARGIN_Y * 2
+    w  = cols - _OVERLAY_MARGIN_X * 2
     y0 = _OVERLAY_MARGIN_Y
     x0 = _OVERLAY_MARGIN_X
 
@@ -25,11 +25,11 @@ def _draw_overlay_box(win, title: str, lines: list[str], scroll: int) -> None:
     for r in range(h):
         safe_addstr(win, y0 + r, x0, " " * w, curses.color_pair(PAIR_NORMAL))
 
-    # Border
+    # Border (ASCII)
     border_attr = curses.color_pair(PAIR_TITLE) | curses.A_BOLD
-    top    = "╔" + "═" * (w - 2) + "╗"
-    mid    = "║" + " " * (w - 2) + "║"
-    bottom = "╚" + "═" * (w - 2) + "╝"
+    top    = "+" + "-" * (w - 2) + "+"
+    mid    = "|" + " " * (w - 2) + "|"
+    bottom = "+" + "-" * (w - 2) + "+"
 
     safe_addstr(win, y0,         x0, top,    border_attr)
     for r in range(1, h - 1):
@@ -45,17 +45,16 @@ def _draw_overlay_box(win, title: str, lines: list[str], scroll: int) -> None:
     safe_addstr(win, y0 + h - 1, x0 + 2, hint, curses.color_pair(PAIR_DIM))
 
     # Content area
-    content_h = h - 2       # inner rows (excluding top/bottom borders)
-    content_w = w - 4       # inner cols (margin inside borders)
-    visible = lines[scroll: scroll + content_h]
+    content_h = h - 2
+    content_w = w - 4
+    visible   = lines[scroll: scroll + content_h]
 
     for i, line in enumerate(visible):
-        # Colour-code by log level keyword
         if "ERROR" in line or "CRITICAL" in line:
             attr = curses.color_pair(PAIR_ERROR)
         elif "WARNING" in line:
             attr = curses.color_pair(PAIR_WARNING)
-        elif "INFO" in line or "✅" in line:
+        elif "INFO" in line or "OK" in line:
             attr = curses.color_pair(PAIR_SUCCESS)
         else:
             attr = curses.color_pair(PAIR_DIM)
@@ -64,20 +63,20 @@ def _draw_overlay_box(win, title: str, lines: list[str], scroll: int) -> None:
     # Scroll indicator
     total = len(lines)
     if total > content_h:
-        pct = int(scroll / max(1, total - content_h) * 100)
+        pct       = int(scroll / max(1, total - content_h) * 100)
         indicator = f" {scroll + 1}-{min(scroll + content_h, total)}/{total} ({pct}%) "
         safe_addstr(win, y0 + h - 1, x0 + w - len(indicator) - 2,
                     indicator, curses.color_pair(PAIR_DIM))
 
 
-# ── Debug overlay (F2) ────────────────────────────────────────────────────────
+# -- Debug overlay (F2) -------------------------------------------------------
 
 
 class DebugOverlay:
     """Live tail of /tmp/bee.log."""
 
     def __init__(self):
-        self.scroll = 0
+        self.scroll  = 0
         self._lines: list[str] = []
 
     def _load(self) -> None:
@@ -86,43 +85,41 @@ class DebugOverlay:
             self._lines = text.splitlines() or ["(log is empty)"]
         except OSError as e:
             self._lines = [f"Cannot read log: {e}"]
-        # Auto-scroll to bottom on every load
-        rows_visible = 20   # approximate; real clip done in draw
+        rows_visible = 20
         self.scroll = max(0, len(self._lines) - rows_visible)
 
     def draw(self, win) -> None:
         self._load()
-        _draw_overlay_box(win, "🐛 Debug Log  /tmp/bee.log", self._lines, self.scroll)
+        _draw_overlay_box(win, "[DEBUG] /tmp/bee.log", self._lines, self.scroll)
 
     def handle_key(self, ch: int) -> bool:
         """Return True to keep overlay open, False to close."""
-        if ch in (curses.KEY_F2, 27):   # F2 or Esc → close
+        if ch in (curses.KEY_F2, 27):   # F2 or Esc - close
             return False
         rows_visible = 20
         if ch in (curses.KEY_UP, ord('k')):
             self.scroll = max(0, self.scroll - 1)
         elif ch in (curses.KEY_DOWN, ord('j')):
             self.scroll = min(max(0, len(self._lines) - rows_visible), self.scroll + 1)
-        elif ch == curses.KEY_PPAGE:    # Page Up
+        elif ch == curses.KEY_PPAGE:
             self.scroll = max(0, self.scroll - rows_visible)
-        elif ch == curses.KEY_NPAGE:    # Page Down
+        elif ch == curses.KEY_NPAGE:
             self.scroll = min(max(0, len(self._lines) - rows_visible), self.scroll + rows_visible)
-        elif ch in (ord('G'),):         # go to bottom
+        elif ch in (ord('G'),):
             self.scroll = max(0, len(self._lines) - rows_visible)
-        elif ch in (ord('g'),):         # go to top
+        elif ch in (ord('g'),):
             self.scroll = 0
         return True
 
 
-# ── Console overlay (F3) ─────────────────────────────────────────────────────
+# -- Console overlay (always-on bottom panel) ---------------------------------
 
 
 class ConsoleOverlay:
-    """CLI command log — shows the bee CLI equivalent of each TUI action."""
+    """CLI command log - shows the bee CLI equivalent of each TUI action."""
 
     def __init__(self):
         self.scroll  = 0
-        # Each entry: (timestamp, bee_command, result_text)
         self.entries: list[tuple[str, str, str]] = []
 
     def log_cmd(self, command: str, result: str = "") -> None:
@@ -132,57 +129,50 @@ class ConsoleOverlay:
         self.entries.append((ts, command, result))
         self.scroll = max(0, self._line_count() - 18)
 
-    # ── rendering helpers ────────────────────────────────────────────
-
     def _render_lines(self) -> list[tuple[str, str]]:
         """Expand entries into (text, kind) pairs ready for drawing.
 
         kind values: 'ts+cmd' | 'result' | 'blank' | 'empty'
         """
         if not self.entries:
-            return [("  (no commands yet — perform actions to populate)", "empty")]
+            return [("  (no commands yet - perform actions to populate)", "empty")]
 
         lines: list[tuple[str, str]] = []
         for ts, cmd, result in self.entries:
             lines.append((f"  {ts}  $  {cmd}", "ts+cmd"))
             if result:
-                lines.append((f"              ✓  {result}", "result"))
+                lines.append((f"              OK  {result}", "result"))
             lines.append(("", "blank"))
         return lines
 
     def _line_count(self) -> int:
         return len(self._render_lines())
 
-    # ── draw ─────────────────────────────────────────────────────────
-
     def draw(self, win) -> None:
+        """Draw as a scrollable modal (legacy - kept for compatibility)."""
         rows, cols = win.getmaxyx()
         h  = rows - _OVERLAY_MARGIN_Y * 2
         w  = cols - _OVERLAY_MARGIN_X * 2
         y0 = _OVERLAY_MARGIN_Y
         x0 = _OVERLAY_MARGIN_X
 
-        # Background
+        border_attr = curses.color_pair(PAIR_TITLE) | curses.A_BOLD
+        top    = "+" + "-" * (w - 2) + "+"
+        mid    = "|" + " " * (w - 2) + "|"
+        bottom = "+" + "-" * (w - 2) + "+"
+
         for r in range(h):
             safe_addstr(win, y0 + r, x0, " " * w, curses.color_pair(PAIR_NORMAL))
-
-        # Border
-        border_attr = curses.color_pair(PAIR_TITLE) | curses.A_BOLD
-        top    = "╔" + "═" * (w - 2) + "╗"
-        mid    = "║" + " " * (w - 2) + "║"
-        bottom = "╚" + "═" * (w - 2) + "╝"
         safe_addstr(win, y0,         x0, top,    border_attr)
         for r in range(1, h - 1):
             safe_addstr(win, y0 + r, x0, mid, border_attr)
         safe_addstr(win, y0 + h - 1, x0, bottom, border_attr)
 
-        # Title / close hint
-        safe_addstr(win, y0,         x0 + 2, "  📋  CLI Command Log  ",
+        safe_addstr(win, y0,         x0 + 2, "  [CLI Command Log]  ",
                     curses.color_pair(PAIR_TITLE) | curses.A_BOLD)
-        safe_addstr(win, y0 + h - 1, x0 + 2, "  Esc / F3 to close  ",
+        safe_addstr(win, y0 + h - 1, x0 + 2, "  Esc to close  ",
                     curses.color_pair(PAIR_DIM))
 
-        # Content
         content_h = h - 2
         content_w = w - 4
         all_lines = self._render_lines()
@@ -191,11 +181,9 @@ class ConsoleOverlay:
         for i, (text, kind) in enumerate(visible):
             row = y0 + 1 + i
             if kind == "ts+cmd" and "  $  " in text:
-                # Split into: timestamp  |  $  |  command
                 ts_part, cmd_part = text.split("  $  ", 1)
                 col = x0 + 2
-                safe_addstr(win, row, col, ts_part,
-                            curses.color_pair(PAIR_DIM))
+                safe_addstr(win, row, col, ts_part, curses.color_pair(PAIR_DIM))
                 col += len(ts_part)
                 safe_addstr(win, row, col, "  $  ",
                             curses.color_pair(PAIR_SUCCESS) | curses.A_BOLD)
@@ -203,23 +191,16 @@ class ConsoleOverlay:
                 safe_addstr(win, row, col,
                             cmd_part[: content_w - (col - x0 - 2)],
                             curses.color_pair(PAIR_NORMAL) | curses.A_BOLD)
-            elif kind == "result":
+            elif kind in ("result", "empty"):
                 safe_addstr(win, row, x0 + 2, text[:content_w],
                             curses.color_pair(PAIR_DIM))
-            elif kind == "empty":
-                safe_addstr(win, row, x0 + 2, text[:content_w],
-                            curses.color_pair(PAIR_DIM))
-            # "blank" → leave the row empty (already cleared)
 
-        # Scroll indicator
         total = len(all_lines)
         if total > content_h:
             pct       = int(self.scroll / max(1, total - content_h) * 100)
             indicator = f" {self.scroll + 1}-{min(self.scroll + content_h, total)}/{total} ({pct}%) "
             safe_addstr(win, y0 + h - 1, x0 + w - len(indicator) - 2,
                         indicator, curses.color_pair(PAIR_DIM))
-
-    # ── key handler ──────────────────────────────────────────────────
 
     def handle_key(self, ch: int) -> bool:
         """Return True to keep overlay open, False to close."""
@@ -237,12 +218,10 @@ class ConsoleOverlay:
             self.scroll = min(max(0, total - content_h), self.scroll + content_h)
         return True
 
-    # ── bottom panel rendering (VS Code style) ────────────────────────
-
     def draw_panel(self, win) -> None:
-        """Render as a compact bottom panel — one line per command.
+        """Render as a compact bottom panel - one line per command (VS Code style).
 
-        Each line:  HH:MM:SS  $  bee <command>   ✓ result
+        Each line:  HH:MM:SS  $  bee <command>   OK result
         Shows the most recent entries that fit in the window height.
         """
         rows, cols = win.getmaxyx()
@@ -251,11 +230,10 @@ class ConsoleOverlay:
 
         if not self.entries:
             safe_addstr(win, 0, 2,
-                "  (no commands yet — perform an action to populate)",
+                "  (no commands yet - perform an action to populate)",
                 curses.color_pair(PAIR_DIM))
             return
 
-        # Build compact single-line-per-entry list (newest last)
         panel_lines: list[tuple[str, str, str]] = list(self.entries)
         visible = panel_lines[max(0, len(panel_lines) - rows):]
 
@@ -263,20 +241,15 @@ class ConsoleOverlay:
             if i >= rows:
                 break
             col = 2
-            # Timestamp  (dim)
             safe_addstr(win, i, col, ts, curses.color_pair(PAIR_DIM))
             col += len(ts)
-            # $  (green bold)
             safe_addstr(win, i, col, "  $  ",
                         curses.color_pair(PAIR_SUCCESS) | curses.A_BOLD)
             col += 5
-            # command  (bold)
-            cmd_max = cols - col - (len(result) + 5 if result else 0) - 2
+            cmd_max = cols - col - (len(result) + 6 if result else 0) - 2
             safe_addstr(win, i, col, cmd[:max(0, cmd_max)],
                         curses.color_pair(PAIR_NORMAL) | curses.A_BOLD)
-            # result inline  (dim, right-aligned after command)
             if result:
-                result_str = f"   ✓ {result}"
+                result_str = f"   OK {result}"
                 safe_addstr(win, i, cols - len(result_str) - 1,
                             result_str[:cols - 2], curses.color_pair(PAIR_DIM))
-

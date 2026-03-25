@@ -1,4 +1,4 @@
-"""Reusable TUI widgets — header, sidebar, table, input box, statusbar."""
+"""Reusable TUI widgets - header, sidebar, table, input box, statusbar."""
 
 from __future__ import annotations
 import curses
@@ -11,7 +11,7 @@ from cb.tui.colors import (
 )
 
 
-# ── ASCII border helpers ──────────────────────────────────────
+# -- ASCII border helpers --------------------------------------
 
 
 def safe_addstr(win, y: int, x: int, text: str, attr: int = 0) -> None:
@@ -36,21 +36,21 @@ def draw_box(win, y: int, x: int, h: int, w: int, attr: int = 0) -> None:
     safe_addstr(win, y + h - 1, x, border, attr)
 
 
-# ── Header ────────────────────────────────────────────────────
+# -- Header ----------------------------------------------------
 
 
 def draw_header(win, server_url: str, username: str, active_ctrl: str = "") -> None:
     rows, cols = win.getmaxyx()
     win.bkgd(" ", curses.color_pair(PAIR_HEADER))
-    title = " CloudBees Manager"
-    ctrl_badge = f"  │  ctrl: {active_ctrl}" if active_ctrl else ""
-    right = f"[{username}]  {server_url} "
-    gap = cols - len(title) - len(ctrl_badge) - len(right)
-    line = title + ctrl_badge + " " * max(gap, 1) + right
+    title       = " CloudBees Manager"
+    ctrl_badge  = f"  |  ctrl: {active_ctrl}" if active_ctrl else ""
+    right       = f"[{username}]  {server_url} "
+    gap         = cols - len(title) - len(ctrl_badge) - len(right)
+    line        = title + ctrl_badge + " " * max(gap, 1) + right
     safe_addstr(win, 0, 0, line[:cols - 1], curses.color_pair(PAIR_HEADER) | curses.A_BOLD)
 
 
-# ── Sidebar ───────────────────────────────────────────────────
+# -- Sidebar ---------------------------------------------------
 
 MENU_ITEMS = [
     "[1] Controller",
@@ -72,11 +72,11 @@ def draw_sidebar(win, active_idx: int, cursor: int | None = None, focus: str = "
         is_cursor = (cursor is not None and i == cursor)
 
         if focus == "content":
-            # Content panel is active — dim the entire sidebar
+            # Content panel is active - dim the entire sidebar
             attr   = curses.color_pair(PAIR_DIM)
             prefix = "> " if is_active else "  "
         elif is_active and is_cursor:
-            # Cursor resting on the already-active screen — show combined state
+            # Cursor resting on the already-active screen - show combined state
             attr   = curses.color_pair(PAIR_ACTIVE) | curses.A_BOLD | curses.A_REVERSE
             prefix = "> "
         elif is_active:
@@ -98,7 +98,7 @@ def draw_sidebar(win, active_idx: int, cursor: int | None = None, focus: str = "
         safe_addstr(win, r, cols - 1, "|", curses.color_pair(PAIR_DIM))
 
 
-# ── Status bar ────────────────────────────────────────────────
+# -- Status bar ------------------------------------------------
 
 
 def draw_statusbar(win, hints: str, message: str = "") -> None:
@@ -109,7 +109,7 @@ def draw_statusbar(win, hints: str, message: str = "") -> None:
     safe_addstr(win, 0, 1, text[:cols - 2], curses.color_pair(PAIR_KEYHINT))
 
 
-# ── ASCII Table ───────────────────────────────────────────────
+# -- ASCII Table -----------------------------------------------
 
 
 def draw_table(
@@ -143,7 +143,7 @@ def draw_table(
         for i, cell in enumerate(row[:n_cols]):
             widths[i] = max(widths[i], len(str(cell)))
 
-    # Scale down if too wide — distribute shrink from largest to smallest
+    # Scale down if too wide - distribute shrink from largest to smallest
     total = sum(widths) + n_cols + 1
     if total > cols - 1:
         excess = total - (cols - 1)
@@ -201,7 +201,7 @@ def draw_table(
     safe_addstr(win, y, 0, count_text, curses.color_pair(PAIR_DIM))
 
 
-# ── Input Box ─────────────────────────────────────────────────
+# -- Input Box -------------------------------------------------
 
 
 def draw_input_box(win, y: int, x: int, label: str, value: str,
@@ -217,10 +217,100 @@ def draw_input_box(win, y: int, x: int, label: str, value: str,
     safe_addstr(win, y + 3, x, "+" + "-" * (width + 2) + "+", curses.color_pair(PAIR_DIM))
 
 
-# ── Spinner ───────────────────────────────────────────────────
+# -- Spinner ---------------------------------------------------
 
 _SPINNER = r"|/-\\"
 
 
 def spinner_char() -> str:
     return _SPINNER[int(time.time() * 4) % len(_SPINNER)]
+
+
+# -- Info modal ---------------------------------------------------------------
+
+
+def show_info_modal(
+    stdscr,
+    title: str,
+    rows: list[tuple[str, str]],
+) -> None:
+    """Draw a blocking ASCII modal info box over stdscr.
+
+    rows: list of (label, value) pairs.
+          Use ("", "") for a blank separator line.
+    Blocks until any key is pressed.
+    """
+    max_h, max_w = stdscr.getmaxyx()
+    inner_rows   = [r for r in rows]          # all rows including blanks
+    content_h    = len(inner_rows) + 2        # rows + top/bottom padding
+    box_h        = content_h + 4              # title bar + divider + hint + borders
+    box_w        = min(62, max_w - 4)
+    y0           = max(0, (max_h - box_h) // 2)
+    x0           = max(0, (max_w - box_w) // 2)
+
+    # Dim background
+    for r in range(max_h):
+        try:
+            stdscr.chgat(r, 0, max_w, curses.A_DIM)
+        except curses.error:
+            pass
+
+    # Border helpers
+    top    = "+" + "-" * (box_w - 2) + "+"
+    mid    = "|" + " " * (box_w - 2) + "|"
+    bottom = "+" + "-" * (box_w - 2) + "+"
+    border_attr = curses.color_pair(PAIR_TITLE) | curses.A_BOLD
+
+    def _put(y, x, text, attr=0):
+        safe_addstr(stdscr, y, x, text[:box_w], attr)
+
+    row = y0
+    _put(row, x0, top, border_attr); row += 1
+
+    # Title bar
+    title_str = f"  {title}  "
+    gap       = box_w - 2 - len(title_str)
+    title_line = "|" + title_str + " " * max(gap, 0) + "|"
+    _put(row, x0, title_line[:box_w], curses.color_pair(PAIR_TITLE) | curses.A_BOLD | curses.A_REVERSE)
+    row += 1
+
+    # Divider below title
+    _put(row, x0, "+" + "-" * (box_w - 2) + "+", border_attr); row += 1
+
+    # Blank top padding
+    _put(row, x0, mid, border_attr); row += 1
+
+    # Content rows
+    lbl_w = 14
+    for label, value in inner_rows:
+        if not label and not value:
+            _put(row, x0, mid, border_attr)
+        else:
+            # Choose colour for value
+            v_upper = value.upper()
+            if v_upper in ("ONLINE", "YES", "ALLOWED"):
+                val_attr = curses.color_pair(PAIR_SUCCESS) | curses.A_BOLD
+            elif v_upper in ("OFFLINE", "NO", "NOT ALLOWED"):
+                val_attr = curses.color_pair(PAIR_ERROR)   | curses.A_BOLD
+            else:
+                val_attr = curses.color_pair(PAIR_NORMAL)  | curses.A_BOLD
+
+            inner = f"  {label:<{lbl_w}}: "
+            available = box_w - 2 - len(inner) - 2
+            val_str   = value[:max(0, available)]
+            line_txt  = "|" + inner + " " * (box_w - 2 - len(inner) - len(val_str)) + " " * 2 + "|"
+            _put(row, x0, "|" + inner, border_attr)
+            _put(row, x0 + 1 + len(inner), val_str, val_attr)
+            _put(row, x0 + box_w - 1, "|", border_attr)
+        row += 1
+
+    # Blank bottom padding
+    _put(row, x0, mid, border_attr); row += 1
+
+    # Hint in bottom border
+    hint      = "  Press any key to continue  "
+    hint_line = "+" + hint + "-" * max(0, box_w - 2 - len(hint)) + "+"
+    _put(row, x0, hint_line[:box_w], border_attr); row += 1
+
+    stdscr.refresh()
+    stdscr.getch()  # block until any key

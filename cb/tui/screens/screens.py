@@ -18,7 +18,7 @@ SCR_JOBS        = 3
 SCR_SETTINGS    = 4
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# -- Helpers -------------------------------------------------------------------
 
 
 def _draw_detail_panel(win, title: str, rows: list[tuple[str, str]]) -> None:
@@ -27,17 +27,17 @@ def _draw_detail_panel(win, title: str, rows: list[tuple[str, str]]) -> None:
     max_rows, cols = win.getmaxyx()
     safe_addstr(win, 0, 2, f"  {title}  ",
                 curses.color_pair(PAIR_TITLE) | curses.A_BOLD | curses.A_UNDERLINE)
-    safe_addstr(win, 1, 2, "─" * (cols - 4), curses.color_pair(PAIR_DIM))
+    safe_addstr(win, 1, 2, "-" * (cols - 4), curses.color_pair(PAIR_DIM))
     for i, (label, value) in enumerate(rows):
         if i + 3 >= max_rows:
             break
         safe_addstr(win, i + 2, 4, f"{label:<16}", curses.color_pair(PAIR_DIM))
         safe_addstr(win, i + 2, 20, value[:cols - 22], curses.color_pair(PAIR_NORMAL) | curses.A_BOLD)
     safe_addstr(win, min(len(rows) + 3, max_rows - 2), 4,
-                "← / Esc to go back", curses.color_pair(PAIR_DIM))
+                "<- / Esc to go back", curses.color_pair(PAIR_DIM))
 
 
-# ── Controller screen ────────────────────────────────────────────────────────
+# -- Controller screen --------------------------------------------------------
 
 
 class ControllerScreen:
@@ -75,7 +75,7 @@ class ControllerScreen:
         return None
 
 
-# ── Credentials screen ────────────────────────────────────────────────────────
+# -- Credentials screen --------------------------------------------------------
 
 
 class CredentialsScreen:
@@ -107,7 +107,7 @@ class CredentialsScreen:
                 ("Name",        c.display_name),
                 ("Type",        c.type_name),
                 ("Scope",       c.scope),
-                ("Description", c.description or "—"),
+                ("Description", c.description or "-"),
             ])
         else:
             headers = ["ID", "Display Name", "Type", "Scope"]
@@ -137,7 +137,7 @@ class CredentialsScreen:
         return None
 
 
-# ── Nodes screen ──────────────────────────────────────────────────────────────
+# -- Nodes screen --------------------------------------------------------------
 
 
 class NodesScreen:
@@ -182,7 +182,7 @@ class NodesScreen:
         # Confirmation prompt overlay at bottom of win
         if self.pending_toggle:
             max_rows, cols = win.getmaxyx()
-            prompt = f"  Toggle '{self.pending_toggle}'?  Enter=confirm   ←/Esc=cancel  "
+            prompt = f"  Toggle '{self.pending_toggle}'?  Enter=confirm   <-/Esc=cancel  "
             safe_addstr(win, max_rows - 2, 2, prompt[:cols - 3],
                         curses.color_pair(PAIR_WARNING) | curses.A_BOLD)
 
@@ -210,21 +210,21 @@ class NodesScreen:
         return None
 
 
-# ── Jobs screen ───────────────────────────────────────────────────────────────
+# -- Jobs screen ---------------------------------------------------------------
 
 
 _JOB_STATUS_ICON = {
-    "blue":          "✅",
-    "blue_anime":    "🔄",
-    "red":           "❌",
-    "red_anime":     "🔄",
-    "yellow":        "⚠️",
-    "yellow_anime":  "🔄",
-    "aborted":       "⚫",
-    "aborted_anime": "🔄",
-    "notbuilt":      "⬜",
-    "disabled":      "🚫",
-    "":              "⬜",
+    "blue":          "[OK] ",
+    "blue_anime":    "[RUN]",
+    "red":           "[FAIL]",
+    "red_anime":     "[RUN]",
+    "yellow":        "[WARN]",
+    "yellow_anime":  "[RUN]",
+    "aborted":       "[ABT]",
+    "aborted_anime": "[RUN]",
+    "notbuilt":      "[-]  ",
+    "disabled":      "[DIS]",
+    "":              "[-]  ",
 }
 
 _JOB_STATUS_PAIR = {
@@ -286,7 +286,7 @@ class JobsScreen:
         # Confirmation prompt
         if self.pending_run:
             max_rows, cols = win.getmaxyx()
-            prompt = f"  Run '{self.pending_run}'?  Enter=confirm   ←/Esc=cancel  "
+            prompt = f"  Run '{self.pending_run}'?  Enter=confirm   <-/Esc=cancel  "
             safe_addstr(win, max_rows - 2, 2, prompt[:cols - 3],
                         curses.color_pair(PAIR_WARNING) | curses.A_BOLD)
 
@@ -319,7 +319,7 @@ class JobsScreen:
         return None
 
 
-# ── Settings screen ───────────────────────────────────────────────────────────
+# -- Settings screen -----------------------------------------------------------
 
 
 def draw_settings(win, client: CloudBeesClient | None) -> None:

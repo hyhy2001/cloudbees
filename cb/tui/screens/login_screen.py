@@ -1,4 +1,4 @@
-"""Login screen — collects URL, username, password."""
+"""Login screen - collects URL, username, password."""
 
 from __future__ import annotations
 import curses
@@ -10,7 +10,7 @@ from cb.tui.colors import (
 from cb.tui.widgets.widgets import safe_addstr
 from cb.tui.keys import KEY_ENTER, KEY_ESC
 
-# ── Layout constants ──────────────────────────────────────────────────────────
+# -- Layout constants ----------------------------------------------------------
 BOX_W   = 58          # total box width  (includes the two | walls)
 PAD     = 2           # spaces between outer wall and content
 ROW_W   = BOX_W - 2 - 2 * PAD   # text width inside a _row()  => 52
@@ -121,7 +121,7 @@ def show_login(stdscr, existing_url: str = "") -> dict | None:
     while True:
         val_rows = _draw_form(stdscr, fields, active, error)
 
-        # ── Cursor ──
+        # -- Cursor --
         rows, cols = stdscr.getmaxyx()
         cx = max(0, cols // 2 - BOX_W // 2)
         display = fields[active]["value"]
