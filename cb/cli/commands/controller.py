@@ -46,11 +46,12 @@ def cmd_list(ctx):
 @click.argument("name")
 @click.pass_context
 def cmd_info(ctx, name):
-    """Show controller details."""
-    from cb.services.controller_service import get_controller
+    """Show controller details and creation permissions."""
+    from cb.services.controller_service import get_controller_capabilities
+    import dataclasses
     try:
-        ctrl = get_controller(_client(ctx), name)
-        click.echo(format_kv(ctrl.to_dict()))
+        caps = get_controller_capabilities(_client(ctx), name)
+        click.echo(format_kv(dataclasses.asdict(caps)))
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)
