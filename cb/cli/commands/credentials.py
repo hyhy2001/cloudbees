@@ -73,7 +73,7 @@ def cmd_create(ctx, cred_id, username, password, description, scope):
         create_username_password(
             _client(ctx),
             cred_id=cred_id,
-            username=username,
+            username_cred=username,  # <-- Sửa lỗi syntax map kwargs ở đây
             password=password,
             desc=description,
             scope=scope,
