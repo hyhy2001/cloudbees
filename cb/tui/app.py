@@ -447,20 +447,38 @@ def main(
                         select_controller(name, url, db_path)
                         status_msg       = f"  Active controller: {name}"
                         active_ctrl_name = name
+                        _loaded.clear()  # Force reload of all screens for new controller scope
                         console_overlay.log_cmd(f"bee controller select {name}", "Active controller set")
                         # Show capability info modal
                         try:
                             caps = get_controller_capabilities(client, name)
-                            show_info_modal(main_win, f"Controller: {name}", [
+                            
+                            # Build rows
+                            rows = [
                                 ("Status",      "ONLINE" if caps.online else "OFFLINE"),
                                 ("Type",         caps.type_label),
-                                ("URL",          (caps.url or "")[:48]),
+                            ]
+                            
+                            # Handle long URLs by wrapping to next line
+                            url_val = caps.url or ""
+                            if len(url_val) > 42:
+                                rows.append(("URL", url_val[:42]))
+                                rows.append(("", url_val[42:84]))
+                                if len(url_val) > 84:
+                                    rows.append(("", url_val[84:126]))
+                            else:
+                                rows.append(("URL", url_val))
+                                
+                            rows.extend([
                                 ("",             ""),
                                 ("Create Job",   "YES" if caps.can_create_job  else "NO"),
                                 ("Create Node",  "YES" if caps.can_create_node else "NO"),
+                                ("Create Cred",  "YES" if caps.can_create_cred else "NO"),
                                 ("",             ""),
                                 ("Description",  (caps.description or "-")[:44]),
-                            ], stdscr=stdscr)
+                            ])
+                            
+                            show_info_modal(main_win, f"Controller: {name}", rows, stdscr=stdscr)
                         except Exception:
                             pass  # capability fetch failed - skip modal silently
                     elif isinstance(action, str) and action.startswith("toggle_node:"):

@@ -21,8 +21,8 @@ def list_jobs(
     """
     List jobs scoped to active controller on CloudBees OC.
 
-    No controller -> /cjoc/api/json   (OC default context)
-    Controller    -> /job/<ctrl>/api/json
+    No controller -> /cjoc/api/json
+    Controller    -> /<ctrl>/api/json
     """
     from cb.services.controller_service import get_active_controller
 
@@ -31,12 +31,9 @@ def list_jobs(
         active = get_active_controller(db_path)
         ctrl   = active[0] if active else None
 
-    if ctrl:
-        endpoint  = f"/job/{ctrl}/api/json?tree={_JOB_TREE}"
-        cache_key = f"jobs.list.{ctrl}"
-    else:
-        endpoint  = f"/cjoc/api/json?tree={_JOB_TREE}"
-        cache_key = "jobs.list.cjoc"
+    prefix = ctrl if ctrl else "cjoc"
+    endpoint  = f"/{prefix}/api/json?tree={_JOB_TREE}"
+    cache_key = f"jobs.list.{prefix}"
 
     data = client.get(endpoint, cache_key=cache_key)
     return [JobDTO.from_dict(j) for j in (data or {}).get("jobs", [])]
@@ -62,10 +59,9 @@ def trigger_job(
     if ctrl is None and db_path is not None:
         active = get_active_controller(db_path)
         ctrl   = active[0] if active else None
-    if ctrl:
-        client.post(f"/job/{ctrl}/job/{name}/build", invalidate="jobs.")
-    else:
-        client.post(f"/cjoc/job/{name}/build", invalidate="jobs.")
+    
+    prefix = ctrl if ctrl else "cjoc"
+    client.post(f"/{prefix}/job/{name}/build", invalidate="jobs.")
 
 
 def trigger_job_with_params(client: CloudBeesClient, name: str, params: dict) -> None:

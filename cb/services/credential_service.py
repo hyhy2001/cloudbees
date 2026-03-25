@@ -24,9 +24,9 @@ def _cred_base(
         from cb.services.controller_service import get_active_controller
         active = get_active_controller(db_path)
         ctrl   = active[0] if active else None
-    if ctrl:
-        return f"/job/{ctrl}"
-    return "/cjoc"   # OC default context
+    
+    prefix = ctrl if ctrl else "cjoc"
+    return f"/{prefix}"
 
 
 def list_credentials(

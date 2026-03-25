@@ -14,17 +14,19 @@ _NODE_TREE = "computer[displayName,offline,numExecutors,assignedLabels[name],des
 def _computer_base(db_path: Optional[Path] = None, controller_name: Optional[str] = None) -> str:
     """Return /computer base path scoped to active controller.
 
-    No controller -> /cjoc/computer  (OC default context)
-    Controller    -> /job/<ctrl>/computer
+    No controller -> /cjoc/computer
+    Controller    -> /<ctrl>/computer
     """
     ctrl = controller_name
     if ctrl is None and db_path is not None:
         from cb.services.controller_service import get_active_controller
         active = get_active_controller(db_path)
         ctrl   = active[0] if active else None
-    if ctrl:
-        return f"/job/{ctrl}/computer"
-    return "/cjoc/computer"   # OC default
+    
+    # User specified routing is <controller>/computer/...
+    # Default is cjoc/computer/...
+    prefix = ctrl if ctrl else "cjoc"
+    return f"/{prefix}/computer"
 
 
 def list_nodes(

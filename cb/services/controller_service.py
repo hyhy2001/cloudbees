@@ -66,6 +66,7 @@ class CapabilityInfo:
     online:          bool
     can_create_job:  bool
     can_create_node: bool
+    can_create_cred: bool
     description:     str
 
 
@@ -81,18 +82,18 @@ def get_controller_capabilities(
         return CapabilityInfo(
             name=dto.name, url=dto.url, description=dto.description,
             type_label="Offline", online=False,
-            can_create_job=False, can_create_node=False,
+            can_create_job=False, can_create_node=False, can_create_cred=False,
         )
 
     if "ManagedMaster" in cls:
-        label, job, node = "Managed Master", True, True
+        label, job, node, cred = "Managed Master", True, True, True
     elif "ConnectedMaster" in cls:
-        label, job, node = "Connected Master", True, False
+        label, job, node, cred = "Connected Master", True, False, True
     elif "Beekeeper" in cls:
-        label, job, node = "Upgrading...", False, False
+        label, job, node, cred = "Upgrading...", False, False, False
     else:
         short = cls.split(".")[-1] if cls else "Unknown"
-        label, job, node = short, True, True
+        label, job, node, cred = short, True, True, True
 
     return CapabilityInfo(
         name=dto.name,
@@ -102,4 +103,5 @@ def get_controller_capabilities(
         online=True,
         can_create_job=job,
         can_create_node=node,
+        can_create_cred=cred,
     )
