@@ -51,15 +51,20 @@ def create_permanent_node(
     if host:
         launcher = {
             "stapler-class": "hudson.plugins.sshslaves.SSHLauncher",
+            "$class": "hudson.plugins.sshslaves.SSHLauncher",
             "host": host,
             "port": port,
             "credentialsId": credentials_id,
             "sshHostKeyVerificationStrategy": {
-                "stapler-class": "hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy"
+                "stapler-class": "hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy",
+                "$class": "hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy"
             }
         }
     else:
-        launcher = {"stapler-class": "hudson.slaves.JNLPLauncher"}
+        launcher = {
+            "stapler-class": "hudson.slaves.JNLPLauncher",
+            "$class": "hudson.slaves.JNLPLauncher"
+        }
 
     json_payload = {
         "name": name,
@@ -69,7 +74,10 @@ def create_permanent_node(
         "labelString": labels,
         "mode": "NORMAL",
         "type": "hudson.slaves.DumbSlave$DescriptorImpl",
-        "retentionStrategy": {"stapler-class": "hudson.slaves.RetentionStrategy$Always"},
+        "retentionStrategy": {
+            "stapler-class": "hudson.slaves.RetentionStrategy$Always",
+            "$class": "hudson.slaves.RetentionStrategy$Always"
+        },
         "nodeProperties": {"stapler-class-bag": "true"},
         "launcher": launcher
     }
