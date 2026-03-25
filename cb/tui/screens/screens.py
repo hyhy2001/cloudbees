@@ -1,4 +1,4 @@
-"""Dashboard, Controller, Credentials, Nodes, Jobs, Users, System screens."""
+"""Controller, Credentials, Nodes, Jobs, Settings screens."""
 
 from __future__ import annotations
 import curses
@@ -11,75 +11,11 @@ from cb.tui.widgets.widgets import safe_addstr, draw_table, draw_box, spinner_ch
 from cb.api.client import CloudBeesClient
 
 # Screen index constants (match app.py and keys.py)
-SCR_DASHBOARD   = 0
-SCR_CONTROLLER  = 1
-SCR_CREDENTIALS = 2
-SCR_NODES       = 3
-SCR_JOBS        = 4
-SCR_USERS       = 5
-SCR_SYSTEM      = 6
-
-# Dashboard menu entries → target screen index
-_DASH_MENU = [
-    ("Controller",   SCR_CONTROLLER),
-    ("Credentials",  SCR_CREDENTIALS),
-    ("Nodes",        SCR_NODES),
-    ("Jobs",         SCR_JOBS),
-    ("Users",        SCR_USERS),
-    ("System",       SCR_SYSTEM),
-]
-
-
-# ── Dashboard (interactive menu) ─────────────────────────────────────────────
-
-
-class DashboardScreen:
-    def __init__(self):
-        self.selected = 0          # kept for compat, not used for nav
-
-    def draw(self, win, client: CloudBeesClient | None) -> None:
-        win.erase()
-        rows, cols = win.getmaxyx()
-        y = 1
-
-        if client is None:
-            safe_addstr(win, y, 2,
-                "  Not logged in.",
-                curses.color_pair(PAIR_WARNING) | curses.A_BOLD)
-            y += 1
-            safe_addstr(win, y, 2,
-                "  Press 'L' to open the login form.",
-                curses.color_pair(PAIR_DIM))
-            return
-
-        # Logged-in welcome
-        safe_addstr(win, y, 2, "  bee - CloudBees CLI",
-                    curses.color_pair(PAIR_TITLE) | curses.A_BOLD); y += 1
-        safe_addstr(win, y, 2, "  " + "-" * 40,
-                    curses.color_pair(PAIR_DIM)); y += 2
-
-        try:
-            from cb.services.system_service import health_check
-            info = health_check(client)
-            status_color = PAIR_SUCCESS if info.get("status") == "OK" else PAIR_ERROR
-            safe_addstr(win, y, 4, f"Status      : {info.get('status','?')}",
-                        curses.color_pair(status_color) | curses.A_BOLD); y += 1
-            safe_addstr(win, y, 4, f"Mode        : {info.get('mode','?')}",
-                        curses.color_pair(PAIR_NORMAL)); y += 1
-            safe_addstr(win, y, 4, f"Executors   : {info.get('executors','?')}",
-                        curses.color_pair(PAIR_NORMAL)); y += 1
-            safe_addstr(win, y, 4, f"Description : {info.get('description','')}",
-                        curses.color_pair(PAIR_NORMAL)); y += 2
-        except Exception as e:
-            safe_addstr(win, y, 4, f"(could not fetch status: {e})",
-                        curses.color_pair(PAIR_DIM)); y += 2
-
-        safe_addstr(win, y, 2,
-            "  Use sidebar (1-7) or Tab / Left-Right to navigate.",
-            curses.color_pair(PAIR_DIM))
-
-    def handle_key(self, ch: int) -> int | None:
-        return None   # dashboard no longer handles Enter-to-navigate
+SCR_CONTROLLER  = 0
+SCR_CREDENTIALS = 1
+SCR_NODES       = 2
+SCR_JOBS        = 3
+SCR_SETTINGS    = 4
 
 
 # ── Controller screen ────────────────────────────────────────────────────────
@@ -256,43 +192,11 @@ class JobsScreen:
         return None
 
 
-# ── Users screen ──────────────────────────────────────────────────────────────
+# ── Settings screen ───────────────────────────────────────────────────────────
 
 
-class UsersScreen:
-    def __init__(self):
-        self.users = []
-        self.selected = 0
-        self.offset = 0
-
-    def load(self, client: CloudBeesClient) -> None:
-        from cb.services.user_service import list_users
-        self.users = list_users(client)
-
-    def draw(self, win) -> None:
-        headers = ["ID", "Full Name", "Description"]
-        rows = [
-            [u.id[:20], u.full_name[:25], (u.description or "")[:35]]
-            for u in self.users
-        ]
-        draw_table(win, headers, rows, self.selected, self.offset)
-
-    def handle_key(self, ch: int) -> str | None:
-        if ch == ord('j') and self.selected < len(self.users) - 1:
-            self.selected += 1
-            if self.selected >= self.offset + 15:
-                self.offset += 1
-        elif ch == ord('k') and self.selected > 0:
-            self.selected -= 1
-            if self.selected < self.offset:
-                self.offset -= 1
-        return None
-
-
-# ── System screen ─────────────────────────────────────────────────────────────
-
-
-def draw_system(win, client: CloudBeesClient | None) -> None:
+def draw_settings(win, client: CloudBeesClient | None) -> None:
+    """Display system health and version info."""
     from cb.services.system_service import health_check, get_version
     win.erase()
     if client is None:
@@ -300,7 +204,7 @@ def draw_system(win, client: CloudBeesClient | None) -> None:
         return
 
     y = 1
-    safe_addstr(win, y, 2, "= System Info =",
+    safe_addstr(win, y, 2, "= Settings / System Info =",
                 curses.color_pair(PAIR_TITLE) | curses.A_BOLD)
     y += 2
 
@@ -312,7 +216,3 @@ def draw_system(win, client: CloudBeesClient | None) -> None:
     for k, v in info.items():
         safe_addstr(win, y, 2, f"  {k:<12}: {v}", curses.color_pair(PAIR_NORMAL))
         y += 1
-
-
-# Keep for backward compat
-PipelinesScreen = None  # removed

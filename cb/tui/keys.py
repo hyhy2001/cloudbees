@@ -12,17 +12,15 @@ KEY_ENTER = [curses.KEY_ENTER, ord('\n'), ord('\r')]
 KEY_ESC   = [27]
 KEY_QUIT  = [ord('q'), ord('Q')]
 
-# Screen shortcuts: 1=Dashboard, 2=Controller, 3=Credentials, 4=Nodes, 5=Jobs, 6=Users, 7=System
+# Screen shortcuts: 1=Controller, 2=Credentials, 3=Nodes, 4=Jobs, 5=Settings
 SCREEN_KEYS = {
-    ord('1'): 0,
-    ord('2'): 1,
-    ord('3'): 2,
-    ord('4'): 3,
-    ord('5'): 4,
-    ord('6'): 5,
-    ord('7'): 6,
+    ord('1'): 0,  # Controller
+    ord('2'): 1,  # Credentials
+    ord('3'): 2,  # Nodes
+    ord('4'): 3,  # Jobs
+    ord('5'): 4,  # Settings
 }
-SCREEN_COUNT = 7
+SCREEN_COUNT = 5
 
 # Actions
 KEY_RUN     = ord('r')
@@ -37,5 +35,6 @@ KEY_LOGOUT  = ord('X')
 KEY_TAB     = ord('\t')
 KEY_HELP    = ord('?')
 
-# Status bar hints
-HINTS = "q:Quit  ↑↓:Sidebar  Enter:Open  j/k:List  1-7:Jump  Tab:Cursor  L:Login  X:Logout  F5:Refresh"
+# Context-aware status bar hints
+HINTS_SIDEBAR = "q:Quit  ↑↓:Move  Enter/→:Open  1-5:Jump  L:Login  X:Logout  F5:Refresh"
+HINTS_CONTENT = "↑↓:Scroll  ←/Esc:Back  r:Run  j/k:Move  q:Quit  F5:Refresh"

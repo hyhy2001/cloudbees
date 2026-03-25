@@ -52,18 +52,16 @@ def draw_header(win, server_url: str, username: str) -> None:
 # ── Sidebar ───────────────────────────────────────────────────
 
 MENU_ITEMS = [
-    "[1] Dashboard",
-    "[2] Controller",
-    "[3] Credentials",
-    "[4] Nodes",
-    "[5] Jobs",
-    "[6] Users",
-    "[7] System",
+    "[1] Controller",
+    "[2] Credentials",
+    "[3] Nodes",
+    "[4] Jobs",
+    "[5] Settings",
     "[-] Logout",
 ]
 
 
-def draw_sidebar(win, active_idx: int, cursor: int | None = None) -> None:
+def draw_sidebar(win, active_idx: int, cursor: int | None = None, focus: str = "sidebar") -> None:
     rows, cols = win.getmaxyx()
     win.bkgd(" ", curses.color_pair(PAIR_SIDEBAR))
     win.erase()
@@ -72,16 +70,20 @@ def draw_sidebar(win, active_idx: int, cursor: int | None = None) -> None:
         is_active = (i == active_idx)
         is_cursor = (cursor is not None and i == cursor)
 
-        if is_active and is_cursor:
-            # cursor is resting on the already-active screen — show combined state
+        if focus == "content":
+            # Content panel is active — dim the entire sidebar
+            attr   = curses.color_pair(PAIR_DIM)
+            prefix = "> " if is_active else "  "
+        elif is_active and is_cursor:
+            # Cursor resting on the already-active screen — show combined state
             attr   = curses.color_pair(PAIR_ACTIVE) | curses.A_BOLD | curses.A_REVERSE
             prefix = "> "
         elif is_active:
-            # this screen is showing in content, cursor is elsewhere
+            # This screen is showing in content, cursor is elsewhere
             attr   = curses.color_pair(PAIR_ACTIVE) | curses.A_BOLD
             prefix = "> "
         elif is_cursor:
-            # cursor hovering here (not yet confirmed with Enter)
+            # Cursor hovering here (not yet confirmed with Enter)
             attr   = curses.color_pair(PAIR_SELECTED)
             prefix = "> "
         else:
