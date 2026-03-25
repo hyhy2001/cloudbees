@@ -26,7 +26,7 @@ def cmd_list(ctx):
     try:
         pipes = list_pipelines(_client(ctx))
         rows = [[p.name, p.status, p.branch, p.description[:40]] for p in pipes]
-            click.echo(format_table(["Name", "Status", "Branch", "Description"], rows))
+        click.echo(format_table(["Name", "Status", "Branch", "Description"], rows))
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)

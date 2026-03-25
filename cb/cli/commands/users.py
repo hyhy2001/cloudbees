@@ -26,7 +26,7 @@ def cmd_list(ctx):
     try:
         users = list_users(_client(ctx))
         rows = [[u.id, u.full_name, u.description[:40]] for u in users]
-            click.echo(format_table(["ID", "Full Name", "Description"], rows))
+        click.echo(format_table(["ID", "Full Name", "Description"], rows))
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)
