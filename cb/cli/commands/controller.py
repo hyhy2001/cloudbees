@@ -63,13 +63,22 @@ def cmd_select(ctx, name):
     """Set the active controller for subsequent commands."""
     from cb.services.controller_service import list_controllers, select_controller
     try:
-        controllers = list_controllers(_client(ctx))
+        client = _client(ctx)
+        controllers = list_controllers(client)
         match = next((c for c in controllers if c.name == name), None)
         if not match:
             click.echo(f"[ERROR] Controller '{name}' not found.", err=True)
             raise SystemExit(1)
-        select_controller(match.name, match.url, ctx.obj.get("db_path"))
-        click.echo(f"[OK] Active controller: {match.name} ({match.url})")
+            
+        url = match.url
+        # Follow the CJOC redirect to obtain the public Ingress real URL
+        real_url = client.resolve_redirect(url)
+        if real_url:
+            url = real_url
+            
+        select_controller(match.name, url, ctx.obj.get("db_path"))
+        click.echo(f"[OK] Active controller: {match.name}")
+        click.echo(f"     Resolved URL: {url}")
     except SystemExit:
         raise
     except Exception as exc:
