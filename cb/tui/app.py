@@ -112,6 +112,10 @@ def main(
                     timeout=oc_client._timeout,
                     db_path=db_path
                 )
+            # Boot straight into the active controller's job list
+            active_screen = SCR_JOBS
+            sidebar_cursor = list(_SCREEN_NAMES).index("Jobs")
+            status_msg = f"  Resumed controller: {active_ctrl_name}"
         else:
             active_ctrl_name = ""
     except Exception:
