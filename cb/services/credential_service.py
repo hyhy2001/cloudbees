@@ -15,6 +15,7 @@ from cb.dtos.credential import CredentialDTO
 
 
 def _cred_base(
+    client: CloudBeesClient,
     db_path: Optional[Path] = None,
     controller_name: Optional[str] = None,
 ) -> str:
@@ -22,7 +23,7 @@ def _cred_base(
     ctrl = controller_name
     if ctrl is None and db_path is not None:
         from cb.services.controller_service import get_active_controller
-        active = get_active_controller(db_path)
+        active = get_active_controller(db_path, client)
         if active:
             return active[1].rstrip("/")
     if ctrl:
@@ -37,7 +38,7 @@ def list_credentials(
     controller_name: Optional[str] = None,
     username: str = "",
 ) -> List[CredentialDTO]:
-    base      = _cred_base(db_path, controller_name)
+    base      = _cred_base(client, db_path, controller_name)
     user_seg  = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
     cache_key = f"credentials.list.{controller_name or '_cjoc'}"
     data = client.get(
@@ -54,7 +55,7 @@ def get_credential(
     controller_name: Optional[str] = None,
     username: str = "",
 ) -> CredentialDTO:
-    base     = _cred_base(db_path, controller_name)
+    base     = _cred_base(client, db_path, controller_name)
     user_seg = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
     data = client.get(
         f"{base}{user_seg}/credential/{cred_id}/api/json",
@@ -74,7 +75,7 @@ def create_username_password(
     controller_name: Optional[str] = None,
     username: str = "",
 ) -> None:
-    base     = _cred_base(db_path, controller_name)
+    base     = _cred_base(client, db_path, controller_name)
     user_seg = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
     xml = build_username_password_cred_xml(
         cred_id=cred_id,
@@ -99,7 +100,7 @@ def delete_credential(
     controller_name: Optional[str] = None,
     username: str = "",
 ) -> None:
-    base     = _cred_base(db_path, controller_name)
+    base     = _cred_base(client, db_path, controller_name)
     user_seg = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
     client.post(
         f"{base}{user_seg}/credential/{cred_id}/doDelete",

@@ -45,21 +45,31 @@ def select_controller(name: str, url: str, db_path: Optional[Path] = None) -> No
     set_setting("active_controller_url", url, db_path)
 
 
-def get_active_controller(db_path: Optional[Path] = None) -> Optional[Tuple[str, str]]:
+def get_active_controller(db_path: Optional[Path] = None, client: Optional[CloudBeesClient] = None) -> Optional[Tuple[str, str]]:
     """Return (name, url) of the active controller, or None. Sanitizes URL to remove /cjoc prefix."""
     from cb.db.repositories.settings_repo import get_setting
     name = get_setting("active_controller", db_path)
-    url  = get_setting("active_controller_url", db_path)
-    if name and url:
+    if not name:
+        return None
+
+    url = get_setting("active_controller_url", db_path)
+    if url:
         # Many OpsCenter configurations return an item URL like example.com/cjoc/job/ctrl/
         # But the actual router expects example.com/ctrl/
-        # We try to heuristically strip the '/cjoc' or '/cjoc/job' part
         if "/cjoc/job/" in url:
             url = url.replace("/cjoc/job/", "/")
         elif "/cjoc/" in url:
             url = url.replace("/cjoc/", "/")
         return (name, url)
-    return None
+    else:
+        # Fallback if DB didn't have URL, or Jenkins didn't return one.
+        # We manually construct absolute URL stripping cjoc
+        if client:
+            base = client.base_url
+            if base.endswith("/cjoc"):
+                base = base[:-5]
+            return (name, f"{base}/{name}/")
+        return (name, f"/{name}/")
 
 
 # -- Controller capability info -----------------------------------------------
