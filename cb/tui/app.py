@@ -489,7 +489,13 @@ def main(
                         name = action.split(":", 1)[1]
                         item = next((c for c in ctrl_scr.items if c.name == name), None)
                         url  = item.url if item and item.url else ""
-                        select_controller(name, url, db_path)
+
+                        # Resolve the true URL immediately via HTTP 302 before saving to DB
+                        true_url = oc_client.resolve_redirect(url) if oc_client else url
+                        if not true_url:
+                            true_url = url
+
+                        select_controller(name, true_url, db_path)
                         status_msg       = f"  Active controller: {name}"
                         
                         # Rebuild ctrl_client for this context
