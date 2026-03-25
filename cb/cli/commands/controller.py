@@ -72,12 +72,8 @@ def cmd_select(ctx, name):
             raise SystemExit(1)
             
         url = match.url
-        # Follow the CJOC redirect to obtain the public Ingress real URL
-        real_url = client.resolve_redirect(url)
-        if real_url:
-            if "operations-center-sso-navigate" in real_url:
-                real_url = real_url.split("operations-center-sso-navigate")[0]
-            url = real_url
+        from cb.services.controller_service import resolve_controller_url
+        url = resolve_controller_url(client, url)
             
         select_controller(match.name, url, ctx.obj.get("db_path"))
         click.echo(f"[OK] Active controller: {match.name}")

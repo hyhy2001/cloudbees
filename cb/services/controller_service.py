@@ -45,6 +45,16 @@ def select_controller(name: str, url: str, db_path: Optional[Path] = None) -> No
     set_setting("active_controller_url", url, db_path)
 
 
+def resolve_controller_url(client: CloudBeesClient, cjoc_url: str) -> str:
+    """Follow the CJOC 302 redirect to find the real Ingress URL, stripping SSO suffixes."""
+    real_url = client.resolve_redirect(cjoc_url)
+    if real_url:
+        if "operations-center-sso-navigate" in real_url:
+            real_url = real_url.split("operations-center-sso-navigate")[0]
+        return real_url
+    return cjoc_url
+
+
 def get_active_controller(db_path: Optional[Path] = None, client: Optional[CloudBeesClient] = None) -> Optional[Tuple[str, str]]:
     """Return (name, url) of the active controller, or None."""
     from cb.db.repositories.settings_repo import get_setting
@@ -111,8 +121,10 @@ def get_controller_capabilities(
     else:
         # Dynamic Permission Probing
         from cb.api.exceptions import AuthError, NotFoundError, APIError
-        # Use a dedicated client bound to the controller's real URL, not the CJOC proxy interface
-        ctrl_client = CloudBeesClient(dto.url, client._token)
+        # Resolve real URL from CJOC proxy URL
+        real_url = resolve_controller_url(client, dto.url)
+        # Use a dedicated client bound to the controller's real URL
+        ctrl_client = CloudBeesClient(real_url, client._token)
 
         # 1. Job Probe 
         try:
