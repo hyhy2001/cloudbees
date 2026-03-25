@@ -71,8 +71,13 @@ def invalidate(key: str, db_path: Path | None = None) -> None:
 def invalidate_prefix(prefix: str, db_path: Path | None = None) -> None:
     """Delete all cached entries whose key starts with prefix."""
     conn = get_connection(db_path)
+    # Escape LIKE special chars so prefix is matched literally
+    safe_prefix = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     try:
-        conn.execute("DELETE FROM cache WHERE key LIKE ?", (f"{prefix}%",))
+        conn.execute(
+            "DELETE FROM cache WHERE key LIKE ? ESCAPE '\\'",
+            (f"{safe_prefix}%",),
+        )
         conn.commit()
     finally:
         conn.close()
@@ -101,7 +106,10 @@ def clear_all(db_path: Path | None = None) -> None:
 
 
 def cache_age(key: str, db_path: Path | None = None) -> int | None:
-    """Return seconds since cache entry was written, or None if not found/expired."""
+    """
+    Return seconds since cache entry was written, or None if not found/expired.
+    Uses `ttl - time_remaining` as an approximation (no written_at column stored).
+    """
     conn = get_connection(db_path)
     try:
         now = int(time.time())
@@ -110,8 +118,7 @@ def cache_age(key: str, db_path: Path | None = None) -> int | None:
         ).fetchone()
         if row is None or row["expires_at"] <= now:
             return None
-        # We stored expires_at = written_at + ttl; we don't store written_at
-        # Return 0 as "fresh" since we don't track exact write time without extra column
-        return 0
+        ttl = get_ttl(key)
+        return max(0, ttl - (row["expires_at"] - now))
     finally:
         conn.close()

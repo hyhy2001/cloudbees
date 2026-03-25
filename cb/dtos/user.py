@@ -14,7 +14,7 @@ class UserDTO(BaseDTO):
     url: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "UserDTO":
+    def from_dict(cls, data: dict[str, Any]) -> UserDTO:
         return cls(
             id=data.get("id", ""),
             full_name=data.get("fullName", ""),
@@ -30,7 +30,7 @@ class TeamDTO(BaseDTO):
     members: list[str] = dataclasses.field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TeamDTO":
+    def from_dict(cls, data: dict[str, Any]) -> TeamDTO:
         return cls(
             name=data.get("name", ""),
             description=data.get("description", ""),

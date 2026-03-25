@@ -1,5 +1,5 @@
-from __future__ import annotations
 """256-color palette for the TUI. Falls back to 8-color if unavailable."""
+from __future__ import annotations
 
 import curses
 

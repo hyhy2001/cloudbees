@@ -28,12 +28,12 @@ def draw_hline(win, y: int, x: int, width: int, char: str = "-") -> None:
 
 def draw_box(win, y: int, x: int, h: int, w: int, attr: int = 0) -> None:
     """Draw an ASCII box with + - | corners."""
-    top = "+" + "-" * (w - 2) + "+"
+    border = "+" + "-" * (w - 2) + "+"
     mid = "|" + " " * (w - 2) + "|"
-    safe_addstr(win, y, x, top, attr)
+    safe_addstr(win, y, x, border, attr)
     for row in range(1, h - 1):
         safe_addstr(win, y + row, x, mid, attr)
-    safe_addstr(win, y + h - 1, x, top, attr)
+    safe_addstr(win, y + h - 1, x, border, attr)
 
 
 # ── Header ────────────────────────────────────────────────────
@@ -73,11 +73,11 @@ def draw_sidebar(win, active_idx: int, cursor: int | None = None) -> None:
         is_cursor = (cursor is not None and i == cursor)
 
         if is_active and is_cursor:
-            # cursor ON the active screen
-            attr   = curses.color_pair(PAIR_ACTIVE) | curses.A_BOLD
+            # cursor is resting on the already-active screen — show combined state
+            attr   = curses.color_pair(PAIR_ACTIVE) | curses.A_BOLD | curses.A_REVERSE
             prefix = "> "
         elif is_active:
-            # this screen is showing in content, but cursor is elsewhere
+            # this screen is showing in content, cursor is elsewhere
             attr   = curses.color_pair(PAIR_ACTIVE) | curses.A_BOLD
             prefix = "> "
         elif is_cursor:
@@ -137,11 +137,19 @@ def draw_table(
         for i, cell in enumerate(row[:n_cols]):
             widths[i] = max(widths[i], len(str(cell)))
 
-    # Scale down if too wide
+    # Scale down if too wide — distribute shrink from largest to smallest
     total = sum(widths) + n_cols + 1
     if total > cols - 1:
         excess = total - (cols - 1)
-        widths[-1] = max(4, widths[-1] - excess)
+        for i in range(n_cols - 1, -1, -1):
+            can_shrink = widths[i] - 4
+            if can_shrink <= 0:
+                continue
+            shrink = min(can_shrink, excess)
+            widths[i] -= shrink
+            excess -= shrink
+            if excess <= 0:
+                break
 
     sep = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
     fmt_parts = [f" {{:<{w}}} " for w in widths]

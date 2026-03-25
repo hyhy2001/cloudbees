@@ -94,7 +94,7 @@ def _launch_tui(profile, controller, password, db_path):
 
 # Register all command groups
 cli.add_command(auth_group, name="auth")
-cli.add_command(auth_group, name="login")
+cli.add_command(auth_group, name="login")   # intentional alias: `bee login` == `bee auth`
 cli.add_command(controller_group, name="controller")
 cli.add_command(jobs_group, name="job")
 cli.add_command(cred_group, name="cred")

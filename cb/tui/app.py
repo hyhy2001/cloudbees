@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 import curses
+import logging
 import signal
 from pathlib import Path
+
+# File-based debug log — doesn't pollute the TUI terminal
+logging.basicConfig(
+    filename="/tmp/bee.log",
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+_log = logging.getLogger(__name__)
 
 from cb.tui.colors import init_colors, PAIR_NORMAL, PAIR_STATUS
 from cb.tui.keys import (
@@ -12,6 +21,11 @@ from cb.tui.keys import (
     KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ENTER,
 )
 from cb.tui.widgets.widgets import draw_header, draw_sidebar, draw_statusbar
+# Screen index constants — single source of truth from screens module
+from cb.tui.screens.screens import (
+    SCR_DASHBOARD, SCR_CONTROLLER, SCR_CREDENTIALS,
+    SCR_NODES, SCR_JOBS, SCR_USERS, SCR_SYSTEM,
+)
 
 
 _SCREEN_NAMES = [
@@ -72,6 +86,7 @@ def main(
         else:
             status_msg = "  Not logged in. Press 'L' to login."
     except Exception:
+        _log.exception("Session load failed")
         status_msg = "  Not logged in. Press 'L' to login."
 
     # Screen objects
@@ -86,7 +101,9 @@ def main(
     jobs_scr  = JobsScreen()
     users_scr = UsersScreen()
 
-    # Track which screens have loaded data (lazy-load on first visit)
+    # Track which screens have loaded data (lazy-load on first visit).
+    # Dashboard (SCR_DASHBOARD) is intentionally excluded — it calls health_check()
+    # live on every draw() and has no separate load step.
     _loaded: set[int] = set()
 
     def _reload_current(force: bool = False):
@@ -99,19 +116,20 @@ def main(
             status_msg = f"  {_SCREEN_NAMES[active_screen]}"
             return
         try:
-            if active_screen == 1:
+            if active_screen == SCR_CONTROLLER:
                 ctrl_scr.load(client)
-            elif active_screen == 2:
+            elif active_screen == SCR_CREDENTIALS:
                 cred_scr.load(client)
-            elif active_screen == 3:
+            elif active_screen == SCR_NODES:
                 node_scr.load(client)
-            elif active_screen == 4:
+            elif active_screen == SCR_JOBS:
                 jobs_scr.load(client, db_path=db_path)
-            elif active_screen == 5:
+            elif active_screen == SCR_USERS:
                 users_scr.load(client)
             _loaded.add(active_screen)
             status_msg = f"  {_SCREEN_NAMES[active_screen]}"
         except Exception as exc:
+            _log.exception("Screen load failed (screen=%d)", active_screen)
             status_msg = f"  Error: {exc}"
 
     _reload_current()
@@ -159,7 +177,7 @@ def main(
         main_win.bkgd(" ", curses.color_pair(PAIR_NORMAL))
         main_win.erase()
         try:
-            if active_screen == 0:
+            if active_screen == SCR_DASHBOARD:
                 dash_scr.draw(main_win, client)
             elif client is None:
                 # All other screens require login
@@ -171,19 +189,20 @@ def main(
                 safe_addstr(main_win, 2, 2,
                     "  Press 'L' to login.",
                     curses.color_pair(PAIR_DIM))
-            elif active_screen == 1:
+            elif active_screen == SCR_CONTROLLER:
                 ctrl_scr.draw(main_win)
-            elif active_screen == 2:
+            elif active_screen == SCR_CREDENTIALS:
                 cred_scr.draw(main_win)
-            elif active_screen == 3:
+            elif active_screen == SCR_NODES:
                 node_scr.draw(main_win)
-            elif active_screen == 4:
+            elif active_screen == SCR_JOBS:
                 jobs_scr.draw(main_win)
-            elif active_screen == 5:
+            elif active_screen == SCR_USERS:
                 users_scr.draw(main_win)
-            elif active_screen == 6:
+            elif active_screen == SCR_SYSTEM:
                 draw_system(main_win, client)
         except Exception as exc:
+            _log.exception("Screen draw failed (screen=%d)", active_screen)
             from cb.tui.widgets.widgets import safe_addstr
             from cb.tui.colors import PAIR_ERROR
             safe_addstr(main_win, 1, 2, f"Error: {exc}", curses.color_pair(PAIR_ERROR))
@@ -245,17 +264,18 @@ def main(
             continue
 
         # ── Refresh / cache clear ────────────────────────────────
+        # KEY_REFRESH: reload only the current screen (leaves rest of cache intact)
         if ch == KEY_REFRESH:
-            from cb.cache.manager import clear_all
-            clear_all(db_path)
-            _loaded.discard(active_screen)   # force re-fetch this screen
+            _loaded.discard(active_screen)
             _reload_current(force=True)
-            status_msg = "  Refreshed."
+            status_msg = "  Screen refreshed."
             continue
 
+        # KEY_CACHE: wipe the entire cache and reset all loaded flags
         if ch == KEY_CACHE:
             from cb.cache.manager import clear_all
             clear_all(db_path)
+            _loaded.clear()
             status_msg = "  Cache cleared."
             continue
 
@@ -293,22 +313,22 @@ def main(
 
         # ── Delegate to active screen ─────────────────────────────
         action = None
-        if active_screen == 0:
+        if active_screen == SCR_DASHBOARD:
             action = dash_scr.handle_key(ch)
             if isinstance(action, int):
                 # Dashboard returned a target screen index
                 active_screen = action
                 _reload_current()
                 continue
-        elif active_screen == 1:
+        elif active_screen == SCR_CONTROLLER:
             action = ctrl_scr.handle_key(ch)
-        elif active_screen == 2:
+        elif active_screen == SCR_CREDENTIALS:
             action = cred_scr.handle_key(ch)
-        elif active_screen == 3:
+        elif active_screen == SCR_NODES:
             action = node_scr.handle_key(ch)
-        elif active_screen == 4:
+        elif active_screen == SCR_JOBS:
             action = jobs_scr.handle_key(ch)
-        elif active_screen == 5:
+        elif active_screen == SCR_USERS:
             action = users_scr.handle_key(ch)
 
         if action and client:
