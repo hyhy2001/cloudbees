@@ -41,9 +41,25 @@ def create_permanent_node(
     num_executors: int = 1,
     labels: str = "",
     desc: str = "",
+    host: str = "",
+    port: int = 22,
+    credentials_id: str = "",
 ) -> None:
     """Create a Permanent Agent with JNLP launcher (Form Data)."""
-    import json
+    
+    if host:
+        launcher = {
+            "stapler-class": "hudson.plugins.sshslaves.SSHLauncher",
+            "host": host,
+            "port": port,
+            "credentialsId": credentials_id,
+            "sshHostKeyVerificationStrategy": {
+                "stapler-class": "hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy"
+            }
+        }
+    else:
+        launcher = {"stapler-class": "hudson.plugins.sshslaves.JNLPLauncher"}
+
     json_payload = {
         "name": name,
         "nodeDescription": desc,
@@ -54,7 +70,7 @@ def create_permanent_node(
         "type": "hudson.slaves.DumbSlave",
         "retentionStrategy": {"stapler-class": "hudson.slaves.RetentionStrategy$Always"},
         "nodeProperties": {"stapler-class-bag": "true"},
-        "launcher": {"stapler-class": "hudson.slaves.JNLPLauncher"}
+        "launcher": launcher
     }
     data = {
         "name": name,

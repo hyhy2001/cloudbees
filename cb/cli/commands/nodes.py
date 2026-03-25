@@ -69,9 +69,12 @@ def cmd_get(ctx, name):
 @click.option("--executors", default=1, show_default=True, help="Number of executors")
 @click.option("--labels", default="", help="Space-separated labels")
 @click.option("--description", default="", help="Description")
+@click.option("--host", default="", help="SSH Host IP/Hostname (if omitted, creates JNLP/Inbound agent)")
+@click.option("--port", default=22, show_default=True, help="SSH Port")
+@click.option("--cred-id", default="", help="Credential ID for SSH connection")
 @click.pass_context
-def cmd_create(ctx, name, remote_dir, executors, labels, description):
-    """Create a new Permanent Agent (JNLP/Inbound launcher)."""
+def cmd_create(ctx, name, remote_dir, executors, labels, description, host, port, cred_id):
+    """Create a Permanent Agent (SSH or JNLP launcher)."""
     from cb.services.node_service import create_permanent_node
     try:
         create_permanent_node(
@@ -81,9 +84,16 @@ def cmd_create(ctx, name, remote_dir, executors, labels, description):
             num_executors=executors,
             labels=labels,
             desc=description,
+            host=host,
+            port=port,
+            credentials_id=cred_id,
         )
         click.echo(f"[OK] Node '{name}' created.")
-        click.echo(f"  Connect it via: Manage Jenkins -> Nodes -> {name} -> Agent command")
+        if host:
+            cred_display = cred_id or 'None'
+            click.echo(f"  SSH Node will auto-connect to {host}:{port} using cred: '{cred_display}'")
+        else:
+            click.echo(f"  Connect it via: Manage Jenkins -> Nodes -> {name} -> Agent command")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)
