@@ -15,6 +15,7 @@ def _client(ctx):
     return get_client(
         profile_name=ctx.obj.get("profile"),
         db_path=ctx.obj.get("db_path"),
+        use_controller=False,  # Controller ops must hit the root Ops Center
     )
 
 

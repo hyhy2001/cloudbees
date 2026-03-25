@@ -58,16 +58,27 @@ def logout(profile_name: str | None = None, db_path: Path | None = None) -> None
 def get_client(
     profile_name: str | None = None,
     db_path: Path | None = None,
+    use_controller: bool = True,
 ) -> CloudBeesClient:
     """
     Build an authenticated CloudBeesClient from the session token.
+    If use_controller is True, bases the client on the active controller.
     """
     init_db(db_path)
 
     from cb.services.session import load_session
     session = load_session(db_path)
     if session and session.get("server_url"):
-        return CloudBeesClient(session["server_url"], session["raw_token"], db_path=db_path)
+        base_url = session["server_url"]
+        
+        if use_controller:
+            from cb.services.controller_service import get_active_controller
+            active = get_active_controller(db_path)
+            if active and active[1]:
+                # Automatically scope the HTTP requests to the controller's namespace
+                base_url = active[1]
+                
+        return CloudBeesClient(base_url, session["raw_token"], db_path=db_path)
 
     raise AuthError("Not logged in or session expired. Run: bee login")
 
