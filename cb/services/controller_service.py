@@ -85,15 +85,51 @@ def get_controller_capabilities(
             can_create_job=False, can_create_node=False, can_create_cred=False,
         )
 
+    # Default base labels
     if "ManagedMaster" in cls:
-        label, job, node, cred = "Managed Master", True, True, True
+        label = "Managed Master"
     elif "ConnectedMaster" in cls:
-        label, job, node, cred = "Connected Master", True, False, True
+        label = "Connected Master"
     elif "Beekeeper" in cls:
-        label, job, node, cred = "Upgrading...", False, False, False
+        label = "Upgrading..."
     else:
-        short = cls.split(".")[-1] if cls else "Unknown"
-        label, job, node, cred = short, True, True, True
+        label = cls.split(".")[-1] if cls else "Unknown"
+
+    if "Beekeeper" in cls:
+        job, node, cred = False, False, False
+    else:
+        # Dynamic Permission Probing
+        from cb.api.exceptions import AuthError, NotFoundError, APIError
+
+        # 1. Job Probe (read root or job list to see if we have access)
+        try:
+            client.get(f"/{name}/api/json?tree=jobs[name]")
+            job = True
+        except (AuthError, NotFoundError, APIError):
+            job = False
+
+        # 2. Node Probe (read computer api)
+        try:
+            client.get(f"/{name}/computer/api/json?tree=computer[displayName]")
+            node = True
+        except (AuthError, NotFoundError, APIError):
+            node = False
+
+        # 3. Credential Probe (read user credential store)
+        try:
+            # We don't have username passed in directly here, so we try the system domain or a simple endpoint
+            # Actually, standard CloudBees client has session info if we access via active profile.
+            # But we can try hitting the basic credential store plugin endpoint.
+            # Even a 404 means the plugin exists and we aren't completely 403.
+            # However, testing /credentials/store/system/domain/_/api/json works.
+            client.get(f"/{name}/credentials/store/system/domain/_/api/json")
+            cred = True
+        except AuthError:
+            cred = False
+        except (NotFoundError, APIError):
+            # If 404, we have read access to the controller but maybe no system creds.
+            # Still means we passed the 403 test.
+            cred = True
 
     return CapabilityInfo(
         name=dto.name,

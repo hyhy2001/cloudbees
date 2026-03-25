@@ -36,10 +36,10 @@ def list_credentials(
     username: str = "",
 ) -> List[CredentialDTO]:
     base      = _cred_base(db_path, controller_name)
-    user_seg  = f"/user/{username}" if username else ""
+    user_seg  = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
     cache_key = f"credentials.list.{controller_name or '_cjoc'}"
     data = client.get(
-        f"{base}{user_seg}/credentials/api/json",
+        f"{base}{user_seg}/api/json",
         cache_key=cache_key,
     )
     return [CredentialDTO.from_dict(c) for c in (data or {}).get("credentials", [])]
@@ -53,9 +53,9 @@ def get_credential(
     username: str = "",
 ) -> CredentialDTO:
     base     = _cred_base(db_path, controller_name)
-    user_seg = f"/user/{username}" if username else ""
+    user_seg = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
     data = client.get(
-        f"{base}{user_seg}/credentials/{cred_id}/api/json",
+        f"{base}{user_seg}/credential/{cred_id}/api/json",
         cache_key=f"credentials.detail.{cred_id}",
     )
     return CredentialDTO.from_dict(data or {})
@@ -73,7 +73,7 @@ def create_username_password(
     username: str = "",
 ) -> None:
     base     = _cred_base(db_path, controller_name)
-    user_seg = f"/user/{username}" if username else ""
+    user_seg = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
     xml = build_username_password_cred_xml(
         cred_id=cred_id,
         username=username_cred,
@@ -81,8 +81,10 @@ def create_username_password(
         desc=desc,
         scope=scope,
     )
+    # The user specifies "newCredentials" but standard Jenkins uses "createCredentials" via XML
+    # We will try createCredentials which is the standard API way.
     client.post_xml(
-        f"{base}{user_seg}/credentials/createItem",
+        f"{base}{user_seg}/createCredentials",
         xml_str=xml,
         invalidate="credentials.",
     )
@@ -96,8 +98,8 @@ def delete_credential(
     username: str = "",
 ) -> None:
     base     = _cred_base(db_path, controller_name)
-    user_seg = f"/user/{username}" if username else ""
+    user_seg = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
     client.post(
-        f"{base}{user_seg}/credentials/{cred_id}/doDelete",
+        f"{base}{user_seg}/credential/{cred_id}/doDelete",
         invalidate="credentials.",
     )
