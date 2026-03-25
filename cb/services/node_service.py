@@ -87,7 +87,7 @@ def create_permanent_node(
         "json": json.dumps(json_payload)
     }
     client.post(
-        "/computer/createItem",
+        "/computer/doCreateItem",
         data=data,
         invalidate="nodes.",
     )
@@ -105,7 +105,7 @@ def copy_node(
         "from": source_name,
     }
     client.post(
-        "/computer/createItem",
+        "/computer/doCreateItem",
         data=data,
         invalidate="nodes.",
     )
