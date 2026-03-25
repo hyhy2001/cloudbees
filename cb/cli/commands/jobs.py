@@ -16,10 +16,7 @@ def jobs_group():
 
 def _client(ctx):
     from cb.services.auth_service import get_client
-    return get_client(
-        profile_name=ctx.obj.get("profile"),
-        db_path=ctx.obj.get("db_path"),
-    )
+    return get_client(profile_name=ctx.obj.get("profile"))
 
 
 # ── list ──────────────────────────────────────────────────────
