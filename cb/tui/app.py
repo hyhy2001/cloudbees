@@ -17,7 +17,8 @@ _log = logging.getLogger(__name__)
 from cb.tui.colors import init_colors, PAIR_NORMAL, PAIR_STATUS
 from cb.tui.keys import (
     KEY_QUIT, KEY_TAB, SCREEN_KEYS, KEY_REFRESH, KEY_CACHE,
-    KEY_LOGIN, KEY_LOGOUT, HINTS_SIDEBAR, HINTS_CONTENT, SCREEN_COUNT,
+    KEY_LOGIN, KEY_LOGOUT, KEY_DEBUG, KEY_CONSOLE,
+    HINTS_SIDEBAR, HINTS_CONTENT, SCREEN_COUNT,
     KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ENTER, KEY_ESC,
 )
 from cb.tui.widgets.widgets import draw_header, draw_sidebar, draw_statusbar
@@ -26,6 +27,7 @@ from cb.tui.screens.screens import (
     SCR_CONTROLLER, SCR_CREDENTIALS,
     SCR_NODES, SCR_JOBS, SCR_SETTINGS,
 )
+from cb.tui.screens.overlay_screens import DebugOverlay, ConsoleOverlay
 
 _SCREEN_NAMES = ["Controller", "Credentials", "Nodes", "Jobs", "Settings"]
 _MIN_ROWS, _MIN_COLS = 24, 80
@@ -69,6 +71,12 @@ def main(
     status_msg     = f"  256-color: {'YES' if has_256 else 'no (8-color fallback)'}"
     client         = None
     active_profile = None
+
+    # Overlay state
+    debug_overlay   = DebugOverlay()
+    console_overlay = ConsoleOverlay()
+    show_debug      = False
+    show_console    = False
 
     # Try loading existing session (no password needed)
     try:
@@ -198,6 +206,12 @@ def main(
         hints = HINTS_SIDEBAR if focus == "sidebar" else HINTS_CONTENT
         draw_statusbar(status_win, hints, status_msg)
 
+        # ── Overlay rendering (drawn on top of main_win) ─────────────
+        if show_debug:
+            debug_overlay.draw(main_win)
+        elif show_console:
+            console_overlay.draw(main_win)
+
         header_win.refresh()
         sidebar_win.refresh()
         main_win.refresh()
@@ -210,9 +224,31 @@ def main(
                 status_msg = ""
             continue
 
-        # ── Global keys (work in any focus) ───────────────────────
+        # ── Global keys (work in any focus + any overlay) ─────────
         if ch in KEY_QUIT:
             break
+
+        # F2 — toggle debug overlay
+        if ch == KEY_DEBUG:
+            if show_console:
+                show_console = False
+            show_debug = not show_debug
+            continue
+
+        # F3 — toggle console overlay
+        if ch == KEY_CONSOLE:
+            if show_debug:
+                show_debug = False
+            show_console = not show_console
+            continue
+
+        # Route to overlay key handler when an overlay is active
+        if show_debug:
+            show_debug = debug_overlay.handle_key(ch)
+            continue
+        if show_console:
+            show_console = console_overlay.handle_key(ch)
+            continue
 
         if ch == KEY_LOGOUT:
             from cb.services.session import clear_session
@@ -222,6 +258,7 @@ def main(
             _loaded.clear()
             focus = "sidebar"
             status_msg = "  Logged out. Session cleared."
+            console_overlay.log("Logged out")
             continue
 
         if ch == KEY_LOGIN:
@@ -249,6 +286,7 @@ def main(
                     active_profile = p
                     _loaded.clear()
                     status_msg = f"  Logged in as {p.username}"
+                    console_overlay.log(f"Logged in as {p.username} @ {result['url']}")
                     _reload_current()
                 except Exception as exc:
                     status_msg = f"  Login error: {exc}"
@@ -279,6 +317,7 @@ def main(
                     if sidebar_cursor != active_screen:
                         active_screen = sidebar_cursor
                         _reload_current()
+                        console_overlay.log(f"Opened screen: {_SCREEN_NAMES[active_screen]}")
                     focus = "content"
                 continue
 
@@ -288,6 +327,7 @@ def main(
                 active_screen  = new_screen
                 sidebar_cursor = new_screen
                 _reload_current()
+                console_overlay.log(f"Jump to: {_SCREEN_NAMES[active_screen]}")
                 focus = "content"
                 continue
 
@@ -295,6 +335,7 @@ def main(
             if ch == KEY_REFRESH:
                 _loaded.discard(active_screen)
                 _reload_current(force=True)
+                console_overlay.log(f"Refreshed: {_SCREEN_NAMES[active_screen]}")
                 status_msg = "  Screen refreshed."
                 continue
 
@@ -303,6 +344,7 @@ def main(
                 from cb.cache.manager import clear_all
                 clear_all(db_path)
                 _loaded.clear()
+                console_overlay.log("Cache cleared (all)")
                 status_msg = "  Cache cleared."
                 continue
 
@@ -338,6 +380,7 @@ def main(
                         name = action.split(":", 1)[1]
                         trigger_job(client, name)
                         status_msg = f"  Triggered: {name}"
+                        console_overlay.log(f"Triggered job: {name}")
                     elif isinstance(action, str) and action.startswith("select_controller:"):
                         from cb.services.controller_service import select_controller
                         name = action.split(":", 1)[1]
@@ -345,11 +388,14 @@ def main(
                         url  = item.url if item and item.url else ""
                         select_controller(name, url, db_path)
                         status_msg = f"  Active controller: {name}"
+                        console_overlay.log(f"Selected controller: {name} ({url})")
                     elif isinstance(action, str) and action.startswith("toggle_node:"):
                         from cb.services.node_service import toggle_node
                         name = action.split(":", 1)[1]
                         toggle_node(client, name)
                         node_scr.load(client)
                         status_msg = f"  Toggled node: {name}"
+                        console_overlay.log(f"Toggled node: {name}")
                 except Exception as exc:
                     status_msg = f"  Error: {exc}"
+                    console_overlay.log(f"ERROR: {exc}")

@@ -29,6 +29,8 @@ KEY_CREATE  = ord('c')
 KEY_DELETE  = ord('d')
 KEY_SEARCH  = ord('/')
 KEY_REFRESH = curses.KEY_F5
+KEY_DEBUG   = curses.KEY_F2   # overlay: tail /tmp/bee.log
+KEY_CONSOLE = curses.KEY_F3   # overlay: in-session action log
 KEY_CACHE   = ord('C')
 KEY_LOGIN   = ord('L')
 KEY_LOGOUT  = ord('X')
@@ -36,5 +38,5 @@ KEY_TAB     = ord('\t')
 KEY_HELP    = ord('?')
 
 # Context-aware status bar hints
-HINTS_SIDEBAR = "q:Quit  ↑↓:Move  Enter/→:Open  1-5:Jump  L:Login  X:Logout  F5:Refresh"
-HINTS_CONTENT = "↑↓:Scroll  ←/Esc:Back  r:Run  j/k:Move  q:Quit  F5:Refresh"
+HINTS_SIDEBAR = "q:Quit  ↑↓:Move  Enter/→:Open  1-5:Jump  L:Login  X:Logout  F2:Debug  F3:Console  F5:Refresh"
+HINTS_CONTENT = "↑↓:Scroll  ←/Esc:Back  r:Run  j/k:Move  q:Quit  F2:Debug  F3:Console  F5:Refresh"
