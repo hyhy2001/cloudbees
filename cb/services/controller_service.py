@@ -54,22 +54,14 @@ def get_active_controller(db_path: Optional[Path] = None, client: Optional[Cloud
 
     url = get_setting("active_controller_url", db_path)
     if url:
-        # Many OpsCenter configurations return an item URL like example.com/cjoc/job/ctrl/
-        # But the actual router expects example.com/ctrl/
-        if "/cjoc/job/" in url:
-            url = url.replace("/cjoc/job/", "/")
-        elif "/cjoc/" in url:
-            url = url.replace("/cjoc/", "/")
         return (name, url)
     else:
         # Fallback if DB didn't have URL, or Jenkins didn't return one.
-        # We manually construct absolute URL stripping cjoc
+        # Ensure we construct the standard /job/<name> path under the OC.
         if client:
-            base = client.base_url
-            if base.endswith("/cjoc"):
-                base = base[:-5]
-            return (name, f"{base}/{name}/")
-        return (name, f"/{name}/")
+            base = client.base_url.rstrip("/")
+            return (name, f"{base}/job/{name}/")
+        return (name, f"/job/{name}/")
 
 
 # -- Controller capability info -----------------------------------------------
