@@ -66,46 +66,7 @@ def build_folder_xml(desc: str = "") -> str:
     return _xml_str(root)
 
 
-# ── Node XML ──────────────────────────────────────────────────
-
-
-def build_permanent_node_xml(
-    name: str,
-    remote_dir: str,
-    num_executors: int = 1,
-    labels: str = "",
-    desc: str = "",
-) -> str:
-    """Permanent Agent (JNLP/Inbound) config.xml."""
-    root = ET.Element("slave")
-    ET.SubElement(root, "name").text = name
-    ET.SubElement(root, "description").text = desc
-    ET.SubElement(root, "remoteFS").text = remote_dir
-    ET.SubElement(root, "numExecutors").text = str(num_executors)
-    ET.SubElement(root, "mode").text = "NORMAL"
-    ET.SubElement(
-        root, "retentionStrategy",
-        {"class": "hudson.slaves.RetentionStrategy$Always"}
-    )
-    ET.SubElement(
-        root, "launcher",
-        {"class": "hudson.slaves.JNLPLauncher", "tunnel": "", "vmargs": ""}
-    )
-    ET.SubElement(root, "label").text = labels
-    ET.SubElement(root, "nodeProperties")
-    return _xml_str(root)
-
-
-def patch_node_xml(source_xml: str, new_name: str) -> str:
-    """
-    Take an existing node config.xml and replace its <name> tag.
-    Used for 'copy node' functionality.
-    """
-    root = ET.fromstring(source_xml)
-    name_el = root.find("name")
-    if name_el is not None:
-        name_el.text = new_name
-    return _xml_str(root)
+# Node XML has been replaced by JSON Form Data (see node_service.py)
 
 
 # ── Credential XML ────────────────────────────────────────────

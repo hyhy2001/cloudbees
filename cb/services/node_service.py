@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Optional, List
 
 from cb.api.client import CloudBeesClient
-from cb.api.xml_builder import build_permanent_node_xml, patch_node_xml
 from cb.dtos.node import NodeDTO, NodeDetailDTO
 
 _NODE_TREE = "computer[displayName,offline,numExecutors,assignedLabels[name],description]"
@@ -43,19 +42,29 @@ def create_permanent_node(
     labels: str = "",
     desc: str = "",
 ) -> None:
-    """Create a Permanent Agent with JNLP launcher."""
-    xml = build_permanent_node_xml(
-        name=name,
-        remote_dir=remote_dir,
-        num_executors=num_executors,
-        labels=labels,
-        desc=desc,
-    )
-    client.post_xml(
+    """Create a Permanent Agent with JNLP launcher (Form Data)."""
+    import json
+    json_payload = {
+        "name": name,
+        "nodeDescription": desc,
+        "numExecutors": str(num_executors),
+        "remoteFS": remote_dir,
+        "labelString": labels,
+        "mode": "NORMAL",
+        "type": "hudson.slaves.DumbSlave",
+        "retentionStrategy": {"stapler-class": "hudson.slaves.RetentionStrategy$Always"},
+        "nodeProperties": {"stapler-class-bag": "true"},
+        "launcher": {"stapler-class": "hudson.slaves.JNLPLauncher"}
+    }
+    data = {
+        "name": name,
+        "type": "hudson.slaves.DumbSlave",
+        "json": json.dumps(json_payload)
+    }
+    client.post(
         "/computer/doCreateItem",
-        xml_str=xml,
+        data=data,
         invalidate="nodes.",
-        params={"name": name, "type": "hudson.slaves.DumbSlave"},
     )
 
 
@@ -64,17 +73,16 @@ def copy_node(
     source_name: str, 
     new_name: str,
 ) -> None:
-    """Copy an existing node's config and register it with a new name."""
-    # Fetch source XML
-    source_xml = client.get_text(f"/computer/{source_name}/config.xml")
-    # Patch name in XML
-    new_xml = patch_node_xml(source_xml, new_name)
-    # Create new node
-    client.post_xml(
+    """Copy an existing node's config and register it with a new name using Form Data."""
+    data = {
+        "name": new_name,
+        "mode": "copy",
+        "from": source_name,
+    }
+    client.post(
         "/computer/doCreateItem",
-        xml_str=new_xml,
+        data=data,
         invalidate="nodes.",
-        params={"name": new_name, "type": "hudson.slaves.DumbSlave"},
     )
 
 
