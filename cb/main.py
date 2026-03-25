@@ -24,16 +24,9 @@ __version__ = "0.2.0"
 @click.group(invoke_without_command=True)
 @click.version_option(__version__, prog_name="bee")
 @click.option("--ui", is_flag=True, default=False, help="Launch the TUI interface")
-@click.option("--profile", "-p", default=None, envvar="CB_PROFILE", help="Profile name to use")
-@click.option("--controller", "-c", default=None, envvar="CB_CONTROLLER",
-              help="Active controller name (overrides saved setting)")
-@click.option("--token", default=None, envvar="CB_TOKEN",
-              help="API Token (or set CB_TOKEN env var)")
 @click.option("--debug", is_flag=True, default=False, help="Enable debug logging")
-@click.option("--db", default=None, envvar="CB_DB_PATH",
-              help="Override database path (for testing)")
 @click.pass_context
-def cli(ctx, ui, profile, controller, token, debug, db):
+def cli(ctx, ui, debug):
     """bee — CloudBees command-line tool.
 
     \b
@@ -46,35 +39,21 @@ def cli(ctx, ui, profile, controller, token, debug, db):
       bee cred create --id x --username u  # Create credential
       bee node list                    # List agent nodes
       bee --ui                         # Launch TUI interface
-
-    \b
-    Environment variables:
-    \b
-    Environment variables:
-      CB_PROFILE     Active profile name
-      CB_CONTROLLER  Active controller name
-      CB_TOKEN       API Token (avoid prompts in scripts)
-      CB_DB_PATH     Custom database path
     """
     if debug:
         logging.basicConfig(level=logging.DEBUG, stream=sys.stderr, format="%(levelname)s %(name)s %(message)s")
 
-    db_path = Path(db) if db else None
-    if db_path:
-        from cb.db.connection import set_db_path
-        set_db_path(db_path)
-
-    init_db(db_path)
+    init_db()
 
     ctx.ensure_object(dict)
-    ctx.obj["profile"] = profile
-    ctx.obj["controller"] = controller
-    ctx.obj["token"] = token
-    ctx.obj["db_path"] = db_path
+    ctx.obj["profile"] = None
+    ctx.obj["controller"] = None
+    ctx.obj["token"] = None
+    ctx.obj["db_path"] = None
     ctx.obj["debug"] = debug
 
     if ui:
-        _launch_tui(profile, controller, token, db_path)
+        _launch_tui(None, None, None, None)
         return
 
     if ctx.invoked_subcommand is None:
