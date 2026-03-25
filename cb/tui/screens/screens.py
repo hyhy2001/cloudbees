@@ -85,6 +85,7 @@ class CredentialsScreen:
         self.offset      = 0
         self.detail_mode = False
         self.detail_item = None
+        self.pending_delete = ""
         self.error: str  = ""
 
     def load(self, client: CloudBeesClient, db_path=None, username: str = "") -> None:
@@ -116,11 +117,27 @@ class CredentialsScreen:
                 for c in self.items
             ]
             draw_table(win, headers, rows, self.selected, self.offset)
+            
+            # Confirmation prompt overlay at bottom of win
+            max_rows, cols = win.getmaxyx()
+            if self.pending_delete:
+                prompt = f"  Delete credential '{self.pending_delete}'?  Enter=confirm   <-/Esc=cancel  "
+                safe_addstr(win, max_rows - 2, 2, prompt[:cols - 3],
+                            curses.color_pair(PAIR_WARNING) | curses.A_REVERSE | curses.A_BOLD)
 
     def handle_key(self, ch: int) -> str | None:
         if self.detail_mode:
             if ch in (curses.KEY_LEFT, 27, ord('\x1b')):
                 self.detail_mode = False
+            return None
+
+        if self.pending_delete:
+            if ch in (curses.KEY_ENTER, ord('\n'), ord('\r')):
+                target = self.pending_delete
+                self.pending_delete = ""
+                return f"delete_cred:{target}"
+            elif ch in (curses.KEY_LEFT, 27, ord('\x1b')):
+                self.pending_delete = ""
             return None
 
         if ch == curses.KEY_DOWN and self.selected < len(self.items) - 1:
@@ -134,6 +151,12 @@ class CredentialsScreen:
         elif ch in (curses.KEY_ENTER, ord('\n'), ord('\r')) and self.items:
             self.detail_item = self.items[self.selected]
             self.detail_mode = True
+        elif ch in (curses.KEY_DC, ord('d'), ord('D')) and self.items:
+            # Delete credential prompt
+            self.pending_delete = self.items[self.selected].id
+        elif ch in (ord('c'), ord('C'), ord('+')):
+            # Create credential
+            return "create_cred"
         return None
 
 

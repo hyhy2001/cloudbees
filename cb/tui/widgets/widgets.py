@@ -226,7 +226,58 @@ def spinner_char() -> str:
     return _SPINNER[int(time.time() * 4) % len(_SPINNER)]
 
 
-# -- Info modal ---------------------------------------------------------------
+# -- Info modal & Input -------------------------------------------------------
+
+
+def prompt_input(stdscr, title: str, prompt: str) -> str | None:
+    """Show a blocking input modal. Returns typed string or None if cancelled."""
+    max_h, max_w = stdscr.getmaxyx()
+    box_w = min(60, max_w - 4)
+    y0    = max(0, (max_h - 6) // 2)
+    x0    = max(0, (max_w - box_w) // 2)
+
+    border_attr = curses.color_pair(PAIR_TITLE) | curses.A_BOLD
+    top         = "+" + "-" * (box_w - 2) + "+"
+    mid         = "|" + " " * (box_w - 2) + "|"
+
+    def _put(y, x, text, attr=0):
+        safe_addstr(stdscr, y, x, text[:box_w], attr)
+    def _bg(y, x, w):
+        safe_addstr(stdscr, y, x, " " * w, curses.color_pair(PAIR_NORMAL))
+
+    r = y0
+    _bg(r, x0, box_w); _put(r, x0, top, border_attr); r += 1
+    
+    _bg(r, x0, box_w)
+    ts = f"  {title}  "
+    _put(r, x0, "|" + ts + " " * max(0, box_w - 2 - len(ts)) + "|", 
+         curses.color_pair(PAIR_TITLE) | curses.A_BOLD | curses.A_REVERSE); r += 1
+         
+    _bg(r, x0, box_w); _put(r, x0, "+" + "-" * (box_w - 2) + "+", border_attr); r += 1
+    _bg(r, x0, box_w); _put(r, x0, mid, border_attr)
+    _put(r, x0 + 2, prompt + " ", border_attr); r += 1
+    _bg(r, x0, box_w); _put(r, x0, top, border_attr); r += 1
+
+    stdscr.refresh()
+    
+    curses.echo()
+    curses.curs_set(1)
+    stdscr.timeout(-1)
+    
+    try:
+        # Move cursor to end of prompt
+        stdscr.move(y0 + 3, x0 + 3 + len(prompt))
+        # getstr handles backspace, enter, etc.
+        user_input = stdscr.getstr(y0 + 3, x0 + 3 + len(prompt), box_w - len(prompt) - 6)
+        ans = user_input.decode('utf-8').strip()
+    except Exception:
+        ans = None
+    finally:
+        curses.noecho()
+        curses.curs_set(0)
+        stdscr.timeout(100)
+    
+    return ans if ans else None
 
 
 def show_info_modal(

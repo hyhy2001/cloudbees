@@ -393,9 +393,13 @@ def main(
             if ch == curses.KEY_LEFT or ch in KEY_ESC:
                 # Give the active screen a chance to close its own sub-state first
                 _consumed = False
-                if active_screen == SCR_CREDENTIALS and cred_scr.detail_mode:
-                    cred_scr.detail_mode = False
-                    _consumed = True
+                if active_screen == SCR_CREDENTIALS:
+                    if cred_scr.pending_delete:
+                        cred_scr.pending_delete = ""
+                        _consumed = True
+                    elif cred_scr.detail_mode:
+                        cred_scr.detail_mode = False
+                        _consumed = True
                 elif active_screen == SCR_NODES and node_scr.pending_toggle:
                     node_scr.pending_toggle = None
                     _consumed = True
@@ -436,6 +440,31 @@ def main(
                         trigger_job(client, name, db_path=db_path)
                         status_msg = f"  Triggered: {name}"
                         console_overlay.log_cmd(f"bee job run {name}", "Job triggered")
+                    elif isinstance(action, str) and action.startswith("delete_cred:"):
+                        from cb.services.credential_service import delete_credential
+                        cred_id = action.split(":", 1)[1]
+                        _uname = active_profile.username if active_profile else ""
+                        delete_credential(client, cred_id, db_path=db_path, username=_uname)
+                        cred_scr.load(client, db_path=db_path, username=_uname)
+                        status_msg = f"  Deleted credential: {cred_id}"
+                        console_overlay.log_cmd(f"bee credential delete {cred_id}", "Deleted")
+                    elif action == "create_cred":
+                        from cb.services.credential_service import create_username_password
+                        from cb.tui.widgets.widgets import prompt_input
+                        _id = prompt_input(stdscr, "Create Credential", "ID:")
+                        if _id:
+                            _u = prompt_input(stdscr, "Create Credential", "Username:")
+                            if _u:
+                                _p = prompt_input(stdscr, "Create Credential", "Password:")
+                                if _p:
+                                    _uname = active_profile.username if active_profile else ""
+                                    create_username_password(
+                                        client, _id, _u, _p, "Created via TUI", 
+                                        db_path=db_path, username=_uname
+                                    )
+                                    cred_scr.load(client, db_path=db_path, username=_uname)
+                                    status_msg = f"  Created credential: {_id}"
+                                    console_overlay.log_cmd(f"bee credential create {_id}", "Created")
                     elif isinstance(action, str) and action.startswith("select_controller:"):
                         from cb.services.controller_service import (
                             select_controller, get_controller_capabilities,
