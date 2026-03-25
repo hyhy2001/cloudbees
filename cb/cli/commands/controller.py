@@ -12,7 +12,7 @@ def controller_group():
 
 def _client(ctx):
     from cb.services.auth_service import get_client
-    return get_client(profile_name=ctx.obj.get("profile"))
+    return get_client(profile_name=ctx.obj.get("profile"), use_controller=False)
 
 
 @controller_group.command("list")
