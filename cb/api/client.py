@@ -99,7 +99,7 @@ class CloudBeesClient:
             if resp.status_code >= 500 and attempt < len(_RETRY_DELAYS):
                 last_err = APIError(resp.status_code, resp.text[:200])
                 continue
-            if not resp.is_success:
+            if not resp.is_success and resp.status_code not in (302, 303):
                 raise APIError(resp.status_code, resp.text[:300])
 
             if resp.content:
