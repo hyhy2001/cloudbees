@@ -101,3 +101,18 @@ def cmd_delete(ctx, cred_id, yes):
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)
+
+
+@cred_group.command("update")
+@click.argument("cred_id")
+@click.argument("xml_file", type=click.File("r"))
+@click.pass_context
+def cmd_update(ctx, cred_id, xml_file):
+    """Update a credential using a config.xml file."""
+    from cb.services.credential_service import update_credential
+    try:
+        update_credential(_client(ctx), cred_id, xml_file.read())
+        click.echo(f"[OK] Credential '{cred_id}' updated.")
+    except Exception as exc:
+        click.echo(f"[ERROR] {exc}", err=True)
+        raise SystemExit(1)

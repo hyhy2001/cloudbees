@@ -46,7 +46,7 @@ def trigger_job_with_params(client: CloudBeesClient, name: str, params: dict) ->
 
 
 def stop_build(client: CloudBeesClient, job_name: str, build_number: int) -> None:
-    client.post(f"/job/{job_name}/{build_number}/stop")
+    client.post(f"/job/{job_name}/{build_number}/stop", invalidate="jobs.")
 
 
 def get_build_detail(client: CloudBeesClient, job_name: str, build_number: int) -> BuildDTO:
@@ -147,3 +147,11 @@ def create_folder(
 
 def delete_job(client: CloudBeesClient, name: str) -> None:
     client.post(f"/job/{name}/doDelete", invalidate="jobs.")
+
+
+def update_job(client: CloudBeesClient, name: str, xml_str: str) -> None:
+    client.post_xml(
+        f"/job/{name}/config.xml",
+        xml_str=xml_str,
+        invalidate="jobs.",
+    )

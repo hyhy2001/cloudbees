@@ -29,12 +29,9 @@ def _client(ctx):
 @click.pass_context
 def cmd_list(ctx):
     """List all jobs with type and last build status."""
-    from cb.db.repositories.job_repo import list_jobs
+    from cb.services.job_service import list_jobs
     try:
-        jobs = list_jobs(ctx.obj.get("db_path"))
-        if not jobs:
-            click.echo("No local jobs found. Try running 'bee sync' first.")
-            return
+        jobs = list_jobs(_client(ctx))
         headers = ["Name", "Type", "Status", "Build#", "Description"]
         rows = [
             [
@@ -301,6 +298,21 @@ def cmd_status(ctx, name, count):
             rows.append([str(b.number), result, dur, ts])
 
         click.echo(format_table(headers, rows))
+    except Exception as exc:
+        click.echo(f"[ERROR] {exc}", err=True)
+        raise SystemExit(1)
+
+
+@jobs_group.command("update")
+@click.argument("name")
+@click.argument("xml_file", type=click.File("r"))
+@click.pass_context
+def cmd_update(ctx, name, xml_file):
+    """Update a job using a config.xml file."""
+    from cb.services.job_service import update_job
+    try:
+        update_job(_client(ctx), name, xml_file.read())
+        click.echo(f"[OK] Job '{name}' updated.")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)

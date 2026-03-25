@@ -22,12 +22,9 @@ def _client(ctx):
 @click.pass_context
 def cmd_list(ctx):
     """List all agent nodes with online/offline status."""
-    from cb.db.repositories.node_repo import list_nodes
+    from cb.services.node_service import list_nodes
     try:
-        nodes = list_nodes(ctx.obj.get("db_path"))
-        if not nodes:
-            click.echo("No local nodes found. Try running 'bee sync' first.")
-            return
+        nodes = list_nodes(_client(ctx))
         headers = ["Name", "Status", "Executors", "Labels", "Description"]
         rows = [
             [
@@ -153,6 +150,21 @@ def cmd_online(ctx, name):
     try:
         toggle_offline(_client(ctx), name, "")
         click.echo(f"[OK] Node '{name}' toggled online.")
+    except Exception as exc:
+        click.echo(f"[ERROR] {exc}", err=True)
+        raise SystemExit(1)
+
+
+@node_group.command("update")
+@click.argument("name")
+@click.argument("xml_file", type=click.File("r"))
+@click.pass_context
+def cmd_update(ctx, name, xml_file):
+    """Update a node using a config.xml file."""
+    from cb.services.node_service import update_node
+    try:
+        update_node(_client(ctx), name, xml_file.read())
+        click.echo(f"[OK] Node '{name}' updated.")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)

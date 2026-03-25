@@ -89,3 +89,12 @@ def toggle_offline(client: CloudBeesClient, name: str, reason: str = "") -> None
         invalidate="nodes.",
         params={"offlineMessage": reason},
     )
+
+
+def update_node(client: CloudBeesClient, name: str, xml_str: str) -> None:
+    """Update node using a config.xml string."""
+    client.post_xml(
+        f"/computer/{name}/config.xml",
+        xml_str=xml_str,
+        invalidate="nodes.",
+    )

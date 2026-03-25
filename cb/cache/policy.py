@@ -3,20 +3,14 @@ from __future__ import annotations
 
 # How long each resource type stays in cache
 TTL: dict[str, int] = {
-    "jobs.list":          60,    # changes frequently
-    "jobs.detail":        30,
-    "controllers.list":   120,   # moderate change rate
-    "controllers.detail": 60,
-    "credentials.list":   180,   # changes rarely
-    "credentials.detail": 180,
-    "nodes.list":         30,    # online/offline flips often
-    "nodes.detail":       30,
-    "pipelines.list":     120,
-    "pipelines.detail":   60,
-    "users.list":         300,   # changes rarely
-    "users.detail":       300,
-    "system.health":      15,    # always fresh
-    "system.version":     3600,  # very stable
+    "jobs.list":          300,
+    "jobs.detail":        300,
+    "controllers.list":   86400,
+    "controllers.detail": 86400,
+    "credentials.list":   3600,
+    "credentials.detail": 3600,
+    "nodes.list":         300,
+    "nodes.detail":       300,
 }
 
 DEFAULT_TTL = 60

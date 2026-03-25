@@ -76,3 +76,17 @@ def delete_credential(
         f"{user_seg}/credential/{cred_id}/doDelete",
         invalidate="credentials.",
     )
+
+
+def update_credential(
+    client: CloudBeesClient,
+    cred_id: str,
+    xml_str: str,
+    username: str = "",
+) -> None:
+    user_seg = f"/user/{username}/credentials/store/user/domain/_" if username else "/credentials/store/system/domain/_"
+    client.post_xml(
+        f"{user_seg}/credential/{cred_id}/config.xml",
+        xml_str=xml_str,
+        invalidate="credentials.",
+    )
