@@ -11,14 +11,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     created_at INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS tokens (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    profile_id INTEGER NOT NULL REFERENCES profiles(id),
-    enc_token  BLOB    NOT NULL,
-    salt       BLOB    NOT NULL,
-    expires_at INTEGER,
-    updated_at INTEGER NOT NULL
-);
+
 
 CREATE TABLE IF NOT EXISTS cache (
     key        TEXT    PRIMARY KEY,

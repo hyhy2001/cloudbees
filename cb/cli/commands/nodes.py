@@ -2,7 +2,7 @@ from __future__ import annotations
 """cb node — list, get, create, copy, delete, offline, online."""
 
 import click
-from cb.cli.formatters import format_table, format_kv, format_json
+from cb.cli.formatters import format_table, format_kv
 
 
 @click.group("node")
@@ -14,22 +14,17 @@ def _client(ctx):
     from cb.services.auth_service import get_client
     return get_client(
         profile_name=ctx.obj.get("profile"),
-        password=ctx.obj.get("password"),
         db_path=ctx.obj.get("db_path"),
     )
 
 
 @node_group.command("list")
-@click.option("--output", "-o", default="table", type=click.Choice(["table", "json"]))
 @click.pass_context
-def cmd_list(ctx, output):
+def cmd_list(ctx):
     """List all agent nodes with online/offline status."""
     from cb.services.node_service import list_nodes
     try:
         nodes = list_nodes(_client(ctx))
-        if output == "json":
-            click.echo(format_json([n.to_dict() for n in nodes]))
-            return
         headers = ["Name", "Status", "Executors", "Labels", "Description"]
         rows = [
             [
@@ -50,9 +45,8 @@ def cmd_list(ctx, output):
 
 @node_group.command("get")
 @click.argument("name")
-@click.option("--output", "-o", default="table", type=click.Choice(["table", "json"]))
 @click.pass_context
-def cmd_get(ctx, name, output):
+def cmd_get(ctx, name):
     """Show node details."""
     from cb.services.node_service import get_node
     try:
@@ -66,10 +60,7 @@ def cmd_get(ctx, name, output):
             "remote_dir": node.remote_dir,
             "description": node.description,
         }
-        if output == "json":
-            click.echo(format_json(data))
-        else:
-            click.echo(format_kv(data))
+        click.echo(format_kv(data))
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)

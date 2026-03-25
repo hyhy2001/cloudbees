@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 from cb.db.connection import get_connection
-from cb.dtos.auth import ProfileDTO, TokenDTO
+from cb.dtos.auth import ProfileDTO
 
 
 # ── Profile repo ──────────────────────────────────────────────
@@ -120,54 +120,3 @@ def delete_profile(name: str, db_path: Path | None = None) -> None:
         conn.close()
 
 
-# ── Token repo ────────────────────────────────────────────────
-
-
-def save_token(
-    profile_id: int,
-    enc_token: bytes,
-    salt: bytes,
-    expires_at: int | None = None,
-    db_path: Path | None = None,
-) -> None:
-    now = int(time.time())
-    conn = get_connection(db_path)
-    try:
-        conn.execute("DELETE FROM tokens WHERE profile_id = ?", (profile_id,))
-        conn.execute(
-            """INSERT INTO tokens (profile_id, enc_token, salt, expires_at, updated_at)
-               VALUES (?, ?, ?, ?, ?)""",
-            (profile_id, enc_token, salt, expires_at, now),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def get_token(profile_id: int, db_path: Path | None = None) -> TokenDTO | None:
-    conn = get_connection(db_path)
-    try:
-        row = conn.execute(
-            "SELECT * FROM tokens WHERE profile_id = ?", (profile_id,)
-        ).fetchone()
-        if row is None:
-            return None
-        return TokenDTO(
-            id=row["id"],
-            profile_id=row["profile_id"],
-            enc_token=bytes(row["enc_token"]),
-            salt=bytes(row["salt"]),
-            expires_at=row["expires_at"],
-            updated_at=row["updated_at"],
-        )
-    finally:
-        conn.close()
-
-
-def delete_token(profile_id: int, db_path: Path | None = None) -> None:
-    conn = get_connection(db_path)
-    try:
-        conn.execute("DELETE FROM tokens WHERE profile_id = ?", (profile_id,))
-        conn.commit()
-    finally:
-        conn.close()

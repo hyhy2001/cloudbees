@@ -14,12 +14,3 @@ class ProfileDTO(BaseDTO):
     is_default: bool = False
     created_at: int = 0
 
-
-@dataclasses.dataclass
-class TokenDTO(BaseDTO):
-    id: int = 0
-    profile_id: int = 0
-    enc_token: bytes = b""
-    salt: bytes = b""
-    expires_at: int | None = None
-    updated_at: int = 0

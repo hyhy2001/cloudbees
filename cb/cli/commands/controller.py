@@ -2,7 +2,7 @@ from __future__ import annotations
 """cb controller — list, info, select, current."""
 
 import click
-from cb.cli.formatters import format_table, format_kv, format_json
+from cb.cli.formatters import format_table, format_kv
 
 
 @click.group("controller")
@@ -14,25 +14,19 @@ def _client(ctx):
     from cb.services.auth_service import get_client
     return get_client(
         profile_name=ctx.obj.get("profile"),
-        password=ctx.obj.get("password"),
         db_path=ctx.obj.get("db_path"),
     )
 
 
 @controller_group.command("list")
-@click.option("--output", "-o", default="table", type=click.Choice(["table", "json"]))
 @click.pass_context
-def cmd_list(ctx, output):
+def cmd_list(ctx):
     """List all controllers on this CloudBees server."""
     from cb.services.controller_service import list_controllers, get_active_controller
     try:
         controllers = list_controllers(_client(ctx))
         active = get_active_controller(ctx.obj.get("db_path"))
         active_name = active[0] if active else None
-
-        if output == "json":
-            click.echo(format_json([c.to_dict() for c in controllers]))
-            return
 
         headers = ["Active", "Name", "Description", "Status"]
         rows = [
@@ -53,17 +47,13 @@ def cmd_list(ctx, output):
 
 @controller_group.command("info")
 @click.argument("name")
-@click.option("--output", "-o", default="table", type=click.Choice(["table", "json"]))
 @click.pass_context
-def cmd_info(ctx, name, output):
+def cmd_info(ctx, name):
     """Show controller details."""
     from cb.services.controller_service import get_controller
     try:
         ctrl = get_controller(_client(ctx), name)
-        if output == "json":
-            click.echo(format_json(ctrl.to_dict()))
-        else:
-            click.echo(format_kv(ctrl.to_dict()))
+        click.echo(format_kv(ctrl.to_dict()))
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)

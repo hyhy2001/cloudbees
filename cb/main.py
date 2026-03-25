@@ -3,6 +3,7 @@
 from __future__ import annotations
 import os
 import sys
+import logging
 from pathlib import Path
 
 import click
@@ -25,12 +26,13 @@ __version__ = "0.2.0"
 @click.option("--profile", "-p", default=None, envvar="CB_PROFILE", help="Profile name to use")
 @click.option("--controller", "-c", default=None, envvar="CB_CONTROLLER",
               help="Active controller name (overrides saved setting)")
-@click.option("--password", default=None, envvar="CB_PASSWORD",
-              help="Master password (or set CB_PASSWORD env var)")
+@click.option("--token", default=None, envvar="CB_TOKEN",
+              help="API Token (or set CB_TOKEN env var)")
+@click.option("--debug", is_flag=True, default=False, help="Enable debug logging")
 @click.option("--db", default=None, envvar="CB_DB_PATH",
               help="Override database path (for testing)")
 @click.pass_context
-def cli(ctx, ui, profile, controller, password, db):
+def cli(ctx, ui, profile, controller, token, debug, db):
     """bee — CloudBees command-line tool.
 
     \b
@@ -46,11 +48,16 @@ def cli(ctx, ui, profile, controller, password, db):
 
     \b
     Environment variables:
+    \b
+    Environment variables:
       CB_PROFILE     Active profile name
       CB_CONTROLLER  Active controller name
-      CB_PASSWORD    Master password (avoid prompts in scripts)
+      CB_TOKEN       API Token (avoid prompts in scripts)
       CB_DB_PATH     Custom database path
     """
+    if debug:
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stderr, format="%(levelname)s %(name)s %(message)s")
+
     db_path = Path(db) if db else None
     if db_path:
         from cb.db.connection import set_db_path
@@ -61,18 +68,19 @@ def cli(ctx, ui, profile, controller, password, db):
     ctx.ensure_object(dict)
     ctx.obj["profile"] = profile
     ctx.obj["controller"] = controller
-    ctx.obj["password"] = password
+    ctx.obj["token"] = token
     ctx.obj["db_path"] = db_path
+    ctx.obj["debug"] = debug
 
     if ui:
-        _launch_tui(profile, controller, password, db_path)
+        _launch_tui(profile, controller, token, db_path)
         return
 
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
 
 
-def _launch_tui(profile, controller, password, db_path):
+def _launch_tui(profile, controller, token, db_path):
     """Bootstrap the curses TUI."""
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     try:
@@ -82,7 +90,7 @@ def _launch_tui(profile, controller, password, db_path):
             tui_main,
             profile=profile,
             controller=controller,
-            password=password,
+            token=token,
             db_path=db_path,
         )
     except KeyboardInterrupt:

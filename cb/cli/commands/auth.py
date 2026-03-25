@@ -15,13 +15,13 @@ def auth_group():
 @auth_group.command("login")
 @click.option("--url", prompt="Server URL", help="CloudBees server URL")
 @click.option("--username", prompt="Username", help="Your username")
-@click.option("--password", prompt="Password", hide_input=True, help="Your password")
+@click.option("--token", prompt="API Token", hide_input=True, help="Your API Token")
 @click.option("--profile", default="default", show_default=True, help="Profile name")
 @click.pass_context
-def cmd_login(ctx, url, username, password, profile):
-    """Login to a CloudBees server and save encrypted credentials."""
+def cmd_login(ctx, url, username, token, profile):
+    """Login to a CloudBees server and save API Token."""
     try:
-        p = login(server_url=url, username=username, password=password,
+        p = login(server_url=url, username=username, password=token,
                   profile_name=profile, is_default=True,
                   db_path=ctx.obj.get("db_path"))
         click.echo(f"[OK] Logged in as '{p.username}' on {p.server_url}")

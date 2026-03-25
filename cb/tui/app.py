@@ -41,7 +41,7 @@ def main(
     *,
     profile: str | None,
     controller: str | None,
-    password: str | None,
+    token: str | None,
     db_path: "Path | None",
 ) -> None:
     """curses.wrapper entry point."""

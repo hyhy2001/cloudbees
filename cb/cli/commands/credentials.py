@@ -2,7 +2,7 @@ from __future__ import annotations
 """cb cred — list, get, create (username+password), delete."""
 
 import click
-from cb.cli.formatters import format_table, format_kv, format_json
+from cb.cli.formatters import format_table, format_kv
 
 
 @click.group("cred")
@@ -14,22 +14,17 @@ def _client(ctx):
     from cb.services.auth_service import get_client
     return get_client(
         profile_name=ctx.obj.get("profile"),
-        password=ctx.obj.get("password"),
         db_path=ctx.obj.get("db_path"),
     )
 
 
 @cred_group.command("list")
-@click.option("--output", "-o", default="table", type=click.Choice(["table", "json"]))
 @click.pass_context
-def cmd_list(ctx, output):
+def cmd_list(ctx):
     """List all credentials."""
     from cb.services.credential_service import list_credentials
     try:
         creds = list_credentials(_client(ctx))
-        if output == "json":
-            click.echo(format_json([c.to_dict() for c in creds]))
-            return
         headers = ["ID", "Type", "Description", "Scope"]
         rows = [[c.id, c.type_name[:25], (c.description or "")[:35], c.scope] for c in creds]
         click.echo(format_table(headers, rows))
@@ -41,9 +36,8 @@ def cmd_list(ctx, output):
 
 @cred_group.command("get")
 @click.argument("cred_id")
-@click.option("--output", "-o", default="table", type=click.Choice(["table", "json"]))
 @click.pass_context
-def cmd_get(ctx, cred_id, output):
+def cmd_get(ctx, cred_id):
     """Show credential details (secrets are masked)."""
     from cb.services.credential_service import get_credential
     try:
@@ -53,10 +47,7 @@ def cmd_get(ctx, cred_id, output):
         for k in list(data.keys()):
             if any(s in k.lower() for s in ("password", "secret", "key", "token")):
                 data[k] = "[HIDDEN]"
-        if output == "json":
-            click.echo(format_json(data))
-        else:
-            click.echo(format_kv(data))
+        click.echo(format_kv(data))
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)

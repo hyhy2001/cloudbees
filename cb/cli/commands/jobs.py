@@ -6,7 +6,7 @@ import time
 import datetime
 
 import click
-from cb.cli.formatters import format_table, format_kv, format_json
+from cb.cli.formatters import format_table, format_kv
 
 
 @click.group("job")
@@ -18,7 +18,6 @@ def _client(ctx):
     from cb.services.auth_service import get_client
     return get_client(
         profile_name=ctx.obj.get("profile"),
-        password=ctx.obj.get("password"),
         db_path=ctx.obj.get("db_path"),
     )
 
@@ -27,16 +26,12 @@ def _client(ctx):
 
 
 @jobs_group.command("list")
-@click.option("--output", "-o", default="table", type=click.Choice(["table", "json"]))
 @click.pass_context
-def cmd_list(ctx, output):
+def cmd_list(ctx):
     """List all jobs with type and last build status."""
     from cb.services.job_service import list_jobs
     try:
         jobs = list_jobs(_client(ctx))
-        if output == "json":
-            click.echo(format_json([j.to_dict() for j in jobs]))
-            return
         headers = ["Name", "Type", "Status", "Build#", "Description"]
         rows = [
             [
@@ -60,18 +55,14 @@ def cmd_list(ctx, output):
 
 @jobs_group.command("get")
 @click.argument("name")
-@click.option("--output", "-o", default="table", type=click.Choice(["table", "json"]))
 @click.pass_context
-def cmd_get(ctx, name, output):
+def cmd_get(ctx, name):
     """Show job details and last build info."""
     from cb.services.job_service import get_job
     try:
         job = get_job(_client(ctx), name)
         data = job.to_dict()
-        if output == "json":
-            click.echo(format_json(data))
-        else:
-            click.echo(format_kv(data))
+        click.echo(format_kv(data))
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)

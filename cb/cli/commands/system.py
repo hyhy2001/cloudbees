@@ -5,7 +5,7 @@ import click
 from cb.services.auth_service import get_client
 from cb.services.system_service import health_check, get_version
 from cb.cache.manager import clear_all, purge_expired
-from cb.cli.formatters import format_kv, format_json
+from cb.cli.formatters import format_kv
 
 
 @click.group("system")
@@ -16,22 +16,17 @@ def system_group():
 def _client(ctx):
     return get_client(
         profile_name=ctx.obj.get("profile"),
-        password=ctx.obj.get("password"),
         db_path=ctx.obj.get("db_path"),
     )
 
 
 @system_group.command("health")
-@click.option("--output", "-o", default="table", type=click.Choice(["table", "json"]))
 @click.pass_context
-def cmd_health(ctx, output):
+def cmd_health(ctx):
     """Show server health information."""
     try:
         info = health_check(_client(ctx))
-        if output == "json":
-            click.echo(format_json(info))
-        else:
-            click.echo(format_kv(info))
+        click.echo(format_kv(info))
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)
@@ -61,3 +56,20 @@ def cmd_cache_clear(ctx, expired_only):
     else:
         clear_all(db)
         click.echo("[OK] Cache cleared.")
+
+
+@system_group.command("autocomplete")
+def cmd_autocomplete():
+    """Print the Bash/Zsh shell completion script."""
+    script = '''# Bash/Zsh completion for bee
+if [ -n "$BASH_VERSION" ]; then
+    eval "$(_BEE_COMPLETE=bash_source bee)"
+elif [ -n "$ZSH_VERSION" ]; then
+    eval "$(_BEE_COMPLETE=zsh_source bee)"
+else
+    echo "# Unsupported shell."
+fi
+'''
+    click.echo(script)
+    click.echo("# Add this to your ~/.bashrc or ~/.zshrc:")
+    click.echo("# eval \"$(bee system autocomplete)\"")
