@@ -91,9 +91,21 @@ class CloudBeesClient:
 
             if resp.content:
                 try:
-                    return resp.json()
+                    data = resp.json()
+                    import logging
+                    log = logging.getLogger(__name__)
+                    # Convert json to single line for debug screen
+                    single_line = json.dumps(data, separators=(',', ':'))
+                    log.debug(f"API [{method}] {url} -> {resp.status_code} | {single_line[:150]}...")
+                    return data
                 except json.JSONDecodeError:
+                    import logging
+                    log = logging.getLogger(__name__)
+                    log.debug(f"API [{method}] {url} -> {resp.status_code} | {resp.text[:150]}...")
                     return resp.text
+            import logging
+            log = logging.getLogger(__name__)
+            log.debug(f"API [{method}] {url} -> {resp.status_code} | (no content)")
             return None
 
         raise last_err or APIError(0, "Request failed after retries")
@@ -151,6 +163,9 @@ class CloudBeesClient:
             )
             if not resp.is_success:
                 raise APIError(resp.status_code, resp.text[:200])
+            import logging
+            log = logging.getLogger(__name__)
+            log.debug(f"API [GET_TEXT] {url} -> {resp.status_code} | {resp.text[:150].replace(chr(10), ' ')}...")
             return resp.text
         except httpx.RequestError as exc:
             raise ConnectionError(str(exc)) from exc
@@ -205,6 +220,11 @@ class CloudBeesClient:
 
         if invalidate:
             invalidate_prefix(invalidate, self._db_path)
+
+        import logging
+        log = logging.getLogger(__name__)
+        raw_resp = resp.text.replace('\n', ' ') if resp.content else "(no content)"
+        log.debug(f"API [POST_XML] {url} -> {resp.status_code} | {raw_resp[:150]}...")
 
         return resp.text if resp.content else None
 
