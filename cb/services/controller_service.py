@@ -46,11 +46,18 @@ def select_controller(name: str, url: str, db_path: Optional[Path] = None) -> No
 
 
 def get_active_controller(db_path: Optional[Path] = None) -> Optional[Tuple[str, str]]:
-    """Return (name, url) of the active controller, or None."""
+    """Return (name, url) of the active controller, or None. Sanitizes URL to remove /cjoc prefix."""
     from cb.db.repositories.settings_repo import get_setting
     name = get_setting("active_controller", db_path)
     url  = get_setting("active_controller_url", db_path)
     if name and url:
+        # Many OpsCenter configurations return an item URL like example.com/cjoc/job/ctrl/
+        # But the actual router expects example.com/ctrl/
+        # We try to heuristically strip the '/cjoc' or '/cjoc/job' part
+        if "/cjoc/job/" in url:
+            url = url.replace("/cjoc/job/", "/")
+        elif "/cjoc/" in url:
+            url = url.replace("/cjoc/", "/")
         return (name, url)
     return None
 

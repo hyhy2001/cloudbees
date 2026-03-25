@@ -33,7 +33,10 @@ def list_jobs(
     if ctrl is None and db_path is not None:
         active = get_active_controller(db_path)
         if active:
-            endpoint  = f"{active[1].rstrip('/')}/api/json?tree={_JOB_TREE}"
+            if active[1]:
+                endpoint  = f"{active[1].rstrip('/')}/api/json?tree={_JOB_TREE}"
+            else:
+                endpoint  = f"/{active[0]}/api/json?tree={_JOB_TREE}"
             cache_key = f"jobs.list.{active[0]}"
     elif ctrl:
         endpoint  = f"/{ctrl}/api/json?tree={_JOB_TREE}"
@@ -63,7 +66,10 @@ def trigger_job(
         from cb.services.controller_service import get_active_controller
         active = get_active_controller(db_path)
         if active:
-            client.post(f"{active[1].rstrip('/')}/job/{name}/build", invalidate="jobs.")
+            if active[1]:
+                client.post(f"{active[1].rstrip('/')}/job/{name}/build", invalidate="jobs.")
+            else:
+                client.post(f"/{active[0]}/job/{name}/build", invalidate="jobs.")
             return
 
     if ctrl:
