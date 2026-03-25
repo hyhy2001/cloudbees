@@ -34,7 +34,7 @@ def list_credentials(
     user_seg = _get_user_seg(username)
     cache_key = f"credentials.list.{client.base_url}"
     data = client.get(
-        f"{user_seg}/api/json",
+        f"{user_seg}/api/json?tree=credentials[id,typeName,description,scope]",
         cache_key=cache_key,
     )
     return [CredentialDTO.from_dict(c) for c in (data or {}).get("credentials", [])]

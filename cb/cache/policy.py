@@ -7,8 +7,8 @@ TTL: dict[str, int] = {
     "jobs.detail":        300,
     "controllers.list":   86400,
     "controllers.detail": 86400,
-    "credentials.list":   3600,
-    "credentials.detail": 3600,
+    "credentials.list":   300,
+    "credentials.detail": 300,
     "nodes.list":         300,
     "nodes.detail":       300,
 }
