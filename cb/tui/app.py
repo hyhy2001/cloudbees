@@ -383,16 +383,27 @@ def main(
                 status_msg = "  Screen refreshed."
                 continue
 
-            # Delegate ↑↓ and all actions to the active screen
+            # Translate arrow keys → j/k so screens respond to both ↑↓ and j/k
+            # Translate curses.KEY_ENTER → \n so Enter triggers screen actions
+            _ch = ch
+            if ch == curses.KEY_DOWN:
+                _ch = ord('j')
+            elif ch == curses.KEY_UP:
+                _ch = ord('k')
+            elif ch == curses.KEY_ENTER:
+                _ch = ord('\n')
+
+            # Delegate to the active screen
             action = None
             if active_screen == SCR_CONTROLLER:
-                action = ctrl_scr.handle_key(ch)
+                action = ctrl_scr.handle_key(_ch)
             elif active_screen == SCR_CREDENTIALS:
-                action = cred_scr.handle_key(ch)
+                action = cred_scr.handle_key(_ch)
             elif active_screen == SCR_NODES:
-                action = node_scr.handle_key(ch)
+                action = node_scr.handle_key(_ch)
             elif active_screen == SCR_JOBS:
-                action = jobs_scr.handle_key(ch)
+                action = jobs_scr.handle_key(_ch)
+
 
             if action and client:
                 try:
