@@ -88,11 +88,11 @@ class CredentialsScreen:
         self.pending_delete = ""
         self.error: str  = ""
 
-    def load(self, client: CloudBeesClient, db_path=None, username: str = "") -> None:
+    def load(self, client: CloudBeesClient, username: str = "") -> None:
         self.error = ""
         try:
             from cb.services.credential_service import list_credentials
-            self.items = list_credentials(client, db_path=db_path, username=username)
+            self.items = list_credentials(client, username=username)
         except Exception as exc:
             self.items = []
             self.error = str(exc)
@@ -171,11 +171,11 @@ class NodesScreen:
         self.pending_toggle: str | None = None
         self.error: str     = ""
 
-    def load(self, client: CloudBeesClient, db_path=None) -> None:
+    def load(self, client: CloudBeesClient) -> None:
         self.error = ""
         try:
             from cb.services.node_service import list_nodes
-            self.items = list_nodes(client, db_path=db_path)
+            self.items = list_nodes(client)
         except Exception as exc:
             self.items = []
             self.error = str(exc)
@@ -269,12 +269,12 @@ class JobsScreen:
         self.pending_run: str | None = None
         self.error: str     = ""
 
-    def load(self, client: CloudBeesClient, db_path=None) -> None:
+    def load(self, client: CloudBeesClient) -> None:
         from cb.services.job_service import list_jobs
         self.loading = True
         self.error   = ""
         try:
-            self.jobs = list_jobs(client, db_path=db_path)
+            self.jobs = list_jobs(client)
         except Exception as exc:
             self.jobs  = []
             self.error = str(exc)

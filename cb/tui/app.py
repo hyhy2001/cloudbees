@@ -80,6 +80,7 @@ def main(
     show_debug      = False
 
     # Try loading existing session (no password needed)
+    oc_client = None
     try:
         from cb.services.session import load_session
         from cb.db.connection import init_db
@@ -87,7 +88,7 @@ def main(
         session = load_session(db_path)
         if session and session.get("server_url"):
             from cb.api.client import CloudBeesClient
-            client = CloudBeesClient(session["server_url"], session["raw_token"], db_path=db_path)
+            oc_client = CloudBeesClient(session["server_url"], session["raw_token"], db_path=db_path)
             from cb.db.repositories.profile_repo import get_default_profile
             active_profile = get_default_profile(db_path)
             status_msg = f"  Logged in as {session['username']}"
@@ -98,10 +99,21 @@ def main(
         status_msg = "  Not logged in. Press 'L' to login."
 
     # Load persisted active controller selection
+    ctrl_client = oc_client
     try:
         from cb.services.controller_service import get_active_controller
-        _ctrl = get_active_controller(db_path)
-        active_ctrl_name = _ctrl[0] if _ctrl else ""
+        _ctrl = get_active_controller(db_path, oc_client)
+        if _ctrl and _ctrl[1]:
+            active_ctrl_name = _ctrl[0]
+            if oc_client:
+                ctrl_client = CloudBeesClient(
+                    base_url=_ctrl[1].rstrip("/"),
+                    token=oc_client._token,
+                    timeout=oc_client._timeout,
+                    db_path=db_path
+                )
+        else:
+            active_ctrl_name = ""
     except Exception:
         active_ctrl_name = ""
 
@@ -121,7 +133,7 @@ def main(
 
     def _reload_current(force: bool = False):
         nonlocal status_msg
-        if client is None:
+        if oc_client is None:
             status_msg = "  Not logged in. Press 'L' to login."
             return
         if not force and active_screen in _loaded:
@@ -129,14 +141,14 @@ def main(
             return
         try:
             if active_screen == SCR_CONTROLLER:
-                ctrl_scr.load(client)
+                ctrl_scr.load(oc_client)
             elif active_screen == SCR_CREDENTIALS:
                 _uname = active_profile.username if active_profile else ""
-                cred_scr.load(client, db_path=db_path, username=_uname)
+                cred_scr.load(ctrl_client, username=_uname)
             elif active_screen == SCR_NODES:
-                node_scr.load(client, db_path=db_path)
+                node_scr.load(ctrl_client)
             elif active_screen == SCR_JOBS:
-                jobs_scr.load(client, db_path=db_path)
+                jobs_scr.load(ctrl_client)
             # SCR_SETTINGS: no load step
             _loaded.add(active_screen)
             status_msg = f"  {_SCREEN_NAMES[active_screen]}"
@@ -212,7 +224,7 @@ def main(
         main_win.bkgd(" ", curses.color_pair(PAIR_NORMAL))
         main_win.erase()
         try:
-            if client is None:
+            if oc_client is None:
                 from cb.tui.widgets.widgets import safe_addstr
                 from cb.tui.colors import PAIR_WARNING, PAIR_DIM
                 safe_addstr(main_win, 1, 2,
@@ -230,7 +242,7 @@ def main(
             elif active_screen == SCR_JOBS:
                 jobs_scr.draw(main_win)
             elif active_screen == SCR_SETTINGS:
-                draw_settings(main_win, client)
+                draw_settings(main_win, oc_client)
         except Exception as exc:
             _log.exception("Screen draw failed (screen=%d)", active_screen)
             from cb.tui.widgets.widgets import safe_addstr
@@ -432,20 +444,20 @@ def main(
                 action = jobs_scr.handle_key(_ch)
 
 
-            if action and client:
+            if action and oc_client:
                 try:
                     if isinstance(action, str) and action.startswith("run_job:"):
                         from cb.services.job_service import trigger_job
                         name = action.split(":", 1)[1]
-                        trigger_job(client, name, db_path=db_path)
+                        trigger_job(ctrl_client, name)
                         status_msg = f"  Triggered: {name}"
                         console_overlay.log_cmd(f"bee job run {name}", "Job triggered")
                     elif isinstance(action, str) and action.startswith("delete_cred:"):
                         from cb.services.credential_service import delete_credential
                         cred_id = action.split(":", 1)[1]
                         _uname = active_profile.username if active_profile else ""
-                        delete_credential(client, cred_id, db_path=db_path, username=_uname)
-                        cred_scr.load(client, db_path=db_path, username=_uname)
+                        delete_credential(ctrl_client, cred_id, username=_uname)
+                        cred_scr.load(ctrl_client, username=_uname)
                         status_msg = f"  Deleted credential: {cred_id}"
                         console_overlay.log_cmd(f"bee credential delete {cred_id}", "Deleted")
                     elif action == "create_cred":
@@ -459,10 +471,10 @@ def main(
                                 if _p:
                                     _uname = active_profile.username if active_profile else ""
                                     create_username_password(
-                                        client, _id, _u, _p, "Created via TUI", 
-                                        db_path=db_path, username=_uname
+                                        ctrl_client, _id, _u, _p, "Created via TUI", 
+                                        username=_uname
                                     )
-                                    cred_scr.load(client, db_path=db_path, username=_uname)
+                                    cred_scr.load(ctrl_client, username=_uname)
                                     status_msg = f"  Created credential: {_id}"
                                     console_overlay.log_cmd(f"bee credential create {_id}", "Created")
                     elif isinstance(action, str) and action.startswith("select_controller:"):
@@ -475,12 +487,26 @@ def main(
                         url  = item.url if item and item.url else ""
                         select_controller(name, url, db_path)
                         status_msg       = f"  Active controller: {name}"
+                        
+                        # Rebuild ctrl_client for this context
                         active_ctrl_name = name
+                        from cb.services.controller_service import get_active_controller
+                        _n_ctrl = get_active_controller(db_path, oc_client)
+                        if _n_ctrl and _n_ctrl[1] and oc_client:
+                            ctrl_client = CloudBeesClient(
+                                base_url=_n_ctrl[1].rstrip("/"),
+                                token=oc_client._token,
+                                timeout=oc_client._timeout,
+                                db_path=db_path
+                            )
+                        else:
+                            ctrl_client = oc_client
+                            
                         _loaded.clear()  # Force reload of all screens for new controller scope
                         console_overlay.log_cmd(f"bee controller select {name}", "Active controller set")
                         # Show capability info modal
                         try:
-                            caps = get_controller_capabilities(client, name)
+                            caps = get_controller_capabilities(oc_client, name)
                             
                             # Build rows
                             rows = [
@@ -513,8 +539,8 @@ def main(
                     elif isinstance(action, str) and action.startswith("toggle_node:"):
                         from cb.services.node_service import toggle_offline
                         name = action.split(":", 1)[1]
-                        toggle_offline(client, name, db_path=db_path)
-                        node_scr.load(client, db_path=db_path)
+                        toggle_offline(ctrl_client, name)
+                        node_scr.load(ctrl_client)
                         status_msg = f"  Toggled node: {name}"
                         console_overlay.log_cmd(f"bee node toggle {name}", "Node toggled")
                 except Exception as exc:
