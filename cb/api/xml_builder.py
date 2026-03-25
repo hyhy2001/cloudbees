@@ -66,7 +66,43 @@ def build_folder_xml(desc: str = "") -> str:
     return _xml_str(root)
 
 
-# Node XML has been replaced by JSON Form Data (see node_service.py)
+# ── Node XML ──────────────────────────────────────────────────
+
+def build_permanent_node_xml(
+    name: str,
+    remote_dir: str,
+    num_executors: int = 1,
+    labels: str = "",
+    desc: str = "",
+    host: str = "",
+    port: int = 22,
+    credentials_id: str = "",
+) -> str:
+    """Config XML for Permanent Agent (SSH or JNLP)."""
+    root = ET.Element("slave")
+    ET.SubElement(root, "name").text = name
+    ET.SubElement(root, "description").text = desc
+    ET.SubElement(root, "remoteFS").text = remote_dir
+    ET.SubElement(root, "numExecutors").text = str(num_executors)
+    ET.SubElement(root, "mode").text = "NORMAL"
+    ET.SubElement(root, "retentionStrategy", {"class": "hudson.slaves.RetentionStrategy$Always"})
+    
+    if host:
+        launcher = ET.SubElement(root, "launcher", {"class": "hudson.plugins.sshslaves.SSHLauncher", "plugin": "ssh-slaves"})
+        ET.SubElement(launcher, "host").text = host
+        ET.SubElement(launcher, "port").text = str(port)
+        ET.SubElement(launcher, "credentialsId").text = credentials_id
+        ET.SubElement(launcher, "sshHostKeyVerificationStrategy", {"class": "hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy"})
+    else:
+        launcher = ET.SubElement(root, "launcher", {"class": "hudson.slaves.JNLPLauncher"})
+        wds = ET.SubElement(launcher, "workDirSettings")
+        ET.SubElement(wds, "disabled").text = "false"
+        ET.SubElement(wds, "internalDir").text = "remoting"
+        ET.SubElement(wds, "failIfWorkDirIsMissing").text = "false"
+        
+    ET.SubElement(root, "label").text = labels
+    ET.SubElement(root, "nodeProperties")
+    return _xml_str(root)
 
 
 # ── Credential XML ────────────────────────────────────────────
