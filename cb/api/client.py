@@ -37,6 +37,11 @@ class CloudBeesClient:
         db_path: Optional[Path] = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        # Force HTTPS to prevent Basic Auth token stripping during 301/302 redirects
+        # by reverse proxies, which causes Jenkins to fallback to 302 SSO navigate.
+        if self.base_url.startswith("http://"):
+            self.base_url = "https://" + self.base_url[7:]
+            
         self._token = token
         self._timeout = timeout
         self._db_path = db_path
