@@ -17,7 +17,7 @@ _log = logging.getLogger(__name__)
 from cb.tui.colors import init_colors, PAIR_NORMAL, PAIR_STATUS
 from cb.tui.keys import (
     KEY_QUIT, KEY_TAB, SCREEN_KEYS, KEY_REFRESH, KEY_CACHE,
-    KEY_LOGIN, KEY_LOGOUT, KEY_DEBUG, KEY_CONSOLE,
+    KEY_LOGIN, KEY_LOGOUT, KEY_DEBUG,
     HINTS_SIDEBAR, HINTS_CONTENT, SCREEN_COUNT,
     KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ENTER, KEY_ESC,
 )
@@ -77,7 +77,6 @@ def main(
     debug_overlay   = DebugOverlay()
     console_overlay = ConsoleOverlay()
     show_debug      = False
-    show_console    = False
 
     # Try loading existing session (no password needed)
     try:
@@ -159,8 +158,8 @@ def main(
         header_h      = 1
         statusbar_h   = 1
         panel_title_h = 1   # content panel title bar
-        # Console bottom panel takes _CONSOLE_H rows + 1 divider row
-        console_total = (_CONSOLE_H + 1) if show_console else 0
+        # Console panel is always visible — fixed height at bottom
+        console_total = _CONSOLE_H + 1   # divider + content rows
         content_h     = rows - header_h - statusbar_h - console_total
         panel_body_h  = content_h - panel_title_h
 
@@ -170,13 +169,9 @@ def main(
             title_win   = stdscr.derwin(panel_title_h,  cols - _SIDEBAR_W, header_h,                           _SIDEBAR_W)
             main_win    = stdscr.derwin(panel_body_h,   cols - _SIDEBAR_W, header_h + panel_title_h,           _SIDEBAR_W)
             status_win  = stdscr.derwin(statusbar_h,    cols,              rows - 1,                           0)
-            if show_console:
-                divider_y   = header_h + content_h
-                divider_win = stdscr.derwin(1,           cols,              divider_y,                          0)
-                console_win = stdscr.derwin(_CONSOLE_H,  cols,              divider_y + 1,                      0)
-            else:
-                divider_win = None
-                console_win = None
+            divider_y   = header_h + content_h
+            divider_win = stdscr.derwin(1,               cols,              divider_y,                          0)
+            console_win = stdscr.derwin(_CONSOLE_H,      cols,              divider_y + 1,                      0)
         except curses.error:
             stdscr.refresh()
             continue
@@ -238,21 +233,16 @@ def main(
         if show_debug:
             debug_overlay.draw(main_win)
 
-        # ── F3 console panel (bottom, VS Code style) ──────────────
-        if show_console and divider_win and console_win:
-            from cb.tui.widgets.widgets import safe_addstr as _csa
-            from cb.tui.colors import PAIR_TITLE as _PT, PAIR_DIM as _CD
-            # Divider line
-            _div = ("─" * 3 + "  📋 CLI Command Log  " +
-                    "─" * max(0, cols - 28) + " F3:close")
-            divider_win.bkgd(" ", curses.color_pair(_PT) | curses.A_BOLD)
-            divider_win.erase()
-            _csa(divider_win, 0, 0, _div[:cols - 1],
-                 curses.color_pair(_PT) | curses.A_BOLD)
-            divider_win.refresh()
-            # Console panel content
-            console_overlay.draw_panel(console_win)
-            console_win.refresh()
+        # ── F3 console panel — always visible at bottom ──────────────
+        from cb.tui.widgets.widgets import safe_addstr as _csa
+        from cb.tui.colors import PAIR_TITLE as _PT
+        _div = "───  📋 CLI Command Log  " + "─" * max(0, cols - 24)
+        divider_win.bkgd(" ", curses.color_pair(_PT) | curses.A_BOLD)
+        divider_win.erase()
+        _csa(divider_win, 0, 0, _div[:cols - 1], curses.color_pair(_PT) | curses.A_BOLD)
+        divider_win.refresh()
+        console_overlay.draw_panel(console_win)
+        console_win.refresh()
 
         header_win.refresh()
         sidebar_win.refresh()
@@ -274,24 +264,12 @@ def main(
 
         # F2 — toggle debug overlay
         if ch == KEY_DEBUG:
-            if show_console:
-                show_console = False
             show_debug = not show_debug
             continue
 
-        # F3 — toggle console overlay
-        if ch == KEY_CONSOLE:
-            if show_debug:
-                show_debug = False
-            show_console = not show_console
-            continue
-
-        # Route to overlay key handler when an overlay is active
+        # Route to overlay key handler when debug overlay is active
         if show_debug:
             show_debug = debug_overlay.handle_key(ch)
-            continue
-        if show_console:
-            show_console = console_overlay.handle_key(ch)
             continue
 
         if ch == KEY_LOGOUT:
