@@ -87,7 +87,7 @@ def create_permanent_node(
         "json": json.dumps(json_payload)
     }
     client.post(
-        f"/computer/createItem?name={name}&type=hudson.slaves.DumbSlave$DescriptorImpl",
+        "/computer/createItem",
         data=data,
         invalidate="nodes.",
     )
@@ -105,7 +105,7 @@ def copy_node(
         "from": source_name,
     }
     client.post(
-        f"/computer/createItem?name={new_name}&mode=copy&from={source_name}",
+        "/computer/createItem",
         data=data,
         invalidate="nodes.",
     )
