@@ -71,7 +71,8 @@ def main(
     focus          = "sidebar"        # "sidebar" | "content"
     status_msg     = f"  256-color: {'YES' if has_256 else 'no (8-color fallback)'}"
     client         = None
-    active_profile = None
+    active_profile   = None
+    active_ctrl_name = ""   # name of currently selected controller
 
     # Overlay state
     debug_overlay   = DebugOverlay()
@@ -95,6 +96,14 @@ def main(
     except Exception:
         _log.exception("Session load failed")
         status_msg = "  Not logged in. Press 'L' to login."
+
+    # Load persisted active controller selection
+    try:
+        from cb.services.controller_service import get_active_controller
+        _ctrl = get_active_controller(db_path)
+        active_ctrl_name = _ctrl[0] if _ctrl else ""
+    except Exception:
+        active_ctrl_name = ""
 
     # Screen objects
     from cb.tui.screens.screens import (
@@ -180,7 +189,7 @@ def main(
         server_url = active_profile.server_url if active_profile else "not connected"
         username   = active_profile.username   if active_profile else "-"
 
-        draw_header(header_win, server_url, username)
+        draw_header(header_win, server_url, username, active_ctrl=active_ctrl_name)
         draw_sidebar(sidebar_win, active_screen, cursor=sidebar_cursor, focus=focus)
 
         # Content panel title bar — bright when focused, dim when sidebar is active
@@ -276,7 +285,8 @@ def main(
             from cb.services.session import clear_session
             clear_session(db_path)
             client = None
-            active_profile = None
+            active_profile   = None
+            active_ctrl_name = ""
             _loaded.clear()
             focus = "sidebar"
             status_msg = "  Logged out. Session cleared."
@@ -305,7 +315,8 @@ def main(
                         client = CloudBeesClient(
                             session["server_url"], session["raw_token"], db_path=db_path
                         )
-                    active_profile = p
+                    active_profile   = p
+                    active_ctrl_name = ""
                     _loaded.clear()
                     status_msg = f"  Logged in as {p.username}"
                     console_overlay.log_cmd(
@@ -376,9 +387,21 @@ def main(
 
         # ── Content focus ──────────────────────────────────────────
         elif focus == "content":
-            # ← / Esc → return to sidebar
+            # ← / Esc → return to sidebar (or close detail/confirm in screens)
             if ch == curses.KEY_LEFT or ch in KEY_ESC:
-                focus = "sidebar"
+                # Give the active screen a chance to close its own sub-state first
+                _consumed = False
+                if active_screen == SCR_CREDENTIALS and cred_scr.detail_mode:
+                    cred_scr.detail_mode = False
+                    _consumed = True
+                elif active_screen == SCR_NODES and node_scr.pending_toggle:
+                    node_scr.pending_toggle = None
+                    _consumed = True
+                elif active_screen == SCR_JOBS and jobs_scr.pending_run:
+                    jobs_scr.pending_run = None
+                    _consumed = True
+                if not _consumed:
+                    focus = "sidebar"
                 continue
 
             # Refresh current screen
@@ -418,6 +441,7 @@ def main(
                         url  = item.url if item and item.url else ""
                         select_controller(name, url, db_path)
                         status_msg = f"  Active controller: {name}"
+                        active_ctrl_name = name
                         console_overlay.log_cmd(f"bee controller select {name}", "Active controller set")
                     elif isinstance(action, str) and action.startswith("toggle_node:"):
                         from cb.services.node_service import toggle_node

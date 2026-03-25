@@ -39,13 +39,14 @@ def draw_box(win, y: int, x: int, h: int, w: int, attr: int = 0) -> None:
 # ── Header ────────────────────────────────────────────────────
 
 
-def draw_header(win, server_url: str, username: str) -> None:
+def draw_header(win, server_url: str, username: str, active_ctrl: str = "") -> None:
     rows, cols = win.getmaxyx()
     win.bkgd(" ", curses.color_pair(PAIR_HEADER))
     title = " CloudBees Manager"
+    ctrl_badge = f"  │  ctrl: {active_ctrl}" if active_ctrl else ""
     right = f"[{username}]  {server_url} "
-    gap = cols - len(title) - len(right)
-    line = title + " " * max(gap, 1) + right
+    gap = cols - len(title) - len(ctrl_badge) - len(right)
+    line = title + ctrl_badge + " " * max(gap, 1) + right
     safe_addstr(win, 0, 0, line[:cols - 1], curses.color_pair(PAIR_HEADER) | curses.A_BOLD)
 
 
@@ -118,10 +119,13 @@ def draw_table(
     selected: int = 0,
     offset: int = 0,
     cache_age: str = "",
+    row_attrs: list[int] | None = None,
 ) -> None:
     """
     Draw a scrollable ASCII table inside win.
-    Uses + - | borders.
+
+    row_attrs: optional per-row curses attr (e.g. PAIR_SUCCESS for ONLINE nodes).
+               When a row is selected, PAIR_SELECTED overrides row_attrs.
     """
     max_rows, cols = win.getmaxyx()
     win.bkgd(" ", curses.color_pair(PAIR_NORMAL))
@@ -178,10 +182,11 @@ def draw_table(
         real_idx = idx + offset
         if real_idx == selected:
             attr = curses.color_pair(PAIR_SELECTED) | curses.A_BOLD
+        elif row_attrs and real_idx < len(row_attrs):
+            attr = row_attrs[real_idx]
         else:
             attr = curses.color_pair(PAIR_NORMAL)
 
-        # Color-code status columns
         row_text = make_row([str(c) for c in row])
         safe_addstr(win, y, 0, row_text[:cols - 1], attr)
         y += 1
