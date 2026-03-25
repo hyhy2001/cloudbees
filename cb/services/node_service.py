@@ -8,25 +8,48 @@ from cb.api.client import CloudBeesClient
 from cb.api.xml_builder import build_permanent_node_xml, patch_node_xml
 from cb.dtos.node import NodeDTO, NodeDetailDTO
 
+_NODE_TREE = "computer[displayName,offline,numExecutors,assignedLabels[name],description]"
 
-def list_nodes(client: CloudBeesClient) -> List[NodeDTO]:
+
+def _computer_base(db_path: Optional[Path] = None, controller_name: Optional[str] = None) -> str:
+    """Return /computer base scoped to active controller if available."""
+    ctrl = controller_name
+    if ctrl is None and db_path is not None:
+        from cb.services.controller_service import get_active_controller
+        active = get_active_controller(db_path)
+        ctrl   = active[0] if active else None
+    return f"/job/{ctrl}/computer" if ctrl else "/computer"
+
+
+def list_nodes(
+    client: CloudBeesClient,
+    db_path: Optional[Path] = None,
+    controller_name: Optional[str] = None,
+) -> List[NodeDTO]:
+    base      = _computer_base(db_path, controller_name)
+    cache_key = f"nodes.list.{controller_name or '_root'}"
     data = client.get(
-        "/computer/api/json?tree=computer[displayName,offline,numExecutors,assignedLabels[name],description]",
-        cache_key="nodes.list",
+        f"{base}/api/json?tree={_NODE_TREE}",
+        cache_key=cache_key,
     )
     computers = (data or {}).get("computer", [])
     return [NodeDTO.from_dict(c) for c in computers]
 
 
-def get_node(client: CloudBeesClient, name: str) -> NodeDetailDTO:
+def get_node(
+    client: CloudBeesClient,
+    name: str,
+    db_path: Optional[Path] = None,
+    controller_name: Optional[str] = None,
+) -> NodeDetailDTO:
+    base = _computer_base(db_path, controller_name)
     data = client.get(
-        f"/computer/{name}/api/json",
+        f"{base}/{name}/api/json",
         cache_key=f"nodes.detail.{name}",
     )
     dto = NodeDetailDTO.from_dict(data or {})
-    # Also fetch config.xml for copy support
     try:
-        xml = client.get_text(f"/computer/{name}/config.xml")
+        xml        = client.get_text(f"{base}/{name}/config.xml")
         dto.config_xml = xml
     except Exception:
         pass
@@ -79,10 +102,17 @@ def delete_node(client: CloudBeesClient, name: str) -> None:
     )
 
 
-def toggle_offline(client: CloudBeesClient, name: str, reason: str = "") -> None:
+def toggle_offline(
+    client: CloudBeesClient,
+    name: str,
+    reason: str = "",
+    db_path: Optional[Path] = None,
+    controller_name: Optional[str] = None,
+) -> None:
     """Mark a node offline (or online if already offline)."""
+    base = _computer_base(db_path, controller_name)
     client.post(
-        f"/computer/{name}/toggleOffline",
+        f"{base}/{name}/toggleOffline",
         invalidate="nodes.",
         params={"offlineMessage": reason},
     )

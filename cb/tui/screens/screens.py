@@ -87,11 +87,11 @@ class CredentialsScreen:
         self.detail_item = None
         self.error: str  = ""
 
-    def load(self, client: CloudBeesClient) -> None:
+    def load(self, client: CloudBeesClient, db_path=None) -> None:
         self.error = ""
         try:
             from cb.services.credential_service import list_credentials
-            self.items = list_credentials(client)
+            self.items = list_credentials(client, db_path=db_path)
         except Exception as exc:
             self.items = []
             self.error = str(exc)
@@ -148,11 +148,11 @@ class NodesScreen:
         self.pending_toggle: str | None = None
         self.error: str     = ""
 
-    def load(self, client: CloudBeesClient) -> None:
+    def load(self, client: CloudBeesClient, db_path=None) -> None:
         self.error = ""
         try:
             from cb.services.node_service import list_nodes
-            self.items = list_nodes(client)
+            self.items = list_nodes(client, db_path=db_path)
         except Exception as exc:
             self.items = []
             self.error = str(exc)

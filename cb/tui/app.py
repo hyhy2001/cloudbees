@@ -131,9 +131,9 @@ def main(
             if active_screen == SCR_CONTROLLER:
                 ctrl_scr.load(client)
             elif active_screen == SCR_CREDENTIALS:
-                cred_scr.load(client)
+                cred_scr.load(client, db_path=db_path)
             elif active_screen == SCR_NODES:
-                node_scr.load(client)
+                node_scr.load(client, db_path=db_path)
             elif active_screen == SCR_JOBS:
                 jobs_scr.load(client, db_path=db_path)
             # SCR_SETTINGS: no load step
@@ -451,8 +451,8 @@ def main(
                     elif isinstance(action, str) and action.startswith("toggle_node:"):
                         from cb.services.node_service import toggle_offline
                         name = action.split(":", 1)[1]
-                        toggle_offline(client, name)
-                        node_scr.load(client)
+                        toggle_offline(client, name, db_path=db_path)
+                        node_scr.load(client, db_path=db_path)
                         status_msg = f"  Toggled node: {name}"
                         console_overlay.log_cmd(f"bee node toggle {name}", "Node toggled")
                 except Exception as exc:
