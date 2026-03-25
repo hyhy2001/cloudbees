@@ -16,12 +16,30 @@ def _client(ctx):
 
 
 @node_group.command("list")
+@click.option("--all", "show_all", is_flag=True, help="Show all nodes (by default, only shows yours)")
 @click.pass_context
-def cmd_list(ctx):
-    """List all agent nodes with online/offline status."""
+def cmd_list(ctx, show_all):
+    """List agent nodes with online/offline status."""
     from cb.services.node_service import list_nodes
+    from cb.db.repositories.resource_repo import get_tracked_resources
     try:
-        nodes = list_nodes(_client(ctx))
+        all_nodes = list_nodes(_client(ctx))
+        nodes = all_nodes
+        
+        if not show_all:
+            profile_name = ctx.obj.get("profile") or "default"
+            tracked = get_tracked_resources("node", profile_name)
+            tracked_set = set(tracked)
+            
+            display_nodes = [n for n in all_nodes if n.name in tracked_set]
+            server_names = {n.name for n in all_nodes}
+            
+            missing = tracked_set - server_names
+            from cb.dtos.node import NodeDTO
+            for m in list(missing):
+                display_nodes.append(NodeDTO(name=m, offline=True, num_executors=0, labels="[DELETED_ON_SERVER]"))
+            
+            nodes = display_nodes
         headers = ["Name", "Status", "Executors", "Labels", "Description"]
         rows = [
             [
@@ -88,6 +106,8 @@ def cmd_create(ctx, name, remote_dir, executors, labels, description, host, port
             port=port,
             credentials_id=cred_id,
         )
+        from cb.db.repositories.resource_repo import track_resource
+        track_resource("node", name, ctx.obj.get("profile") or "default")
         click.echo(f"[OK] Node '{name}' created.")
         if host:
             cred_display = cred_id or 'None'
@@ -108,6 +128,8 @@ def cmd_copy(ctx, source_name, new_name):
     from cb.services.node_service import copy_node
     try:
         copy_node(_client(ctx), source_name, new_name)
+        from cb.db.repositories.resource_repo import track_resource
+        track_resource("node", new_name, ctx.obj.get("profile") or "default")
         click.echo(f"[OK] Node '{new_name}' created (copied from '{source_name}').")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
@@ -125,6 +147,8 @@ def cmd_delete(ctx, name, yes):
         if not yes:
             click.confirm(f"Delete node '{name}'?", abort=True)
         delete_node(_client(ctx), name)
+        from cb.db.repositories.resource_repo import untrack_resource
+        untrack_resource("node", name, ctx.obj.get("profile") or "default")
         click.echo(f"[OK] Node '{name}' deleted.")
     except click.Abort:
         click.echo("Cancelled.")

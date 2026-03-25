@@ -49,3 +49,11 @@ CREATE TABLE IF NOT EXISTS pipelines (
     description  TEXT,
     last_updated INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS user_resources (
+    resource_type TEXT NOT NULL,
+    name          TEXT NOT NULL,
+    profile_name  TEXT NOT NULL,
+    created_at    INTEGER NOT NULL,
+    PRIMARY KEY (resource_type, name, profile_name)
+);

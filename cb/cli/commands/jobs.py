@@ -23,12 +23,30 @@ def _client(ctx):
 
 
 @jobs_group.command("list")
+@click.option("--all", "show_all", is_flag=True, help="Show all jobs (by default, only shows yours)")
 @click.pass_context
-def cmd_list(ctx):
+def cmd_list(ctx, show_all):
     """List all jobs with type and last build status."""
     from cb.services.job_service import list_jobs
+    from cb.db.repositories.resource_repo import get_tracked_resources
     try:
-        jobs = list_jobs(_client(ctx))
+        all_jobs = list_jobs(_client(ctx))
+        jobs = all_jobs
+        
+        if not show_all:
+            profile_name = ctx.obj.get("profile") or "default"
+            tracked = get_tracked_resources("job", profile_name)
+            tracked_set = set(tracked)
+            
+            display_jobs = [j for j in all_jobs if j.name in tracked_set]
+            server_names = {j.name for j in all_jobs}
+            
+            missing = tracked_set - server_names
+            from cb.dtos.job import JobDTO
+            for m in list(missing):
+                display_jobs.append(JobDTO(name=m, url="", color="[DELETED_ON_SERVER]"))
+            
+            jobs = display_jobs
         headers = ["Name", "Type", "Status", "Build#", "Description"]
         rows = [
             [
@@ -85,6 +103,8 @@ def create_freestyle(ctx, name, description, shell):
         if not shell:
             shell = click.prompt("Shell command", default="echo hello")
         create_freestyle_job(_client(ctx), name=name, desc=description, shell_cmd=shell)
+        from cb.db.repositories.resource_repo import track_resource
+        track_resource("job", name, ctx.obj.get("profile") or "default")
         click.echo(f"[OK] Freestyle job '{name}' created.")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
@@ -114,6 +134,8 @@ def create_pipeline(ctx, name, description, script, script_file):
                 lines.append(line)
             script = "\n".join(lines)
         create_pipeline_job(_client(ctx), name=name, desc=description, script=script)
+        from cb.db.repositories.resource_repo import track_resource
+        track_resource("job", name, ctx.obj.get("profile") or "default")
         click.echo(f"[OK] Pipeline job '{name}' created.")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
@@ -129,6 +151,8 @@ def create_folder(ctx, name, description):
     from cb.services.job_service import create_folder
     try:
         create_folder(_client(ctx), name=name, desc=description)
+        from cb.db.repositories.resource_repo import track_resource
+        track_resource("job", name, ctx.obj.get("profile") or "default")
         click.echo(f"[OK] Folder '{name}' created.")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
@@ -149,6 +173,8 @@ def cmd_delete(ctx, name, yes):
         if not yes:
             click.confirm(f"Delete job '{name}'?", abort=True)
         delete_job(_client(ctx), name)
+        from cb.db.repositories.resource_repo import untrack_resource
+        untrack_resource("job", name, ctx.obj.get("profile") or "default")
         click.echo(f"[OK] Job '{name}' deleted.")
     except click.Abort:
         click.echo("Cancelled.")

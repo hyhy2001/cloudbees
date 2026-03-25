@@ -16,12 +16,30 @@ def _client(ctx):
 
 
 @cred_group.command("list")
+@click.option("--all", "show_all", is_flag=True, help="Show all credentials (by default, only shows yours)")
 @click.pass_context
-def cmd_list(ctx):
+def cmd_list(ctx, show_all):
     """List all credentials."""
     from cb.services.credential_service import list_credentials
+    from cb.db.repositories.resource_repo import get_tracked_resources
     try:
-        creds = list_credentials(_client(ctx))
+        all_creds = list_credentials(_client(ctx))
+        creds = all_creds
+        
+        if not show_all:
+            profile_name = ctx.obj.get("profile") or "default"
+            tracked = get_tracked_resources("cred", profile_name)
+            tracked_set = set(tracked)
+            
+            display_creds = [c for c in all_creds if c.id in tracked_set]
+            server_ids = {c.id for c in all_creds}
+            
+            missing = tracked_set - server_ids
+            from cb.dtos.credential import CredentialDTO
+            for m in list(missing):
+                display_creds.append(CredentialDTO(id=m, type_name="[DELETED]", description="Not found on server", scope="-"))
+            
+            creds = display_creds
         headers = ["ID", "Type", "Description", "Scope"]
         rows = [[c.id, c.type_name[:25], (c.description or "")[:35], c.scope] for c in creds]
         click.echo(format_table(headers, rows))
@@ -78,6 +96,8 @@ def cmd_create(ctx, cred_id, username, password, description, scope):
             desc=description,
             scope=scope,
         )
+        from cb.db.repositories.resource_repo import track_resource
+        track_resource("cred", cred_id, ctx.obj.get("profile") or "default")
         click.echo(f"[OK] Credential '{cred_id}' created.")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
@@ -95,6 +115,8 @@ def cmd_delete(ctx, cred_id, yes):
         if not yes:
             click.confirm(f"Delete credential '{cred_id}'?", abort=True)
         delete_credential(_client(ctx), cred_id)
+        from cb.db.repositories.resource_repo import untrack_resource
+        untrack_resource("cred", cred_id, ctx.obj.get("profile") or "default")
         click.echo(f"[OK] Credential '{cred_id}' deleted.")
     except click.Abort:
         click.echo("Cancelled.")
