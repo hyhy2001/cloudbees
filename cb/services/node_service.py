@@ -1,6 +1,7 @@
 from __future__ import annotations
 """Node / Agent service — list, get, create, copy, delete, toggle offline."""
 
+import json
 from pathlib import Path
 from typing import Optional, List
 
@@ -45,23 +46,43 @@ def create_permanent_node(
     port: int = 22,
     credentials_id: str = "",
 ) -> None:
-    """Create a Permanent Agent (SSH or JNLP launcher) via XML."""
-    from cb.api.xml_builder import build_permanent_node_xml
-    xml = build_permanent_node_xml(
-        name=name,
-        remote_dir=remote_dir,
-        num_executors=num_executors,
-        labels=labels,
-        desc=desc,
-        host=host,
-        port=port,
-        credentials_id=credentials_id,
-    )
+    """Create a Permanent Agent with Form Data matching python-jenkins exactly."""
     
-    # POST XML to createItem endpoint with query parameters
-    client.post_xml(
-        f"/computer/createItem?name={name}&type=hudson.slaves.DumbSlave$DescriptorImpl",
-        xml_str=xml,
+    if host:
+        launcher = {
+            "stapler-class": "hudson.plugins.sshslaves.SSHLauncher",
+            "host": host,
+            "port": port,
+            "credentialsId": credentials_id,
+            "sshHostKeyVerificationStrategy": {
+                "stapler-class": "hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy"
+            }
+        }
+    else:
+        launcher = {"stapler-class": "hudson.slaves.JNLPLauncher"}
+
+    json_payload = {
+        "name": name,
+        "nodeDescription": desc,
+        "numExecutors": str(num_executors),
+        "remoteFS": remote_dir,
+        "labelString": labels,
+        "mode": "NORMAL",
+        "type": "hudson.slaves.DumbSlave$DescriptorImpl",
+        "retentionStrategy": {"stapler-class": "hudson.slaves.RetentionStrategy$Always"},
+        "nodeProperties": {"stapler-class-bag": "true"},
+        "launcher": launcher
+    }
+
+    data = {
+        "name": name,
+        "type": "hudson.slaves.DumbSlave$DescriptorImpl",
+        "json": json.dumps(json_payload)
+    }
+
+    client.post(
+        "/computer/doCreateItem",
+        data=data,
         invalidate="nodes.",
     )
 
@@ -71,16 +92,15 @@ def copy_node(
     source_name: str, 
     new_name: str,
 ) -> None:
-    """Copy an existing node's config and register it with a new name using XML."""
-    xml = client.get_text(f"/computer/{source_name}/config.xml")
-    
-    import re
-    # Inject the new name into the <name> tag of the XML before posting
-    xml = re.sub(r"<name>.*?</name>", f"<name>{new_name}</name>", xml, count=1)
-    
-    client.post_xml(
-        f"/computer/createItem?name={new_name}&type=hudson.slaves.DumbSlave$DescriptorImpl",
-        xml_str=xml,
+    """Copy an existing node's config and register it with a new name using Form Data."""
+    data = {
+        "name": new_name,
+        "mode": "copy",
+        "from": source_name,
+    }
+    client.post(
+        "/computer/doCreateItem",
+        data=data,
         invalidate="nodes.",
     )
 
