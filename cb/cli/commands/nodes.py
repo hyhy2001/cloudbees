@@ -22,9 +22,12 @@ def _client(ctx):
 @click.pass_context
 def cmd_list(ctx):
     """List all agent nodes with online/offline status."""
-    from cb.services.node_service import list_nodes
+    from cb.db.repositories.node_repo import list_nodes
     try:
-        nodes = list_nodes(_client(ctx))
+        nodes = list_nodes(ctx.obj.get("db_path"))
+        if not nodes:
+            click.echo("No local nodes found. Try running 'bee sync' first.")
+            return
         headers = ["Name", "Status", "Executors", "Labels", "Description"]
         rows = [
             [

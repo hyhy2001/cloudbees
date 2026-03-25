@@ -29,9 +29,12 @@ def _client(ctx):
 @click.pass_context
 def cmd_list(ctx):
     """List all jobs with type and last build status."""
-    from cb.services.job_service import list_jobs
+    from cb.db.repositories.job_repo import list_jobs
     try:
-        jobs = list_jobs(_client(ctx))
+        jobs = list_jobs(ctx.obj.get("db_path"))
+        if not jobs:
+            click.echo("No local jobs found. Try running 'bee sync' first.")
+            return
         headers = ["Name", "Type", "Status", "Build#", "Description"]
         rows = [
             [

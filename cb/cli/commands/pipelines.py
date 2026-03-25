@@ -24,7 +24,11 @@ def _client(ctx):
 def cmd_list(ctx):
     """List all pipelines."""
     try:
-        pipes = list_pipelines(_client(ctx))
+        from cb.db.repositories.pipeline_repo import list_pipelines as list_local_pipelines
+        pipes = list_local_pipelines(ctx.obj.get("db_path"))
+        if not pipes:
+            click.echo("No local pipelines found. Try running 'bee sync' first.")
+            return
         rows = [[p.name, p.status, p.branch, p.description[:40]] for p in pipes]
         click.echo(format_table(["Name", "Status", "Branch", "Description"], rows))
     except Exception as exc:

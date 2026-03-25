@@ -23,3 +23,29 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS jobs (
+    name         TEXT PRIMARY KEY,
+    job_type     TEXT,
+    color        TEXT,
+    build_number INTEGER,
+    description  TEXT,
+    last_updated INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS nodes (
+    name          TEXT PRIMARY KEY,
+    offline       INTEGER NOT NULL DEFAULT 0,
+    num_executors INTEGER,
+    labels        TEXT,
+    description   TEXT,
+    last_updated  INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pipelines (
+    name         TEXT PRIMARY KEY,
+    status       TEXT,
+    branch       TEXT,
+    description  TEXT,
+    last_updated INTEGER NOT NULL
+);

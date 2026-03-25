@@ -16,6 +16,7 @@ from cb.cli.commands.credentials import cred_group
 from cb.cli.commands.nodes import node_group
 from cb.cli.commands.users import users_group
 from cb.cli.commands.system import system_group
+from cb.cli.commands.sync import cmd_sync
 
 __version__ = "0.2.0"
 
@@ -109,6 +110,7 @@ cli.add_command(cred_group, name="cred")
 cli.add_command(node_group, name="node")
 cli.add_command(users_group, name="users")
 cli.add_command(system_group, name="system")
+cli.add_command(cmd_sync, name="sync")
 
 
 if __name__ == "__main__":
