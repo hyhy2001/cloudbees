@@ -23,9 +23,12 @@ def _cred_base(
     if ctrl is None and db_path is not None:
         from cb.services.controller_service import get_active_controller
         active = get_active_controller(db_path)
-        ctrl   = active[0] if active else None
-    
-    return f"/{ctrl}" if ctrl else ""
+        if active:
+            return active[1].rstrip("/")
+    if ctrl:
+        # If explicitly passed a controller name without db_path, we just do /name (legacy caller)
+        return f"/{ctrl}"
+    return ""
 
 
 def list_credentials(

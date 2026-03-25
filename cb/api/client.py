@@ -54,7 +54,10 @@ class CloudBeesClient:
         return {}
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
-        url = f"{self.base_url}{path}"
+        if path.startswith("http://") or path.startswith("https://"):
+            url = path
+        else:
+            url = f"{self.base_url}{path}"
         last_err: Optional[Exception] = None
 
         for attempt, delay in enumerate([0] + _RETRY_DELAYS):
@@ -135,7 +138,10 @@ class CloudBeesClient:
 
     def get_text(self, path: str, **kwargs: Any) -> str:
         """GET that returns raw text (e.g. console log, config.xml)."""
-        url = f"{self.base_url}{path}"
+        if path.startswith("http://") or path.startswith("https://"):
+            url = path
+        else:
+            url = f"{self.base_url}{path}"
         try:
             resp = httpx.get(
                 url,
@@ -165,7 +171,10 @@ class CloudBeesClient:
         if crumb:
             headers[crumb["field"]] = crumb["value"]
 
-        url = f"{self.base_url}{path}"
+        if path.startswith("http://") or path.startswith("https://"):
+            url = path
+        else:
+            url = f"{self.base_url}{path}"
         try:
             resp = httpx.post(
                 url,

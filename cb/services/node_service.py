@@ -21,9 +21,11 @@ def _computer_base(db_path: Optional[Path] = None, controller_name: Optional[str
     if ctrl is None and db_path is not None:
         from cb.services.controller_service import get_active_controller
         active = get_active_controller(db_path)
-        ctrl   = active[0] if active else None
-    
-    return f"/{ctrl}/computer" if ctrl else "/computer"
+        if active:
+            return f"{active[1].rstrip('/')}/computer"
+    if ctrl:
+        return f"/{ctrl}/computer"
+    return "/computer"
 
 
 def list_nodes(

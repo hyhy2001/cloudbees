@@ -27,12 +27,17 @@ def list_jobs(
     from cb.services.controller_service import get_active_controller
 
     ctrl = controller_name
-    if ctrl is None:
+    endpoint = f"/api/json?tree={_JOB_TREE}"
+    cache_key = "jobs.list"
+    
+    if ctrl is None and db_path is not None:
         active = get_active_controller(db_path)
-        ctrl   = active[0] if active else None
-
-    endpoint  = f"/{ctrl}/api/json?tree={_JOB_TREE}" if ctrl else f"/api/json?tree={_JOB_TREE}"
-    cache_key = f"jobs.list.{ctrl}" if ctrl else "jobs.list"
+        if active:
+            endpoint  = f"{active[1].rstrip('/')}/api/json?tree={_JOB_TREE}"
+            cache_key = f"jobs.list.{active[0]}"
+    elif ctrl:
+        endpoint  = f"/{ctrl}/api/json?tree={_JOB_TREE}"
+        cache_key = f"jobs.list.{ctrl}"
 
     data = client.get(endpoint, cache_key=cache_key)
     return [JobDTO.from_dict(j) for j in (data or {}).get("jobs", [])]
@@ -53,12 +58,14 @@ def trigger_job(
     db_path=None,
 ) -> None:
     """Trigger a job build scoped to the active controller."""
-    from cb.services.controller_service import get_active_controller
     ctrl = controller_name
     if ctrl is None and db_path is not None:
+        from cb.services.controller_service import get_active_controller
         active = get_active_controller(db_path)
-        ctrl   = active[0] if active else None
-    
+        if active:
+            client.post(f"{active[1].rstrip('/')}/job/{name}/build", invalidate="jobs.")
+            return
+
     if ctrl:
         client.post(f"/{ctrl}/job/{name}/build", invalidate="jobs.")
     else:
