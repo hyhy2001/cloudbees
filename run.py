@@ -29,4 +29,4 @@ if str(_root) not in sys.path:
 from cb.main import cli
 
 if __name__ == "__main__":
-    cli()
+    cli(prog_name="bee")
