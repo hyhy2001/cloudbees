@@ -66,6 +66,12 @@ def init_db(db_path: Optional[Path] = None) -> None:
     conn = get_connection(db_path)
     try:
         conn.executescript(sql)
+        # Automatic transparent migration: add missing columns to user_resources
+        try:
+            conn.execute("ALTER TABLE user_resources ADD COLUMN controller_name TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass  # Column likely already exists
+            
         conn.commit()
     finally:
         conn.close()

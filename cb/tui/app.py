@@ -242,18 +242,16 @@ class BeeApp(App):
             except Exception:
                 pass  # pane not yet mounted -- silently skip
 
-def _force_ascii() -> None:
-    """Force pure ASCII internally. Strip all UTF-8 support.
-    Any non-ASCII characters from files or API will become '?'.
+def _ensure_utf8_safe() -> None:
+    """Safely force UTF-8 for Textual UI while preventing UnicodeDecodeErrors.
+    Reconfigures stdin/stdout/stderr to handle invalid bytes with 'replace'.
     """
     import builtins
     import os
     import sys
 
-    os.environ["PYTHONIOENCODING"] = "ascii:replace"
-    os.environ["PYTHONUTF8"] = "0"
-    os.environ["LANG"] = "C"
-    os.environ["LC_ALL"] = "C"
+    os.environ["PYTHONIOENCODING"] = "utf-8:replace"
+    os.environ["PYTHONUTF8"] = "1"
 
     _real_open = builtins.open
     _patched   = getattr(builtins, "_bee_open_patched", False)
@@ -261,7 +259,7 @@ def _force_ascii() -> None:
         def _safe_open(file, mode="r", buffering=-1,
                        encoding=None, errors=None, **kwargs):
             if isinstance(mode, str) and "b" not in mode:
-                encoding = "ascii"
+                encoding = "utf-8"
                 errors = "replace"
             return _real_open(file, mode=mode, buffering=buffering,
                               encoding=encoding, errors=errors, **kwargs)
@@ -269,20 +267,20 @@ def _force_ascii() -> None:
         builtins.open = _safe_open
         builtins._bee_open_patched = True
 
-    # Reconfigure live output/input streams to trap bad bytes
+    # Crucial: Reconfigure stdin to catch 0xdf / weird bytes from terminal
     for name in ("stdout", "stderr", "stdin"):
         stream = getattr(sys, name, None)
         if stream is None:
             continue
         try:
             if hasattr(stream, "reconfigure"):
-                stream.reconfigure(encoding="ascii", errors="replace")
+                stream.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass
 
 
 def main(db_path: Optional[Path] = None) -> None:
     """Entry point called from cb/main.py."""
-    _force_ascii()  # MUST BE FIRST
+    _ensure_utf8_safe()  # MUST BE FIRST
     app = BeeApp(db_path=db_path)
     app.run()
