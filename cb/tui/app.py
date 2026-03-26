@@ -242,66 +242,47 @@ class BeeApp(App):
             except Exception:
                 pass  # pane not yet mounted -- silently skip
 
-def _ensure_utf8() -> None:
-    """Force UTF-8 for ALL file I/O in this process.
-
-    Problem: LANG=C means Python's open() defaults to ASCII encoding.
-    Textual calls open(css_file) without specifying encoding=, which then
-    fails with UnicodeDecodeError when reading any file that has bytes
-    outside 0x00-0x7F -- even if the file IS valid UTF-8.
-
-    The env-var LANG trick alone does NOT fix this because locale.getpreferredencoding()
-    reads the locale at process start and caches it. open() uses that cache.
-
-    Fix chain (belt AND suspenders):
-    1. os.environ: LANG, LC_ALL, PYTHONUTF8 -- for child processes
-    2. locale.setlocale(LC_ALL, 'C.UTF-8') -- updates the in-process cache
-    3. sys.stdout/stderr.reconfigure()    -- fixes output streams
+def _force_ascii() -> None:
+    """Force pure ASCII internally. Strip all UTF-8 support.
+    Any non-ASCII characters from files or API will become '?'.
     """
-    import locale
+    import builtins
     import os
     import sys
 
-    active = (os.environ.get("LC_ALL") or os.environ.get("LANG") or "C").upper()
-    if "UTF" in active:
-        return  # already UTF-8
+    os.environ["PYTHONIOENCODING"] = "ascii:replace"
+    os.environ["PYTHONUTF8"] = "0"
+    os.environ["LANG"] = "C"
+    os.environ["LC_ALL"] = "C"
 
-    # 1. Environment variables (inherited by child processes)
-    os.environ["LANG"]            = "C.UTF-8"
-    os.environ["LC_ALL"]          = "C.UTF-8"
-    os.environ["LC_CTYPE"]        = "C.UTF-8"
-    os.environ["PYTHONUTF8"]      = "1"         # Python 3.7+ UTF-8 mode
-    os.environ["PYTHONIOENCODING"] = "utf-8:replace"
+    _real_open = builtins.open
+    _patched   = getattr(builtins, "_bee_open_patched", False)
+    if not _patched:
+        def _safe_open(file, mode="r", buffering=-1,
+                       encoding=None, errors=None, **kwargs):
+            if isinstance(mode, str) and "b" not in mode:
+                encoding = "ascii"
+                errors = "replace"
+            return _real_open(file, mode=mode, buffering=buffering,
+                              encoding=encoding, errors=errors, **kwargs)
 
-    # 2. Actually change the in-process locale so open() uses UTF-8
-    for loc in ("C.UTF-8", "en_US.UTF-8", "UTF-8", ""):
-        try:
-            locale.setlocale(locale.LC_ALL, loc)
-            break  # first one that works
-        except locale.Error:
-            continue
+        builtins.open = _safe_open
+        builtins._bee_open_patched = True
 
-    # 3. Reconfigure live stdout and stderr streams
-    for name in ("stdout", "stderr"):
+    # Reconfigure live output/input streams to trap bad bytes
+    for name in ("stdout", "stderr", "stdin"):
         stream = getattr(sys, name, None)
         if stream is None:
             continue
         try:
-            if hasattr(stream, "reconfigure"):       # Python 3.7+
-                stream.reconfigure(encoding="utf-8", errors="replace")
-            elif hasattr(stream, "buffer"):          # fallback
-                import io
-                setattr(sys, name,
-                        io.TextIOWrapper(stream.buffer,
-                                         encoding="utf-8",
-                                         errors="replace",
-                                         line_buffering=stream.line_buffering))
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="ascii", errors="replace")
         except Exception:
             pass
 
 
 def main(db_path: Optional[Path] = None) -> None:
     """Entry point called from cb/main.py."""
-    _ensure_utf8()
+    _force_ascii()  # MUST BE FIRST
     app = BeeApp(db_path=db_path)
     app.run()

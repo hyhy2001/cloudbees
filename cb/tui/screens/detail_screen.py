@@ -9,7 +9,7 @@ from typing import Callable
 from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Static
-from textual.containers import Horizontal, ScrollableContainer, Vertical
+from textual.containers import Horizontal, Vertical
 from textual.keys import Keys
 
 
@@ -47,7 +47,7 @@ class DetailScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with ScrollableContainer():
+        with Vertical(id="detail-main"):
             yield Static(
                 f"--- {self._detail_title} ---",
                 classes="panel-title",
