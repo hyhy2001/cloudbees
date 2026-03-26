@@ -198,8 +198,46 @@ class BeeApp(App):
         self.sub_title = "not connected"
         self.notify("Session cleared.", title="Logged Out")
 
+def _ensure_utf8() -> None:
+    """Force UTF-8 I/O so Textual/Rich renders correctly on LANG=C systems.
+
+    On many corporate Linux servers LANG=C (POSIX/ASCII locale). Python opens
+    stdout with ASCII encoding, so every Unicode box-drawing character that
+    Rich/Textual tries to write becomes ??? or raises UnicodeEncodeError.
+
+    Fix: set LANG=C.UTF-8 (keeps POSIX collation, adds full Unicode I/O) and
+    reconfigure sys.stdout/stderr to UTF-8 BEFORE Textual initialises its
+    Console object.
+    """
+    import os, sys
+
+    active = (os.environ.get("LC_ALL") or os.environ.get("LANG") or "C").upper()
+    if "UTF" in active:
+        return  # already UTF-8, nothing to do
+
+    os.environ["LANG"] = "C.UTF-8"  # UTF-8 I/O, POSIX sort order
+    os.environ["PYTHONIOENCODING"] = "utf-8:replace"  # never crash on bad chars
+
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        if stream is None:
+            continue
+        try:
+            if hasattr(stream, "reconfigure"):          # Python 3.7+, preferred
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            elif hasattr(stream, "buffer"):             # fallback: re-wrap
+                import io
+                setattr(sys, name,
+                        io.TextIOWrapper(stream.buffer,
+                                         encoding="utf-8",
+                                         errors="replace",
+                                         line_buffering=stream.line_buffering))
+        except Exception:
+            pass  # non-wrappable stream (piped/redirected) — skip silently
+
 
 def main(db_path: Optional[Path] = None) -> None:
     """Entry point called from cb/main.py."""
+    _ensure_utf8()
     app = BeeApp(db_path=db_path)
     app.run()
