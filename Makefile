@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 PYTHON   := python3
-DEPS     := click httpx cryptography
+DEPS     := click httpx cryptography textual
 ABS_PATH := $(shell pwd)
 BIN_DIR  := $(HOME)/.local/bin
 
@@ -16,7 +16,9 @@ help:
 	@echo ""
 
 install:
-	@pip install --target=./lib $(DEPS) -q 2>/dev/null || \
+	@mkdir -p ./lib
+	@~/.local/bin/pip install --target=./lib $(DEPS) -q 2>/dev/null || \
+	 pip install --target=./lib $(DEPS) -q 2>/dev/null || \
 	 pip3 install --target=./lib $(DEPS) -q 2>/dev/null || \
 	 echo "[WARN] pip failed — run: pip install --target=./lib $(DEPS)"
 	@mkdir -p $(BIN_DIR)

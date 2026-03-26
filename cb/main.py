@@ -15,7 +15,7 @@ from cb.cli.commands.controller import controller_group
 from cb.cli.commands.credentials import cred_group
 from cb.cli.commands.nodes import node_group
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 
 @click.group(invoke_without_command=True)
@@ -58,22 +58,17 @@ def cli(ctx, ui, debug):
 
 
 def _launch_tui(profile, controller, token, db_path):
-    """Bootstrap the curses TUI."""
+    """Bootstrap the Textual TUI."""
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     try:
-        import curses
         from cb.tui.app import main as tui_main
-        curses.wrapper(
-            tui_main,
-            profile=profile,
-            controller=controller,
-            token=token,
-            db_path=db_path,
-        )
+        tui_main(db_path=db_path)
     except KeyboardInterrupt:
         pass
     except Exception as exc:
         click.echo(f"[ERROR] TUI failed: {exc}", err=True)
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 

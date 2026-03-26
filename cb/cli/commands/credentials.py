@@ -3,6 +3,15 @@ from __future__ import annotations
 
 import click
 from cb.cli.formatters import format_table, format_kv
+from cb.services.credential_service import CREDENTIAL_STORES
+
+_STORE_OPTION = click.option(
+    "--store",
+    type=click.Choice(CREDENTIAL_STORES),
+    default="system",
+    show_default=True,
+    help="Credential store: 'system' (shared, usable by jobs/nodes) or 'user' (personal).",
+)
 
 
 @click.group("cred")
@@ -12,45 +21,36 @@ def cred_group():
 
 def _client(ctx):
     from cb.services.auth_service import get_client
-    from cb.cache.manager import invalidate_resource_cache
-    
-    client = get_client(profile_name=ctx.obj.get("profile"))
-    
-    # Invalidate credential cache to ensure fresh data
-    invalidate_resource_cache("credential", client._db_path)
-    
-    return client
+    return get_client(profile_name=ctx.obj.get("profile"))
+
+
+def _username(ctx) -> str:
+    """Return the logged-in username from session."""
+    try:
+        from cb.services.session import load_session
+        session = load_session()
+        return session.get("username", "") if session else ""
+    except Exception:
+        return ""
 
 
 @cred_group.command("list")
-@click.option("--all", "show_all", is_flag=True, help="Show all credentials (by default, only shows yours)")
+@click.option("-o", "--output", type=click.Choice(["table", "json"]), default="table")
+@_STORE_OPTION
 @click.pass_context
-def cmd_list(ctx, show_all):
-    """List all credentials."""
+def cmd_list(ctx, output, store):
+    """List credentials from the selected store."""
     from cb.services.credential_service import list_credentials
-    from cb.db.repositories.resource_repo import get_tracked_resources
     try:
-        all_creds = list_credentials(_client(ctx))
-        creds = all_creds
-        
-        if not show_all:
-            profile_name = ctx.obj.get("profile") or "default"
-            tracked = get_tracked_resources("cred", profile_name)
-            tracked_set = set(tracked)
-            
-            display_creds = [c for c in all_creds if c.id in tracked_set]
-            server_ids = {c.id for c in all_creds}
-            
-            missing = tracked_set - server_ids
-            from cb.dtos.credential import CredentialDTO
-            for m in list(missing):
-                display_creds.append(CredentialDTO(id=m, type_name="[DELETED]", description="Not found on server", scope="-"))
-            
-            creds = display_creds
-        headers = ["ID", "Type", "Description", "Scope"]
-        rows = [[c.id, c.type_name[:25], (c.description or "")[:35], c.scope] for c in creds]
-        click.echo(format_table(headers, rows))
-        click.echo(f"  {len(creds)} credential(s)")
+        creds = list_credentials(_client(ctx), username=_username(ctx), store=store)
+        if output == "json":
+            import json
+            click.echo(json.dumps([c.to_dict() for c in creds], indent=2))
+        else:
+            headers = ["ID", "Type", "Description", "Scope"]
+            rows = [[c.id, c.type_name[:25], (c.description or "")[:35], c.scope] for c in creds]
+            click.echo(format_table(headers, rows))
+            click.echo(f"  {len(creds)} credential(s)  [store: {store}]")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)
@@ -58,14 +58,14 @@ def cmd_list(ctx, show_all):
 
 @cred_group.command("get")
 @click.argument("cred_id")
+@_STORE_OPTION
 @click.pass_context
-def cmd_get(ctx, cred_id):
+def cmd_get(ctx, cred_id, store):
     """Show credential details (secrets are masked)."""
     from cb.services.credential_service import get_credential
     try:
-        cred = get_credential(_client(ctx), cred_id)
+        cred = get_credential(_client(ctx), cred_id, username=_username(ctx), store=store)
         data = cred.to_dict()
-        # Mask any field that looks like a secret
         for k in list(data.keys()):
             if any(s in k.lower() for s in ("password", "secret", "key", "token")):
                 data[k] = "[HIDDEN]"
@@ -81,8 +81,9 @@ def cmd_get(ctx, cred_id):
 @click.option("--password", default=None, help="Password (prompted if omitted)")
 @click.option("--description", default="", help="Description")
 @click.option("--scope", default="GLOBAL", type=click.Choice(["GLOBAL", "SYSTEM"]))
+@_STORE_OPTION
 @click.pass_context
-def cmd_create(ctx, cred_id, username, password, description, scope):
+def cmd_create(ctx, cred_id, username, password, description, scope, store):
     """Create a Username+Password credential."""
     from cb.services.credential_service import create_username_password
     import uuid
@@ -98,14 +99,14 @@ def cmd_create(ctx, cred_id, username, password, description, scope):
         create_username_password(
             _client(ctx),
             cred_id=cred_id,
-            username_cred=username,  # <-- Sửa lỗi syntax map kwargs ở đây
+            username_cred=username,
             password=password,
             desc=description,
             scope=scope,
+            username=_username(ctx),
+            store=store,
         )
-        from cb.db.repositories.resource_repo import track_resource
-        track_resource("cred", cred_id, ctx.obj.get("profile") or "default")
-        click.echo(f"[OK] Credential '{cred_id}' created.")
+        click.echo(f"[OK] Credential '{cred_id}' created in {store} store.")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)
@@ -114,17 +115,16 @@ def cmd_create(ctx, cred_id, username, password, description, scope):
 @cred_group.command("delete")
 @click.argument("cred_id")
 @click.option("--yes", is_flag=True, default=False, help="Skip confirmation")
+@_STORE_OPTION
 @click.pass_context
-def cmd_delete(ctx, cred_id, yes):
+def cmd_delete(ctx, cred_id, yes, store):
     """Delete a credential."""
     from cb.services.credential_service import delete_credential
     try:
         if not yes:
-            click.confirm(f"Delete credential '{cred_id}'?", abort=True)
-        delete_credential(_client(ctx), cred_id)
-        from cb.db.repositories.resource_repo import untrack_resource
-        untrack_resource("cred", cred_id, ctx.obj.get("profile") or "default")
-        click.echo(f"[OK] Credential '{cred_id}' deleted.")
+            click.confirm(f"Delete credential '{cred_id}' from {store} store?", abort=True)
+        delete_credential(_client(ctx), cred_id, username=_username(ctx), store=store)
+        click.echo(f"[OK] Credential '{cred_id}' deleted from {store} store.")
     except click.Abort:
         click.echo("Cancelled.")
     except Exception as exc:
@@ -135,12 +135,13 @@ def cmd_delete(ctx, cred_id, yes):
 @cred_group.command("update")
 @click.argument("cred_id")
 @click.argument("xml_file", type=click.File("r"))
+@_STORE_OPTION
 @click.pass_context
-def cmd_update(ctx, cred_id, xml_file):
+def cmd_update(ctx, cred_id, xml_file, store):
     """Update a credential using a config.xml file."""
     from cb.services.credential_service import update_credential
     try:
-        update_credential(_client(ctx), cred_id, xml_file.read())
+        update_credential(_client(ctx), cred_id, xml_file.read(), username=_username(ctx), store=store)
         click.echo(f"[OK] Credential '{cred_id}' updated.")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)

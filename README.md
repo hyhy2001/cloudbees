@@ -1,12 +1,12 @@
 # bee 🐝 — CloudBees CLI + TUI
 
-A lightweight Python tool to manage CloudBees from your terminal.  
+A lightweight Python tool to manage CloudBees CI from your terminal.  
 **CLI** for scripting · **TUI** for interactive use · No `sudo` · No virtualenv required.
 
 ## Requirements
 
-- Python **3.8+**
-- Dependencies auto-installed by `make install`: `click`, `httpx`, `cryptography`
+- Python **3.9+**
+- Dependencies auto-installed by `make install`: `click`, `httpx`, `cryptography`, `textual`
 
 ## Install
 
@@ -76,11 +76,22 @@ bee job status <name> [--count 10]               # Recent build history
 ### Credentials
 
 ```bash
+# Default: system store (shared, usable by Jobs and Nodes)
 bee cred list [-o json|table]
 bee cred get <id>
 bee cred create --id <id> --username <u> [--password]
 bee cred delete <id> [--yes]
+
+# User store (personal, scoped to your account)
+bee cred list --store user
+bee cred create --store user --id <id> --username <u>
+bee cred delete --store user <id>
 ```
+
+| Store | Path | Accessible by |
+|-------|------|--------------|
+| `system` (default) | `/credentials/store/system/domain/_` | Jobs, Nodes, all users |
+| `user` | `/user/<username>/credentials/store/user/domain/_` | Logged-in user only |
 
 ### Nodes
 
@@ -116,9 +127,11 @@ bee system cache-clear
 bee --ui
 ```
 
-**Sidebar:**
+Built with **[Textual](https://textual.textualize.io/)** — async-first, non-blocking UI. All API calls run in background threads so the interface stays responsive at all times.
+
+**Tabs:**
 ```
-[1] Dashboard  [2] Controller  [3] Credentials  [4] Nodes  [5] Jobs  [6] Users  [7] System
+[1] Controller   [2] Credentials   [3] Nodes   [4] Jobs   [5] Settings
 ```
 
 **Keys:**
@@ -126,18 +139,21 @@ bee --ui
 | Key | Action |
 |-----|--------|
 | `q` | Quit (session saved) |
-| `Tab` / `←` `→` | Cycle screens |
-| `1`–`7` | Jump to screen |
-| `↑` / `↓` or `j`/`k` | Navigate list |
-| `Enter` | Select / detail |
+| `1`–`5` | Jump to screen |
+| `↑` / `↓` | Navigate list |
+| `Enter` | Select / confirm action |
 | `L` | Login |
 | `X` | Logout (clears session) |
-| `r` | Run selected job |
-| `o` | Toggle node offline/online |
-| `F5` | Force refresh |
-| `C` | Clear cache |
+| `r` | Run selected job (Jobs screen) |
+| `o` | Toggle node offline/online (Nodes screen) |
+| `S` | Toggle credential store: system ↔ user (Credentials screen) |
+| `c` | Create credential (Credentials screen) |
+| `d` | Delete selected item |
+| `F5` | Force refresh (bypass cache, re-fetch from API) |
+| `F2` | Toggle dark/light mode |
+| `Esc` | Close modal / cancel action |
 
-> **Session:** Login once → session saved encrypted in `.db`. Reopen TUI/CLI anytime without re-entering credentials. `X` to logout and clear session.
+> **Session:** Login once → session saved encrypted in SQLite. Reopen TUI/CLI anytime without re-entering credentials. `X` to logout.
 
 ---
 
@@ -146,33 +162,34 @@ bee --ui
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `CB_PROFILE` | Active profile name | `default` |
-| `CB_CONTROLLER` | Active controller override | — |
-| `CB_PASSWORD` | Password for non-interactive scripting | — |
 | `CB_DB_PATH` | Custom database path | `./data/cb.db` |
+| `CB_PASSWORD` | Password for non-interactive scripting | — |
 
 ---
 
 ## Security
 
-- Session token encrypted with machine-derived key (stored in SQLite `settings`)
-- API tokens encrypted with **Fernet (AES-128-CBC)** + **PBKDF2HMAC-SHA256** (390k iterations)
-- Secrets always use hidden input — never in shell history
-- `X` (Logout) deletes session; `q` (Quit) preserves it
+- Session token encrypted with XOR cipher using a machine-derived key (SHA-256 of a per-machine random secret stored in SQLite)
+- API tokens (Basic Auth) stored as `username:password` Base64, encrypted with the machine key at rest
+- Secrets always use hidden input — never exposed in shell history
+- `X` (Logout) deletes session; `q` (Quit) preserves it for next launch
 
 ---
 
 ## Caching
 
-All `GET` responses cached in SQLite:
+All `GET` responses cached in SQLite with short TTLs for fast refresh:
 
 | Resource | TTL |
 |----------|-----|
-| `controllers.list` | 120 s |
-| `jobs.list` | 60 s |
-| `credentials.list` | 60 s |
-| `nodes.list` | 30 s |
-| `users.list` | 300 s |
-| `system.health` | 15 s |
+| `controllers.list/detail` | 60 s |
+| `controllers.capabilities` | 60 s |
+| `jobs.list/detail` | 30 s |
+| `credentials.list/detail` | 60 s |
+| `nodes.list/detail` | 30 s |
+| Default (other resources) | 30 s |
+
+`F5` or `bee system cache-clear` bypasses the cache and forces a live API call.
 
 ---
 
@@ -186,13 +203,17 @@ cloudbees/
 ├── data/               # SQLite DB — tokens, cache, settings (gitignored)
 └── cb/
     ├── api/            # HTTP client, CSRF crumb, XML builder
-    ├── cache/          # SQLite TTL cache
+    ├── cache/          # SQLite TTL cache (manager + policy)
     ├── cli/commands/   # auth, controller, jobs, credentials, nodes, users, system
-    ├── crypto/         # Fernet + PBKDF2HMAC
-    ├── db/             # SQLite schema, repositories
-    ├── dtos/           # Dataclass DTOs
-    ├── services/       # Business logic (auth, session, job, node…)
-    └── tui/            # curses TUI (256-color, ASCII borders)
+    ├── crypto/         # Encryption utilities (reserved)
+    ├── db/             # SQLite schema, connection, repositories
+    ├── dtos/           # Dataclass DTOs (Job, Node, Credential, Auth…)
+    ├── services/       # Business logic (auth, session, job, node, credential…)
+    └── tui/            # Textual TUI
+         ├── app.py          # BeeApp — main Textual App class
+         ├── bee.tcss        # Textual CSS (GitHub dark theme)
+         ├── screens/        # One Screen class per tab
+         └── widgets/        # Shared modals (Login, Confirm, Info, CreateCred)
 ```
 
 ---
@@ -201,6 +222,6 @@ cloudbees/
 
 | Version | Changes |
 |---------|---------|
-| `0.3.0` | Persistent session (auto-login), Logout key, 7-screen TUI nav, arrow keys, login form fix, FK bug fixed |
+| `0.3.0` | **Textual TUI** (async workers, non-blocking UI), dual credential store (system/user), shorter TTLs (30–60s), Python 3.9+, `--store` CLI option |
 | `0.2.0` | Controller, Credential, Node management; Job create; local `./lib` install |
 | `0.1.0` | Initial release — auth, job list/run/stop, TUI, encrypted storage, cache |
