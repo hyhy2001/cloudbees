@@ -120,6 +120,8 @@ class BeeApp(App):
                 f"Logged in as {self._username}" + (f" [{ctrl[0]}]" if ctrl else ""),
                 title="bee",
             )
+            # Trigger all panes to reload now we have a live client
+            self.app.call_from_thread(self._refresh_all_panes)
         except Exception as exc:
             _log.exception("Session restore failed")
             self.app.call_from_thread(
@@ -166,7 +168,7 @@ class BeeApp(App):
             from cb.services.session import load_session
             from cb.api.client import CloudBeesClient
 
-            profile = login(
+            login(
                 server_url=url,
                 username=username,
                 password=password,
@@ -176,13 +178,18 @@ class BeeApp(App):
             session = load_session(self._db_path)
             if session:
                 self._username = username
-                oc = CloudBeesClient(session["server_url"], session["raw_token"], db_path=self._db_path)
-                self.app.call_from_thread(setattr, self, "oc_client", oc)
-                self.app.call_from_thread(setattr, self, "ctrl_client", oc)
+                oc = CloudBeesClient(
+                    session["server_url"], session["raw_token"],
+                    db_path=self._db_path,
+                )
+                self.app.call_from_thread(setattr, self, "oc_client",    oc)
+                self.app.call_from_thread(setattr, self, "ctrl_client",  oc)
                 self.app.call_from_thread(setattr, self, "active_ctrl_name", "")
                 self.app.call_from_thread(
                     self.notify, f"Logged in as {username}", title="Login OK"
                 )
+                # Reload all panes now that we have a client
+                self.app.call_from_thread(self._refresh_all_panes)
         except Exception as exc:
             self.app.call_from_thread(
                 self.notify, str(exc), title="Login Failed", severity="error"
@@ -197,6 +204,28 @@ class BeeApp(App):
         self._username = ""
         self.sub_title = "not connected"
         self.notify("Session cleared.", title="Logged Out")
+        self._refresh_all_panes()
+
+    def _refresh_all_panes(self) -> None:
+        """Reload data in all tab panes (call on main thread after login/logout)."""
+        from cb.tui.screens.controller_screen import ControllerPane
+        from cb.tui.screens.credentials_screen import CredentialsPane
+        from cb.tui.screens.nodes_screen import NodesPane
+        from cb.tui.screens.jobs_screen import JobsPane
+        from cb.tui.screens.settings_screen import SettingsPane
+
+        for pane_cls, method in [
+            (ControllerPane,  "_load_controllers"),
+            (CredentialsPane, "_load_creds"),
+            (NodesPane,       "_load_nodes"),
+            (JobsPane,        "_load_jobs"),
+            (SettingsPane,    "_load_info"),
+        ]:
+            try:
+                pane = self.query_one(pane_cls)
+                getattr(pane, method)()
+            except Exception:
+                pass  # pane not yet mounted -- silently skip
 
 def _ensure_utf8() -> None:
     """Force UTF-8 for ALL file I/O in this process.
