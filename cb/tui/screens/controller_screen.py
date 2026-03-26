@@ -1,10 +1,9 @@
-"""Controller screen -- list and select CloudBees controllers."""
-from __future__ import annotations
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, LoadingIndicator, Static
+from textual.widgets import DataTable, Footer, Static
 from textual.reactive import reactive
 from textual import work
+from cb.tui.widgets.loader import AsciiLoader
 
 
 class ControllerScreen(Screen):
@@ -20,7 +19,7 @@ class ControllerScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Static("Controllers", classes="panel-title")
-        yield LoadingIndicator()
+        yield AsciiLoader(id="loader")
         yield DataTable(id="ctrl-table", cursor_type="row")
         yield Footer()
 
@@ -31,7 +30,7 @@ class ControllerScreen(Screen):
         self._load_controllers()
 
     def watch__loading(self, loading: bool) -> None:
-        self.query_one(LoadingIndicator).display = loading
+        self.query_one(AsciiLoader).display = loading
         self.query_one(DataTable).display = not loading
 
     def watch__error(self, error: str) -> None:

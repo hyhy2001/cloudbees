@@ -1,10 +1,9 @@
-"""Nodes screen -- list agents, toggle offline/online."""
-from __future__ import annotations
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, LoadingIndicator, Static
+from textual.widgets import DataTable, Footer, Static
 from textual.reactive import reactive
 from textual import work
+from cb.tui.widgets.loader import AsciiLoader
 
 
 class NodesScreen(Screen):
@@ -21,7 +20,7 @@ class NodesScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Static("Nodes / Agents", classes="panel-title")
-        yield LoadingIndicator()
+        yield AsciiLoader(id="loader")
         yield DataTable(id="nodes-table", cursor_type="row")
         yield Footer()
 
@@ -32,7 +31,7 @@ class NodesScreen(Screen):
         self._load_nodes()
 
     def watch__loading(self, loading: bool) -> None:
-        self.query_one(LoadingIndicator).display = loading
+        self.query_one(AsciiLoader).display = loading
         self.query_one(DataTable).display = not loading
 
     def watch__error(self, error: str) -> None:

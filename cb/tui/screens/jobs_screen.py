@@ -1,11 +1,10 @@
-"""Jobs screen -- list jobs, trigger builds."""
-from __future__ import annotations
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, LoadingIndicator, Static
+from textual.widgets import DataTable, Footer, Static
 from textual.reactive import reactive
 from cb.tui.compat import SYM
 from textual import work
+from cb.tui.widgets.loader import AsciiLoader
 
 def _mk(icon: str, color: str) -> str:
     return f"[{color}]{icon}[/{color}]"
@@ -42,7 +41,7 @@ class JobsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Static("Jobs", classes="panel-title")
-        yield LoadingIndicator()
+        yield AsciiLoader(id="loader")
         yield DataTable(id="jobs-table", cursor_type="row")
         yield Footer()
 
@@ -53,7 +52,7 @@ class JobsScreen(Screen):
         self._load_jobs()
 
     def watch__loading(self, loading: bool) -> None:
-        self.query_one(LoadingIndicator).display = loading
+        self.query_one(AsciiLoader).display = loading
         self.query_one(DataTable).display = not loading
 
     def watch__error(self, error: str) -> None:

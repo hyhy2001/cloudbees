@@ -1,10 +1,9 @@
-"""Credentials screen -- list, create, delete with store toggle."""
-from __future__ import annotations
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Label, LoadingIndicator, Static
+from textual.widgets import DataTable, Footer, Label, Static
 from textual.reactive import reactive
 from textual import work
+from cb.tui.widgets.loader import AsciiLoader
 
 
 class CredentialsScreen(Screen):
@@ -23,7 +22,7 @@ class CredentialsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Label("", id="store-label")
-        yield LoadingIndicator()
+        yield AsciiLoader(id="loader")
         yield DataTable(id="creds-table", cursor_type="row")
         yield Footer()
 
@@ -34,7 +33,7 @@ class CredentialsScreen(Screen):
         self._load_creds()
 
     def watch__loading(self, loading: bool) -> None:
-        self.query_one(LoadingIndicator).display = loading
+        self.query_one(AsciiLoader).display = loading
         self.query_one(DataTable).display = not loading
 
     def watch__store(self, store: str) -> None:
