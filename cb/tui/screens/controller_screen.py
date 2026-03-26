@@ -36,7 +36,7 @@ class ControllerScreen(Screen):
 
     def watch__error(self, error: str) -> None:
         if error:
-            self.query_one(Static, classes="panel-title").update(f"[red]Error: {error}[/red]")
+            self.query_one(".panel-title", Static).update(f"[red]Error: {error}[/red]")
 
     @work(thread=True, exclusive=True, name="load-controllers")
     def _load_controllers(self) -> None:

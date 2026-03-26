@@ -58,7 +58,7 @@ class JobsScreen(Screen):
 
     def watch__error(self, error: str) -> None:
         if error:
-            self.query_one(Static, classes="panel-title").update(
+            self.query_one(".panel-title", Static).update(
                 f"[red]Jobs — Error: {error}[/red]"
             )
 
