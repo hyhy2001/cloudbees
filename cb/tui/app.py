@@ -199,33 +199,53 @@ class BeeApp(App):
         self.notify("Session cleared.", title="Logged Out")
 
 def _ensure_utf8() -> None:
-    """Force UTF-8 I/O so Textual/Rich renders correctly on LANG=C systems.
+    """Force UTF-8 for ALL file I/O in this process.
 
-    On many corporate Linux servers LANG=C (POSIX/ASCII locale). Python opens
-    stdout with ASCII encoding, so every Unicode box-drawing character that
-    Rich/Textual tries to write becomes ??? or raises UnicodeEncodeError.
+    Problem: LANG=C means Python's open() defaults to ASCII encoding.
+    Textual calls open(css_file) without specifying encoding=, which then
+    fails with UnicodeDecodeError when reading any file that has bytes
+    outside 0x00-0x7F -- even if the file IS valid UTF-8.
 
-    Fix: set LANG=C.UTF-8 (keeps POSIX collation, adds full Unicode I/O) and
-    reconfigure sys.stdout/stderr to UTF-8 BEFORE Textual initialises its
-    Console object.
+    The env-var LANG trick alone does NOT fix this because locale.getpreferredencoding()
+    reads the locale at process start and caches it. open() uses that cache.
+
+    Fix chain (belt AND suspenders):
+    1. os.environ: LANG, LC_ALL, PYTHONUTF8 -- for child processes
+    2. locale.setlocale(LC_ALL, 'C.UTF-8') -- updates the in-process cache
+    3. sys.stdout/stderr.reconfigure()    -- fixes output streams
     """
-    import os, sys
+    import locale
+    import os
+    import sys
 
     active = (os.environ.get("LC_ALL") or os.environ.get("LANG") or "C").upper()
     if "UTF" in active:
-        return  # already UTF-8, nothing to do
+        return  # already UTF-8
 
-    os.environ["LANG"] = "C.UTF-8"  # UTF-8 I/O, POSIX sort order
-    os.environ["PYTHONIOENCODING"] = "utf-8:replace"  # never crash on bad chars
+    # 1. Environment variables (inherited by child processes)
+    os.environ["LANG"]            = "C.UTF-8"
+    os.environ["LC_ALL"]          = "C.UTF-8"
+    os.environ["LC_CTYPE"]        = "C.UTF-8"
+    os.environ["PYTHONUTF8"]      = "1"         # Python 3.7+ UTF-8 mode
+    os.environ["PYTHONIOENCODING"] = "utf-8:replace"
 
+    # 2. Actually change the in-process locale so open() uses UTF-8
+    for loc in ("C.UTF-8", "en_US.UTF-8", "UTF-8", ""):
+        try:
+            locale.setlocale(locale.LC_ALL, loc)
+            break  # first one that works
+        except locale.Error:
+            continue
+
+    # 3. Reconfigure live stdout and stderr streams
     for name in ("stdout", "stderr"):
         stream = getattr(sys, name, None)
         if stream is None:
             continue
         try:
-            if hasattr(stream, "reconfigure"):          # Python 3.7+, preferred
+            if hasattr(stream, "reconfigure"):       # Python 3.7+
                 stream.reconfigure(encoding="utf-8", errors="replace")
-            elif hasattr(stream, "buffer"):             # fallback: re-wrap
+            elif hasattr(stream, "buffer"):          # fallback
                 import io
                 setattr(sys, name,
                         io.TextIOWrapper(stream.buffer,
@@ -233,7 +253,7 @@ def _ensure_utf8() -> None:
                                          errors="replace",
                                          line_buffering=stream.line_buffering))
         except Exception:
-            pass  # non-wrappable stream (piped/redirected) -- skip silently
+            pass
 
 
 def main(db_path: Optional[Path] = None) -> None:
