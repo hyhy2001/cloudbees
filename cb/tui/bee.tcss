@@ -16,10 +16,22 @@ Header {
     text-style: bold;
 }
 
+/* HeaderIcon width: keeps it compact after we set icon to '>' (1 char) */
+HeaderIcon {
+    width: 3;
+    content-align: left middle;
+}
+
 /* -- Footer --------------------------------------- */
 Footer {
     background: #161b22;
     color: #8b949e;
+}
+
+/* Highlight the key label in Footer */
+FooterKey > .footer-key--key {
+    background: #21262d;
+    color: #58a6ff;
 }
 
 /* -- Tabs ----------------------------------------- */
@@ -160,11 +172,7 @@ Button.-error {
     border: ascii #30363d;
 }
 
-/* -- Loading indicator ---------------------------- */
-LoadingIndicator {
-    background: #0d1117;
-    color: #58a6ff;
-}
+
 
 /* -- Static info panels --------------------------- */
 .kv-label {

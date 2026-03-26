@@ -24,7 +24,8 @@ class BeeApp(App):
 
     CSS_PATH = "bee.tcss"
 
-    TITLE = f"bee {SYM.bee} -- CloudBees TUI"
+    TITLE = "bee -- CloudBees TUI"
+    ENABLE_COMMAND_PALETTE = False  # disables ctrl+p (unicode icon in footer)
 
     BINDINGS = [
         ("q", "quit", "Quit"),
@@ -81,6 +82,11 @@ class BeeApp(App):
     # -- Startup ----------------------------------------
 
     def on_mount(self) -> None:
+        # Set Header icon to ASCII '>' -- default is U+2B58 (heavy circle -> ???)
+        try:
+            self.query_one(Header).icon = ">"
+        except Exception:
+            pass
         self._restore_session()
 
     @work(thread=True, name="restore-session")
