@@ -39,21 +39,22 @@ class BeeApp(App):
         ("5", "switch_tab('settings')", "Settings"),
     ]
 
-    # Reactive app-level state -- updates cascade to screens automatically
-    oc_client: reactive = reactive(None)     # Operations Center root client
-    ctrl_client: reactive = reactive(None)   # Active controller-scoped client
-    active_ctrl_name: reactive[str] = reactive("")
-
-    # Shared data stores (populated by workers, read by screens)
-    _controllers: list = []
-    _jobs: list = []
-    _creds: list = []
-    _nodes: list = []
-    _username: str = ""
+    # Reactive app-level state -- Textual manages these as descriptors
+    oc_client:         reactive = reactive(None)   # Operations Center root client
+    ctrl_client:       reactive = reactive(None)   # Active controller-scoped client
+    active_ctrl_name:  reactive[str] = reactive("")  # Currently selected controller name
 
     def __init__(self, db_path: Optional[Path] = None, **kwargs):
         super().__init__(**kwargs)
         self._db_path = db_path
+        # Plain instance attributes -- NOT class-level annotated lists.
+        # Class-level `_x: list = []` causes Textual metaclass to try
+        # processing them as reactive descriptors -> '_updates' AttributeError.
+        self._controllers = []
+        self._jobs        = []
+        self._creds       = []
+        self._nodes       = []
+        self._username    = ""
 
     # -- Compose ----------------------------------------
 
