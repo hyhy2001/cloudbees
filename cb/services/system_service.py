@@ -1,4 +1,4 @@
-"""System service — health, version."""
+"""System service -- health, version."""
 
 from __future__ import annotations
 from cb.api.client import CloudBeesClient

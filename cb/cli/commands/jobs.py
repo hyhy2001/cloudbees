@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""cb job — full job management: list, get, create, delete, run, stop, log, status."""
+"""cb job -- full job management: list, get, create, delete, run, stop, log, status."""
 
 import sys
 import time
@@ -26,7 +26,7 @@ def _client(ctx):
     return client
 
 
-# ── list ──────────────────────────────────────────────────────
+# -- list ------------------------------------------------------
 
 
 @jobs_group.command("list")
@@ -72,7 +72,7 @@ def cmd_list(ctx, show_all):
         raise SystemExit(1)
 
 
-# ── get ───────────────────────────────────────────────────────
+# -- get -------------------------------------------------------
 
 
 @jobs_group.command("get")
@@ -90,7 +90,7 @@ def cmd_get(ctx, name):
         raise SystemExit(1)
 
 
-# ── create ────────────────────────────────────────────────────
+# -- create ----------------------------------------------------
 
 
 @jobs_group.group("create")
@@ -169,7 +169,7 @@ def create_folder(ctx, name, description):
         raise SystemExit(1)
 
 
-# ── delete ────────────────────────────────────────────────────
+# -- delete ----------------------------------------------------
 
 
 @jobs_group.command("delete")
@@ -212,7 +212,7 @@ def cmd_delete(ctx, name, yes):
         raise SystemExit(1)
 
 
-# ── run ───────────────────────────────────────────────────────
+# -- run -------------------------------------------------------
 
 
 @jobs_group.command("run")
@@ -273,7 +273,7 @@ def cmd_run(ctx, name, wait, timeout):
             click.echo("  Could not determine build number. Check Jenkins manually.")
             return
 
-        click.echo(f"  Build #{new_build_num} — waiting for completion (timeout={timeout}s)...")
+        click.echo(f"  Build #{new_build_num} -- waiting for completion (timeout={timeout}s)...")
         try:
             build = wait_for_build(client, name, new_build_num, timeout=timeout)
             result = build.result or "IN_PROGRESS"
@@ -285,7 +285,7 @@ def cmd_run(ctx, name, wait, timeout):
         raise SystemExit(1)
 
 
-# ── stop ──────────────────────────────────────────────────────
+# -- stop ------------------------------------------------------
 
 
 @jobs_group.command("stop")
@@ -303,7 +303,7 @@ def cmd_stop(ctx, name, build_number):
         raise SystemExit(1)
 
 
-# ── log ───────────────────────────────────────────────────────
+# -- log -------------------------------------------------------
 
 
 @jobs_group.command("log")
@@ -340,7 +340,7 @@ def cmd_log(ctx, name, build_number, follow):
                 click.echo(log)
                 return
             
-            # Follow mode — poll until done
+            # Follow mode -- poll until done
             shown = 0
             while True:
                 log = get_build_log(client, name, build_number)
@@ -363,7 +363,7 @@ def cmd_log(ctx, name, build_number, follow):
         raise SystemExit(1)
 
 
-# ── status ────────────────────────────────────────────────────
+# -- status ----------------------------------------------------
 
 
 @jobs_group.command("status")

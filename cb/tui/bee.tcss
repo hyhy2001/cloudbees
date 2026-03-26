@@ -1,28 +1,28 @@
-/* bee.tcss — ASCII-safe styling for bee CloudBees TUI
+/* bee.tcss -- ASCII-safe styling for bee CloudBees TUI
    All borders use the textual "ascii" style: + - |
    Compatible with any terminal, no Unicode box-drawing required.
 */
 
-/* ── Base ───────────────────────────────────────── */
+/* -- Base ----------------------------------------- */
 Screen {
     background: #0d1117;
     color: #c9d1d9;
 }
 
-/* ── Header ─────────────────────────────────────── */
+/* -- Header --------------------------------------- */
 Header {
     background: #161b22;
     color: #58a6ff;
     text-style: bold;
 }
 
-/* ── Footer ─────────────────────────────────────── */
+/* -- Footer --------------------------------------- */
 Footer {
     background: #161b22;
     color: #8b949e;
 }
 
-/* ── Tabs ───────────────────────────────────────── */
+/* -- Tabs ----------------------------------------- */
 TabbedContent {
     height: 1fr;
     border: ascii #30363d;
@@ -48,7 +48,7 @@ Tab:hover {
     color: #c9d1d9;
 }
 
-/* ── DataTable ──────────────────────────────────── */
+/* -- DataTable ------------------------------------ */
 DataTable {
     height: 1fr;
     background: #0d1117;
@@ -71,14 +71,14 @@ DataTable > .datatable--hover {
     background: #21262d;
 }
 
-/* ── Status colours ─────────────────────────────── */
+/* -- Status colours ------------------------------- */
 .success { color: #3fb950; }
 .error   { color: #f85149; }
 .warning { color: #d29922; }
 .dim     { color: #8b949e; }
 .url     { color: #58a6ff; }
 
-/* ── Panel title ────────────────────────────────── */
+/* -- Panel title ---------------------------------- */
 .panel-title {
     color: #58a6ff;
     text-style: bold;
@@ -87,7 +87,7 @@ DataTable > .datatable--hover {
     border-bottom: ascii #30363d;
 }
 
-/* ── Status bar ─────────────────────────────────── */
+/* -- Status bar ----------------------------------- */
 #status-bar {
     height: 1;
     background: #161b22;
@@ -95,7 +95,7 @@ DataTable > .datatable--hover {
     padding: 0 1;
 }
 
-/* ── Modals ─────────────────────────────────────── */
+/* -- Modals --------------------------------------- */
 ModalScreen {
     align: center middle;
 }
@@ -151,7 +151,7 @@ Button.-error {
     color: #ffffff;
 }
 
-/* ── Credential store label ─────────────────────── */
+/* -- Credential store label ----------------------- */
 #store-label {
     background: #21262d;
     color: #f0883e;
@@ -160,13 +160,13 @@ Button.-error {
     border: ascii #30363d;
 }
 
-/* ── Loading indicator ──────────────────────────── */
+/* -- Loading indicator ---------------------------- */
 LoadingIndicator {
     background: #0d1117;
     color: #58a6ff;
 }
 
-/* ── Static info panels ─────────────────────────── */
+/* -- Static info panels --------------------------- */
 .kv-label {
     color: #8b949e;
     width: 18;
@@ -177,13 +177,13 @@ LoadingIndicator {
     text-style: bold;
 }
 
-/* ── Vertical containers ────────────────────────── */
+/* -- Vertical containers -------------------------- */
 Vertical {
     border: ascii #30363d;
     padding: 1;
 }
 
-/* ── Settings screen ────────────────────────────── */
+/* -- Settings screen ------------------------------ */
 #sys-info {
     padding: 1;
     border: ascii #30363d;

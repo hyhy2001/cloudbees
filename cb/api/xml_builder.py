@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""Config XML builders for Jobs, Nodes, Credentials — using stdlib xml.etree."""
+"""Config XML builders for Jobs, Nodes, Credentials -- using stdlib xml.etree."""
 
 import xml.etree.ElementTree as ET
 
@@ -13,7 +13,7 @@ def _xml_str(root: ET.Element) -> str:
     )
 
 
-# ── Job XML ───────────────────────────────────────────────────
+# -- Job XML ---------------------------------------------------
 
 
 def build_freestyle_xml(
@@ -80,7 +80,7 @@ def build_folder_xml(desc: str = "") -> str:
     return _xml_str(root)
 
 
-# ── Node XML ──────────────────────────────────────────────────
+# -- Node XML --------------------------------------------------
 
 def build_permanent_node_xml(
     name: str,
@@ -119,7 +119,7 @@ def build_permanent_node_xml(
     return _xml_str(root)
 
 
-# ── Credential XML ────────────────────────────────────────────
+# -- Credential XML --------------------------------------------
 
 
 def build_username_password_cred_xml(

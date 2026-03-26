@@ -1,4 +1,4 @@
-"""Session management — machine-key encrypted token for auto-login.
+"""Session management -- machine-key encrypted token for auto-login.
 
 The session token is stored in the 'settings' table under key 'session_token'
 and 'session_profile'. It uses a machine-derived key (not user password) so
@@ -23,7 +23,7 @@ from cb.db.connection import get_connection
 _KEY_LEN = 32
 
 
-# ── Machine key ────────────────────────────────────────────────
+# -- Machine key ------------------------------------------------
 
 
 def _get_machine_secret(db_path: Path | None = None) -> str:
@@ -56,7 +56,7 @@ def _machine_key(db_path: Path | None = None) -> bytes:
 
 
 def _xor_encrypt(data: str, key: bytes) -> bytes:
-    """Simple XOR cipher — good enough for a dev-tool CLI session."""
+    """Simple XOR cipher -- good enough for a dev-tool CLI session."""
     b = data.encode("utf-8")
     key_cycle = (key * (len(b) // len(key) + 1))[: len(b)]
     return bytes(x ^ k for x, k in zip(b, key_cycle))
@@ -67,7 +67,7 @@ def _xor_decrypt(data: bytes, key: bytes) -> str:
     return bytes(x ^ k for x, k in zip(data, key_cycle)).decode("utf-8")
 
 
-# ── Public API ─────────────────────────────────────────────────
+# -- Public API -------------------------------------------------
 
 
 def save_session(

@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""cb controller — list, info, select, current."""
+"""cb controller -- list, info, select, current."""
 
 import click
 from cb.cli.formatters import format_table, format_kv

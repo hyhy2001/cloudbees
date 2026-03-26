@@ -1,4 +1,4 @@
-"""Authentication service — login, logout, profile switching."""
+"""Authentication service -- login, logout, profile switching."""
 
 from __future__ import annotations
 import os
@@ -36,7 +36,7 @@ def login(
     except AuthError:
         raise AuthError("Login failed: invalid username or password.")
 
-    # Credentials are valid — store profile and set machine-key session
+    # Credentials are valid -- store profile and set machine-key session
     profile = save_profile(server_url=server_url, name=profile_name,
                            username=username, is_default=is_default,
                            db_path=db_path)

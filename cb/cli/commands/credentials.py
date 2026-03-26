@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""cb cred — list, get, create (username+password), delete."""
+"""cb cred -- list, get, create (username+password), delete."""
 
 import click
 from cb.cli.formatters import format_table, format_kv

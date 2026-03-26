@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""Credential DTOs — UsernamePassword focused."""
+"""Credential DTOs -- UsernamePassword focused."""
 
 import dataclasses
 from cb.dtos.base import BaseDTO

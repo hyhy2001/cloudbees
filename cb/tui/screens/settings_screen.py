@@ -1,4 +1,4 @@
-"""Settings screen — system health + version info."""
+"""Settings screen -- system health + version info."""
 from __future__ import annotations
 from textual.app import ComposeResult
 from textual.screen import Screen
@@ -14,7 +14,7 @@ class SettingsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Static("[bold blue]⚙  Settings / System Info[/bold blue]\n")
+            yield Static("[bold blue][*] Settings / System Info[/bold blue]\n")
             yield Static("Loading...", id="sys-info")
         yield Footer()
 

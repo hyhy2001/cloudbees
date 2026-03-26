@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""Job service — list, get, create (Freestyle/Pipeline/Folder), run, stop, log."""
+"""Job service -- list, get, create (Freestyle/Pipeline/Folder), run, stop, log."""
 
 import time
 from pathlib import Path
@@ -169,7 +169,7 @@ def wait_for_build(
     return get_build_detail(client, job_name, build_number)
 
 
-# ── Create jobs ───────────────────────────────────────────────
+# -- Create jobs -----------------------------------------------
 
 
 def create_freestyle_job(

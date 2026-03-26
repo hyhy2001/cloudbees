@@ -1,4 +1,4 @@
-"""CloudBees HTTP client — httpx wrapper with caching, CSRF crumb, and retry."""
+"""CloudBees HTTP client -- httpx wrapper with caching, CSRF crumb, and retry."""
 
 from __future__ import annotations
 import json
@@ -46,7 +46,7 @@ class CloudBeesClient:
         self._timeout = timeout
         self._db_path = db_path
 
-    # ── Internal helpers ──────────────────────────────────────
+    # -- Internal helpers --------------------------------------
 
     def _headers(self) -> dict:
         return {
@@ -136,7 +136,7 @@ class CloudBeesClient:
         try:
             return self._request(method, path, **kwargs)
         except AuthError as exc:
-            # 403 may be expired crumb — invalidate and retry once
+            # 403 may be expired crumb -- invalidate and retry once
             if "403" in str(exc):
                 invalidate_crumb(self.base_url)
                 new_crumb = self._crumb_headers()
@@ -162,7 +162,7 @@ class CloudBeesClient:
             _log.debug("Failed to resolve redirect for %s: %s", url, exc)
         return None
 
-    # ── Public API ────────────────────────────────────────────
+    # -- Public API --------------------------------------------
 
     def get(self, path: str, cache_key: Optional[str] = None, **kwargs: Any) -> Any:
         """GET with optional SQLite cache. Pass cache_key to enable caching."""

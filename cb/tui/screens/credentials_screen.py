@@ -1,4 +1,4 @@
-"""Credentials screen — list, create, delete with store toggle."""
+"""Credentials screen -- list, create, delete with store toggle."""
 from __future__ import annotations
 from textual.app import ComposeResult
 from textual.screen import Screen

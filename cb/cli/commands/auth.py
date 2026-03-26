@@ -1,4 +1,4 @@
-"""cb CLI — auth commands: login, logout, profile."""
+"""cb CLI -- auth commands: login, logout, profile."""
 
 from __future__ import annotations
 import click

@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""Node / Agent service — list, get, create, copy, delete, toggle offline."""
+"""Node / Agent service -- list, get, create, copy, delete, toggle offline."""
 
 import json
 from pathlib import Path

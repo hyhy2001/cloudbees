@@ -2,8 +2,8 @@ from __future__ import annotations
 """Credential service - controller-scoped for CloudBees CI / OC.
 
 Endpoint pattern (as specified by CloudBees API):
-  store="system"  → /credentials/store/system/domain/_
-  store="user"    → /user/<username>/credentials/store/user/domain/_
+  store="system"  -> /credentials/store/system/domain/_
+  store="user"    -> /user/<username>/credentials/store/user/domain/_
 
 Default is "system" so Jobs and Nodes can use the credentials.
 """
@@ -15,7 +15,7 @@ from cb.api.client import CloudBeesClient
 from cb.api.xml_builder import build_username_password_cred_xml
 from cb.dtos.credential import CredentialDTO
 
-# Valid store choices — exposed for CLI/TUI validation.
+# Valid store choices -- exposed for CLI/TUI validation.
 CREDENTIAL_STORES = ("system", "user")
 
 
@@ -28,7 +28,7 @@ def _get_user_seg(username: str = "", store: str = "system") -> str:
     """
     if store == "user" and username and username.lower() != "system":
         return f"/user/{username}/credentials/store/user/domain/_"
-    # Fallback and default: system store — accessible by all jobs/nodes.
+    # Fallback and default: system store -- accessible by all jobs/nodes.
     return "/credentials/store/system/domain/_"
 
 

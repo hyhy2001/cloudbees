@@ -1,4 +1,4 @@
-"""Controller screen — list and select CloudBees controllers."""
+"""Controller screen -- list and select CloudBees controllers."""
 from __future__ import annotations
 from textual.app import ComposeResult
 from textual.screen import Screen

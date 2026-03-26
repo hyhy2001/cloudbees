@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""Settings repository — simple key/value store in SQLite."""
+"""Settings repository -- simple key/value store in SQLite."""
 
 from pathlib import Path
 from typing import Optional

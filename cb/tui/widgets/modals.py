@@ -13,13 +13,13 @@ class LoginModal(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="modal-box"):
-            yield Label("🐝  bee — Login to CloudBees")
+            yield Label("[bee] Login to CloudBees")
             yield Static("Server URL", classes="dim")
             yield Input(placeholder="https://your-cloudbees.example.com", id="url")
             yield Static("Username", classes="dim")
             yield Input(placeholder="admin", id="login-username")
             yield Static("Password", classes="dim")
-            yield Input(placeholder="••••••••", password=True, id="login-password")
+            yield Input(placeholder="password", password=True, id="login-password")
             yield Button("Login", variant="primary", id="btn-login")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -50,7 +50,7 @@ class ConfirmModal(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="modal-box"):
-            yield Label("⚠  Confirm Action")
+            yield Label("[!] Confirm Action")
             yield Static(self._message)
             yield Button("Confirm", variant="error", id="btn-confirm")
             yield Button("Cancel", id="btn-cancel")

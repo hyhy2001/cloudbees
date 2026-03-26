@@ -41,7 +41,7 @@ def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     # SQLite 3.7 compatible pragmas only
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = DELETE")  # NOT WAL — 3.7 compat
+    conn.execute("PRAGMA journal_mode = DELETE")  # NOT WAL -- 3.7 compat
     return conn
 
 @contextlib.contextmanager

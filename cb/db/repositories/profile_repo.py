@@ -1,4 +1,4 @@
-"""Profile and token repository — SQLite3 CRUD."""
+"""Profile and token repository -- SQLite3 CRUD."""
 
 from __future__ import annotations
 import time
@@ -8,7 +8,7 @@ from cb.db.connection import get_connection
 from cb.dtos.auth import ProfileDTO
 
 
-# ── Profile repo ──────────────────────────────────────────────
+# -- Profile repo ----------------------------------------------
 
 
 def save_profile(
@@ -32,7 +32,7 @@ def save_profile(
             (server_url.rstrip("/"), username, int(is_default), name),
         )
         if cur.rowcount == 0:
-            # New profile — INSERT
+            # New profile -- INSERT
             conn.execute(
                 """INSERT INTO profiles
                    (name, server_url, username, is_default, created_at)

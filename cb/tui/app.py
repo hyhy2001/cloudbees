@@ -1,4 +1,4 @@
-"""bee TUI — Textual-based interactive interface for CloudBees."""
+"""bee TUI -- Textual-based interactive interface for CloudBees."""
 
 from __future__ import annotations
 import logging
@@ -20,11 +20,11 @@ logging.basicConfig(
 
 
 class BeeApp(App):
-    """🐝 bee — CloudBees TUI (Textual)."""
+    """bee CloudBees TUI (Textual)."""
 
     CSS_PATH = "bee.tcss"
 
-    TITLE = f"bee {SYM.bee} — CloudBees TUI"
+    TITLE = f"bee {SYM.bee} -- CloudBees TUI"
 
     BINDINGS = [
         ("q", "quit", "Quit"),
@@ -39,7 +39,7 @@ class BeeApp(App):
         ("5", "switch_tab('settings')", "Settings"),
     ]
 
-    # Reactive app-level state — updates cascade to screens automatically
+    # Reactive app-level state -- updates cascade to screens automatically
     oc_client: reactive = reactive(None)     # Operations Center root client
     ctrl_client: reactive = reactive(None)   # Active controller-scoped client
     active_ctrl_name: reactive[str] = reactive("")
@@ -55,7 +55,7 @@ class BeeApp(App):
         super().__init__(**kwargs)
         self._db_path = db_path
 
-    # ── Compose ────────────────────────────────────────
+    # -- Compose ----------------------------------------
 
     def compose(self) -> ComposeResult:
         from cb.tui.screens.controller_screen import ControllerScreen
@@ -78,7 +78,7 @@ class BeeApp(App):
                 yield SettingsScreen()
         yield Footer()
 
-    # ── Startup ────────────────────────────────────────
+    # -- Startup ----------------------------------------
 
     def on_mount(self) -> None:
         self._restore_session()
@@ -117,7 +117,7 @@ class BeeApp(App):
 
             self.app.call_from_thread(
                 self.notify,
-                f"Logged in as {self._username}" + (f" · {ctrl[0]}" if ctrl else ""),
+                f"Logged in as {self._username}" + (f" [{ctrl[0]}]" if ctrl else ""),
                 title="bee",
             )
         except Exception as exc:
@@ -126,17 +126,17 @@ class BeeApp(App):
                 self.notify, f"Session error: {exc}", title="bee", severity="warning"
             )
 
-    # ── Dynamic header subtitle ────────────────────────
+    # -- Dynamic header subtitle ------------------------
 
     def watch_active_ctrl_name(self, name: str) -> None:
-        ctrl_suffix = f" · {name}" if name else ""
+        ctrl_suffix = f" [{name}]" if name else ""
         self.sub_title = f"{self._username}{ctrl_suffix}" if self._username else "not connected"
 
     def watch_oc_client(self, client) -> None:
         if client and not self._username:
             self.sub_title = "connected"
 
-    # ── Global key actions ─────────────────────────────
+    # -- Global key actions -----------------------------
 
     def action_switch_tab(self, tab_id: str) -> None:
         tabs = self.query_one(TabbedContent)
@@ -233,7 +233,7 @@ def _ensure_utf8() -> None:
                                          errors="replace",
                                          line_buffering=stream.line_buffering))
         except Exception:
-            pass  # non-wrappable stream (piped/redirected) — skip silently
+            pass  # non-wrappable stream (piped/redirected) -- skip silently
 
 
 def main(db_path: Optional[Path] = None) -> None:

@@ -19,7 +19,7 @@ class CreateCredModal(ModalScreen):
             yield Static("Username", classes="dim")
             yield Input(placeholder="service-user", id="cred-username")
             yield Static("Password", classes="dim")
-            yield Input(placeholder="••••••••", password=True, id="cred-password")
+            yield Input(placeholder="password", password=True, id="cred-password")
             yield Button("Create", variant="primary", id="btn-create")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

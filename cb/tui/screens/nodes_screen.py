@@ -1,4 +1,4 @@
-"""Nodes screen — list agents, toggle offline/online."""
+"""Nodes screen -- list agents, toggle offline/online."""
 from __future__ import annotations
 from textual.app import ComposeResult
 from textual.screen import Screen
@@ -38,7 +38,7 @@ class NodesScreen(Screen):
     def watch__error(self, error: str) -> None:
         if error:
             self.query_one(".panel-title", Static).update(
-                f"[red]Nodes — Error: {error}[/red]"
+                f"[red]Nodes -- Error: {error}[/red]"
             )
 
     @work(thread=True, exclusive=True, name="load-nodes")

@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""cb node — list, get, create, copy, delete, offline, online."""
+"""cb node -- list, get, create, copy, delete, offline, online."""
 
 import click
 from cb.cli.formatters import format_table, format_kv
