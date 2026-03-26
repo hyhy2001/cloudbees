@@ -11,27 +11,31 @@ from cb.tui.widgets.loader import AsciiLoader
 class ControllerPane(Widget):
     """Tab 1: List all controllers, select one to activate."""
 
-    PANE_TITLE = "Controllers"
+    PANE_TITLE = "Controllers  (Enter=select)"
     DEFAULT_CSS = "ControllerPane { height: 1fr; }"
 
-    BINDINGS = [
-        ("f5", "refresh", "Refresh"),
-        ("enter", "select_controller", "Select"),
-    ]
+    BINDINGS = [("f5", "refresh", "Refresh")]
 
     _loading: reactive[bool] = reactive(True)
     _error:   reactive[str]  = reactive("")
 
     def compose(self) -> ComposeResult:
-        yield Static("Controllers", classes="panel-title")
+        yield Static(self.PANE_TITLE, classes="panel-title")
         yield AsciiLoader(id="loader")
-        yield DataTable(id="ctrl-table", cursor_type="row")
+        yield DataTable(id="ctrl-table", cursor_type="row", zebra_stripes=True)
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
         table.add_columns("Name", "Online", "Type", "URL")
         table.display = False
         self._load_controllers()
+
+    def on_focus(self) -> None:
+        """Focus DataTable when pane gains focus."""
+        try:
+            self.query_one(DataTable).focus()
+        except Exception:
+            pass
 
     def watch__loading(self, loading: bool) -> None:
         self.query_one(AsciiLoader).display = loading
@@ -42,7 +46,7 @@ class ControllerPane(Widget):
         if error:
             title.update(f"[red]{self.PANE_TITLE} -- {error}[/red]")
         else:
-            title.update(self.PANE_TITLE)  # reset to default on clear
+            title.update(self.PANE_TITLE)
 
     @work(thread=True, exclusive=True, name="load-controllers")
     def _load_controllers(self) -> None:
@@ -78,17 +82,22 @@ class ControllerPane(Widget):
         invalidate_prefix("controllers.", self.app._db_path)
         self._load_controllers()
 
-    def action_select_controller(self) -> None:
-        table = self.query_one(DataTable)
-        controllers = getattr(self.app, "_controllers", [])
-        if not controllers or table.cursor_row < 0 or table.cursor_row >= len(controllers):
-            return
-        self._select(controllers[table.cursor_row])
-
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        controllers = getattr(self.app, "_controllers", [])
-        if controllers and event.cursor_row < len(controllers):
-            self._select(controllers[event.cursor_row])
+        controllers = self.app.bee_controllers
+        if not controllers or event.cursor_row >= len(controllers):
+            return
+        ctrl = controllers[event.cursor_row]
+        from cb.tui.screens.detail_screen import DetailScreen
+        info = [
+            ("Name",   ctrl.name),
+            ("Status", "ONLINE" if ctrl.online else "OFFLINE"),
+            ("Type",   ctrl.class_name.split(".")[-1]),
+            ("URL",    ctrl.url or ""),
+        ]
+        actions = [
+            ("s", "Select as Active", lambda c=ctrl: self._select(c)),
+        ]
+        self.app.push_screen(DetailScreen(f"Controller: {ctrl.name}", info, actions))
 
     @work(thread=True, name="select-controller")
     def _select(self, ctrl) -> None:
@@ -97,9 +106,13 @@ class ControllerPane(Widget):
         oc = self.app.oc_client
         if not oc:
             return
-        true_url = oc.resolve_redirect(ctrl.url) if ctrl.url else ctrl.url
-        if not true_url:
-            true_url = ctrl.url
+        true_url = ctrl.url
+        try:
+            resolved = oc.resolve_redirect(ctrl.url)
+            if resolved:
+                true_url = resolved
+        except Exception:
+            pass
         select_controller(ctrl.name, true_url or "", self.app._db_path)
         self.app.call_from_thread(setattr, self.app, "active_ctrl_name", ctrl.name)
         if true_url:
@@ -110,23 +123,9 @@ class ControllerPane(Widget):
             )
             self.app.call_from_thread(setattr, self.app, "ctrl_client", new_client)
         self.app.call_from_thread(
-            self.app.notify, f"Active controller: {ctrl.name}", title="Controller Selected"
+            self.app.notify,
+            f"Active controller: {ctrl.name}",
+            title="Controller Selected",
         )
-        try:
-            from cb.services.controller_service import get_controller_capabilities
-            caps = get_controller_capabilities(oc, ctrl.name)
-            rows = [
-                ("Status",      "ONLINE" if caps.online else "OFFLINE"),
-                ("Type",        caps.type_label),
-                ("URL",         (caps.url or "")[:50]),
-                ("",            ""),
-                ("Create Job",  "YES" if caps.can_create_job  else "NO"),
-                ("Create Node", "YES" if caps.can_create_node else "NO"),
-                ("Create Cred", "YES" if caps.can_create_cred else "NO"),
-            ]
-            from cb.tui.widgets.modals import InfoModal
-            self.app.call_from_thread(
-                self.app.push_screen, InfoModal(f"Controller: {ctrl.name}", rows)
-            )
-        except Exception:
-            pass
+        # Refresh other panes with new controller client
+        self.app.call_from_thread(self.app._refresh_all_panes)

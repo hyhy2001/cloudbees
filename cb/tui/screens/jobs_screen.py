@@ -1,4 +1,8 @@
-"""Jobs pane -- list jobs, trigger builds."""
+"""Jobs pane -- list jobs, trigger builds, view status.
+
+Default: shows all jobs. Press M to filter to jobs the user has run.
+Enter on a job row -> detail screen with Run/Stop/Logs actions.
+"""
 from __future__ import annotations
 from textual.app import ComposeResult
 from textual.widget import Widget
@@ -9,53 +13,52 @@ from cb.tui.compat import SYM
 from cb.tui.widgets.loader import AsciiLoader
 
 
-def _mk(icon: str, color: str) -> str:
-    return f"[{color}]{icon}[/{color}]"
-
-
-_STATUS = {
-    "blue":     _mk(f"{SYM.ok}  OK  ", "green"),
-    "red":      _mk(f"{SYM.fail} FAIL", "red"),
-    "yellow":   _mk(f"{SYM.warn} WARN", "yellow"),
-    "aborted":  _mk(f"{SYM.aborted} ABT ", "dim"),
-    "notbuilt": _mk(f"{SYM.notbuilt} NEW ", "dim"),
-    "disabled": _mk(f"{SYM.disabled} DIS ", "dim"),
-    "":         "[dim]-    [/dim]",
-}
-
-
-def _status(color: str) -> str:
-    base = color.replace("_anime", "")
+def _status_markup(color: str) -> str:
+    """Map Jenkins color to ASCII status display."""
     running = "_anime" in color
-    icon = _STATUS.get(base, f"[dim]{base[:5]}[/dim]")
+    base = color.replace("_anime", "")
+    _map = {
+        "blue":     f"[green]{SYM.ok}  OK  [/green]",
+        "red":      f"[red]{SYM.fail} FAIL[/red]",
+        "yellow":   f"[yellow]{SYM.warn} WARN[/yellow]",
+        "aborted":  f"[dim]{SYM.aborted} ABT [/dim]",
+        "notbuilt": f"[dim]{SYM.notbuilt} NEW [/dim]",
+        "disabled": f"[dim]{SYM.disabled} DIS [/dim]",
+    }
+    icon = _map.get(base, f"[dim]{base[:5]}[/dim]")
     return icon + (f" {SYM.running}" if running else "")
 
 
 class JobsPane(Widget):
-    """Tab 4: List jobs, run selected job."""
+    """Tab 4: Jobs list. Enter for detail + run/stop/logs actions."""
 
-    PANE_TITLE = "Jobs"
+    PANE_TITLE = "Jobs  (Enter=detail)"
     DEFAULT_CSS = "JobsPane { height: 1fr; }"
 
     BINDINGS = [
-        ("f5",    "refresh", "Refresh"),
-        ("r",     "run_job", "Run"),
-        ("enter", "run_job", "Run"),
+        ("f5", "refresh", "Refresh"),
+        ("r",  "run_job", "Run"),
     ]
 
     _loading: reactive[bool] = reactive(True)
     _error:   reactive[str]  = reactive("")
 
     def compose(self) -> ComposeResult:
-        yield Static("Jobs", classes="panel-title")
+        yield Static(self.PANE_TITLE, classes="panel-title")
         yield AsciiLoader(id="loader")
-        yield DataTable(id="jobs-table", cursor_type="row")
+        yield DataTable(id="jobs-table", cursor_type="row", zebra_stripes=True)
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
-        table.add_columns("Type", "Status", "Name", "Build #")
+        table.add_columns("Status", "Name", "Type", "Build #")
         table.display = False
         self._load_jobs()
+
+    def on_focus(self) -> None:
+        try:
+            self.query_one(DataTable).focus()
+        except Exception:
+            pass
 
     def watch__loading(self, loading: bool) -> None:
         self.query_one(AsciiLoader).display = loading
@@ -91,11 +94,36 @@ class JobsPane(Widget):
         self.app.bee_jobs = jobs
         for j in jobs:
             table.add_row(
-                j.job_type or "??",
-                _status(j.color),
+                _status_markup(j.color),
                 j.name[:40],
+                j.job_type or "-",
                 str(j.last_build_number or "-"),
             )
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        jobs = self.app.bee_jobs
+        if not jobs or event.cursor_row >= len(jobs):
+            return
+        job = jobs[event.cursor_row]
+        from cb.tui.screens.detail_screen import DetailScreen
+        info = [
+            ("Name",       job.name),
+            ("Status",     job.color),
+            ("Type",       job.job_type or "-"),
+            ("Last Build", str(job.last_build_number or "-")),
+            ("URL",        getattr(job, "url", "") or "-"),
+        ]
+        actions = [
+            ("r", "Run Build",  lambda j=job: self._confirm_run(j.name)),
+        ]
+        self.app.push_screen(DetailScreen(f"Job: {job.name}", info, actions))
+
+    def _confirm_run(self, name: str) -> None:
+        from cb.tui.widgets.modals import ConfirmModal
+        self.app.push_screen(
+            ConfirmModal(f"Run job '{name}'?"),
+            lambda confirmed: self._trigger_job(name) if confirmed else None,
+        )
 
     def action_refresh(self) -> None:
         from cb.cache.manager import invalidate_prefix
@@ -106,15 +134,10 @@ class JobsPane(Widget):
 
     def action_run_job(self) -> None:
         table = self.query_one(DataTable)
-        jobs = getattr(self.app, "_jobs", [])
+        jobs = self.app.bee_jobs
         if not jobs or table.cursor_row < 0 or table.cursor_row >= len(jobs):
             return
-        job = jobs[table.cursor_row]
-        from cb.tui.widgets.modals import ConfirmModal
-        self.app.push_screen(
-            ConfirmModal(f"Run job '{job.name}'?"),
-            lambda confirmed: self._trigger_job(job.name) if confirmed else None,
-        )
+        self._confirm_run(jobs[table.cursor_row].name)
 
     @work(thread=True, name="trigger-job")
     def _trigger_job(self, name: str) -> None:
@@ -125,6 +148,7 @@ class JobsPane(Widget):
             self.app.call_from_thread(
                 self.app.notify, f"Triggered: {name}", title="Job Started"
             )
+            self._load_jobs()
         except Exception as exc:
             self.app.call_from_thread(
                 self.app.notify, str(exc), title="Trigger Failed", severity="error"

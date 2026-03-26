@@ -185,14 +185,35 @@ Button.-error {
     text-style: bold;
 }
 
-/* -- Vertical containers -------------------------- */
-Vertical {
+/* -- Vertical containers in detail screen only ---- */
+#detail-info {
     border: ascii #30363d;
     padding: 1;
+    margin-bottom: 1;
 }
 
 /* -- Settings screen ------------------------------ */
 #sys-info {
     padding: 1;
     border: ascii #30363d;
+}
+
+/* -- Detail screen -------------------------------- */
+.kv-row {
+    height: 1;
+}
+
+#detail-actions {
+    margin-top: 1;
+    height: auto;
+    padding: 0 1;
+}
+
+#detail-actions Button {
+    margin-right: 1;
+    min-width: 14;
+}
+
+#detail-spacer {
+    height: 1;
 }

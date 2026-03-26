@@ -1,4 +1,8 @@
-"""Credentials pane -- list, create, delete with store toggle."""
+"""Credentials pane -- list, create, delete.
+
+Default: shows current user's credential store only (store='user').
+Press S to toggle between user/system stores.
+"""
 from __future__ import annotations
 from textual.app import ComposeResult
 from textual.widget import Widget
@@ -9,7 +13,7 @@ from cb.tui.widgets.loader import AsciiLoader
 
 
 class CredentialsPane(Widget):
-    """Tab 2: List credentials; toggle between system/user store."""
+    """Tab 2: User's credentials (default: user store). Toggle S for system."""
 
     DEFAULT_CSS = "CredentialsPane { height: 1fr; }"
 
@@ -22,12 +26,13 @@ class CredentialsPane(Widget):
 
     _loading: reactive[bool] = reactive(True)
     _error:   reactive[str]  = reactive("")
-    _store:   reactive[str]  = reactive("system")
+    # Default: "user" store -- shows only current user's credentials
+    _store:   reactive[str]  = reactive("user")
 
     def compose(self) -> ComposeResult:
         yield Label("", id="store-label")
         yield AsciiLoader(id="loader")
-        yield DataTable(id="creds-table", cursor_type="row")
+        yield DataTable(id="creds-table", cursor_type="row", zebra_stripes=True)
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
@@ -36,9 +41,20 @@ class CredentialsPane(Widget):
         self._update_store_label()
         self._load_creds()
 
+    def on_focus(self) -> None:
+        try:
+            self.query_one(DataTable).focus()
+        except Exception:
+            pass
+
     def _update_store_label(self) -> None:
+        store_display = (
+            "[green]user (mine)[/green]"
+            if self._store == "user"
+            else "[yellow]system (shared)[/yellow]"
+        )
         self.query_one("#store-label", Label).update(
-            f"[bold]Store:[/bold] [orange1]{self._store}[/orange1]  [dim](S to toggle)[/dim]"
+            f"[bold]Credential store:[/bold] {store_display}  [dim](S to toggle)[/dim]"
         )
 
     def watch__loading(self, loading: bool) -> None:
@@ -53,7 +69,7 @@ class CredentialsPane(Widget):
         if error:
             self.query_one("#store-label", Label).update(f"[red]Error: {error}[/red]")
         else:
-            self._update_store_label()  # reset to store indicator
+            self._update_store_label()
 
     @work(thread=True, exclusive=True, name="load-creds")
     def _load_creds(self) -> None:
@@ -86,6 +102,33 @@ class CredentialsPane(Widget):
                 (c.description or "")[:30], c.scope[:12],
             )
 
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        creds = self.app.bee_creds
+        if not creds or event.cursor_row >= len(creds):
+            return
+        cred = creds[event.cursor_row]
+        from cb.tui.screens.detail_screen import DetailScreen
+        info = [
+            ("ID",          cred.id),
+            ("Type",        cred.type_name),
+            ("Description", cred.description or ""),
+            ("Scope",       cred.scope),
+            ("Store",       self._store),
+        ]
+        actions = [
+            ("d", "Delete", lambda c=cred: self._confirm_delete(c.id)),
+        ]
+        self.app.push_screen(
+            DetailScreen(f"Credential: {cred.id}", info, actions)
+        )
+
+    def _confirm_delete(self, cred_id: str) -> None:
+        from cb.tui.widgets.modals import ConfirmModal
+        self.app.push_screen(
+            ConfirmModal(f"Delete '{cred_id}' from {self._store} store?"),
+            lambda confirmed: self._delete(cred_id) if confirmed else None,
+        )
+
     def action_refresh(self) -> None:
         from cb.cache.manager import invalidate_prefix
         invalidate_prefix("credentials.", self.app._db_path)
@@ -96,15 +139,10 @@ class CredentialsPane(Widget):
 
     def action_delete_cred(self) -> None:
         table = self.query_one(DataTable)
-        creds = getattr(self.app, "bee_creds", [])
+        creds = self.app.bee_creds
         if not creds or table.cursor_row < 0 or table.cursor_row >= len(creds):
             return
-        cred = creds[table.cursor_row]
-        from cb.tui.widgets.modals import ConfirmModal
-        self.app.push_screen(
-            ConfirmModal(f"Delete credential '{cred.id}' from {self._store} store?"),
-            lambda confirmed: self._delete(cred.id) if confirmed else None,
-        )
+        self._confirm_delete(creds[table.cursor_row].id)
 
     @work(thread=True, name="delete-cred")
     def _delete(self, cred_id: str) -> None:

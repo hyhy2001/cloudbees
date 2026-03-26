@@ -150,13 +150,22 @@ class BeeApp(App):
         tabs = self.query_one(TabbedContent)
         tabs.active = tab_id
 
-    def action_refresh_active(self) -> None:
-        """Delegate F5 to the active tab's screen."""
+    def on_tabbed_content_tab_activated(
+        self, event: TabbedContent.TabActivated
+    ) -> None:
+        """Auto-focus the DataTable in the newly-active tab pane."""
         try:
-            active = self.query_one(TabbedContent).active
-            self.post_message_to_all_widgets = False  # suppress
-            # Focus the active tab pane and trigger its refresh action
-            self.action_switch_tab(active)
+            from textual.widgets import DataTable
+            event.pane.query_one(DataTable).focus()
+        except Exception:
+            pass
+
+    def action_refresh_active(self) -> None:
+        """Delegate F5 to the active tab pane's refresh action."""
+        try:
+            active = self.query_one(TabbedContent).active_pane
+            if active:
+                active.action_refresh()
         except Exception:
             pass
 
