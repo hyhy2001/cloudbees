@@ -1,49 +1,54 @@
+"""Jobs pane -- list jobs, trigger builds."""
+from __future__ import annotations
 from textual.app import ComposeResult
-from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Static
+from textual.widget import Widget
+from textual.widgets import DataTable, Static
 from textual.reactive import reactive
-from cb.tui.compat import SYM
 from textual import work
+from cb.tui.compat import SYM
 from cb.tui.widgets.loader import AsciiLoader
+
 
 def _mk(icon: str, color: str) -> str:
     return f"[{color}]{icon}[/{color}]"
 
-_STATUS_MARKUP = {
-    "blue":     _mk(f"{SYM.ok}  OK   ", "green"),
-    "red":      _mk(f"{SYM.fail}  FAIL ", "red"),
-    "yellow":   _mk(f"{SYM.warn}  WARN ", "yellow"),
-    "aborted":  _mk(f"{SYM.aborted}  ABT  ", "dim"),
-    "notbuilt": _mk(f"{SYM.notbuilt}  NEW  ", "dim"),
-    "disabled": _mk(f"{SYM.disabled}  DIS  ", "dim"),
-    "": f"[dim]-       [/dim]",
+
+_STATUS = {
+    "blue":     _mk(f"{SYM.ok}  OK  ", "green"),
+    "red":      _mk(f"{SYM.fail} FAIL", "red"),
+    "yellow":   _mk(f"{SYM.warn} WARN", "yellow"),
+    "aborted":  _mk(f"{SYM.aborted} ABT ", "dim"),
+    "notbuilt": _mk(f"{SYM.notbuilt} NEW ", "dim"),
+    "disabled": _mk(f"{SYM.disabled} DIS ", "dim"),
+    "":         "[dim]-    [/dim]",
 }
 
 
 def _status(color: str) -> str:
     base = color.replace("_anime", "")
     running = "_anime" in color
-    icon = _STATUS_MARKUP.get(base, f"[dim]{base[:6]}[/dim]")
-    return icon + (f" [{SYM.running}]" if running else "")
+    icon = _STATUS.get(base, f"[dim]{base[:5]}[/dim]")
+    return icon + (f" {SYM.running}" if running else "")
 
 
-class JobsScreen(Screen):
-    """Screen 4: List jobs, run selected job."""
+class JobsPane(Widget):
+    """Tab 4: List jobs, run selected job."""
+
+    DEFAULT_CSS = "JobsPane { height: 1fr; }"
 
     BINDINGS = [
-        ("f5", "refresh", "Refresh"),
-        ("r", "run_job", "Run"),
+        ("f5",    "refresh", "Refresh"),
+        ("r",     "run_job", "Run"),
         ("enter", "run_job", "Run"),
     ]
 
     _loading: reactive[bool] = reactive(True)
-    _error: reactive[str] = reactive("")
+    _error:   reactive[str]  = reactive("")
 
     def compose(self) -> ComposeResult:
         yield Static("Jobs", classes="panel-title")
         yield AsciiLoader(id="loader")
         yield DataTable(id="jobs-table", cursor_type="row")
-        yield Footer()
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
@@ -58,7 +63,7 @@ class JobsScreen(Screen):
     def watch__error(self, error: str) -> None:
         if error:
             self.query_one(".panel-title", Static).update(
-                f"[red]Jobs -- Error: {error}[/red]"
+                f"[red]Jobs -- {error}[/red]"
             )
 
     @work(thread=True, exclusive=True, name="load-jobs")
@@ -103,12 +108,11 @@ class JobsScreen(Screen):
         if not jobs or table.cursor_row < 0 or table.cursor_row >= len(jobs):
             return
         job = jobs[table.cursor_row]
-
         from cb.tui.widgets.modals import ConfirmModal
-        def _on_confirm(confirmed: bool) -> None:
-            if confirmed:
-                self._trigger_job(job.name)
-        self.app.push_screen(ConfirmModal(f"Run job '{job.name}'?"), _on_confirm)
+        self.app.push_screen(
+            ConfirmModal(f"Run job '{job.name}'?"),
+            lambda confirmed: self._trigger_job(job.name) if confirmed else None,
+        )
 
     @work(thread=True, name="trigger-job")
     def _trigger_job(self, name: str) -> None:
@@ -116,7 +120,9 @@ class JobsScreen(Screen):
             client = self.app.ctrl_client or self.app.oc_client
             from cb.services.job_service import trigger_job
             trigger_job(client, name)
-            self.app.call_from_thread(self.app.notify, f"Triggered: {name}", title="Job Started")
+            self.app.call_from_thread(
+                self.app.notify, f"Triggered: {name}", title="Job Started"
+            )
         except Exception as exc:
             self.app.call_from_thread(
                 self.app.notify, str(exc), title="Trigger Failed", severity="error"

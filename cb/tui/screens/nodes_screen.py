@@ -1,28 +1,31 @@
+"""Nodes pane -- list agents, toggle offline/online."""
+from __future__ import annotations
 from textual.app import ComposeResult
-from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Static
+from textual.widget import Widget
+from textual.widgets import DataTable, Static
 from textual.reactive import reactive
 from textual import work
 from cb.tui.widgets.loader import AsciiLoader
 
 
-class NodesScreen(Screen):
-    """Screen 3: List agent nodes; toggle offline status."""
+class NodesPane(Widget):
+    """Tab 3: List agent nodes; toggle offline status."""
+
+    DEFAULT_CSS = "NodesPane { height: 1fr; }"
 
     BINDINGS = [
-        ("f5", "refresh", "Refresh"),
-        ("o", "toggle_offline", "Toggle Offline"),
+        ("f5",    "refresh",        "Refresh"),
+        ("o",     "toggle_offline", "Toggle Offline"),
         ("enter", "toggle_offline", "Toggle"),
     ]
 
     _loading: reactive[bool] = reactive(True)
-    _error: reactive[str] = reactive("")
+    _error:   reactive[str]  = reactive("")
 
     def compose(self) -> ComposeResult:
         yield Static("Nodes / Agents", classes="panel-title")
         yield AsciiLoader(id="loader")
         yield DataTable(id="nodes-table", cursor_type="row")
-        yield Footer()
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
@@ -37,7 +40,7 @@ class NodesScreen(Screen):
     def watch__error(self, error: str) -> None:
         if error:
             self.query_one(".panel-title", Static).update(
-                f"[red]Nodes -- Error: {error}[/red]"
+                f"[red]Nodes -- {error}[/red]"
             )
 
     @work(thread=True, exclusive=True, name="load-nodes")
@@ -79,10 +82,10 @@ class NodesScreen(Screen):
         node = nodes[table.cursor_row]
         action = "online" if node.offline else "offline"
         from cb.tui.widgets.modals import ConfirmModal
-        def _on_confirm(confirmed: bool) -> None:
-            if confirmed:
-                self._do_toggle(node.name)
-        self.app.push_screen(ConfirmModal(f"Mark node '{node.name}' {action}?"), _on_confirm)
+        self.app.push_screen(
+            ConfirmModal(f"Mark node '{node.name}' {action}?"),
+            lambda confirmed: self._do_toggle(node.name) if confirmed else None,
+        )
 
     @work(thread=True, name="toggle-node")
     def _do_toggle(self, name: str) -> None:
@@ -90,7 +93,9 @@ class NodesScreen(Screen):
             client = self.app.ctrl_client or self.app.oc_client
             from cb.services.node_service import toggle_offline
             toggle_offline(client, name)
-            self.app.call_from_thread(self.app.notify, f"Toggled: {name}", title="Node Updated")
+            self.app.call_from_thread(
+                self.app.notify, f"Toggled: {name}", title="Node Updated"
+            )
             self._load_nodes()
         except Exception as exc:
             self.app.call_from_thread(

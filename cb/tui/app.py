@@ -58,24 +58,24 @@ class BeeApp(App):
     # -- Compose ----------------------------------------
 
     def compose(self) -> ComposeResult:
-        from cb.tui.screens.controller_screen import ControllerScreen
-        from cb.tui.screens.credentials_screen import CredentialsScreen
-        from cb.tui.screens.nodes_screen import NodesScreen
-        from cb.tui.screens.jobs_screen import JobsScreen
-        from cb.tui.screens.settings_screen import SettingsScreen
+        from cb.tui.screens.controller_screen import ControllerPane
+        from cb.tui.screens.credentials_screen import CredentialsPane
+        from cb.tui.screens.nodes_screen import NodesPane
+        from cb.tui.screens.jobs_screen import JobsPane
+        from cb.tui.screens.settings_screen import SettingsPane
 
         yield Header()
         with TabbedContent(initial="controller"):
             with TabPane("1 Controller", id="controller"):
-                yield ControllerScreen()
+                yield ControllerPane()
             with TabPane("2 Credentials", id="credentials"):
-                yield CredentialsScreen()
+                yield CredentialsPane()
             with TabPane("3 Nodes", id="nodes"):
-                yield NodesScreen()
+                yield NodesPane()
             with TabPane("4 Jobs", id="jobs"):
-                yield JobsScreen()
+                yield JobsPane()
             with TabPane("5 Settings", id="settings"):
-                yield SettingsScreen()
+                yield SettingsPane()
         yield Footer()
 
     # -- Startup ----------------------------------------
