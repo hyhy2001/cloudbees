@@ -63,7 +63,7 @@ class NodesPane(Widget):
     def _populate_table(self, nodes: list) -> None:
         table = self.query_one(DataTable)
         table.clear()
-        self.app._nodes = nodes
+        self.app.bee_nodes = nodes
         for n in nodes:
             status = "[red]OFFLINE[/red]" if n.offline else "[green]ONLINE[/green]"
             labels = n.labels if isinstance(n.labels, str) else " ".join(n.labels)

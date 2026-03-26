@@ -86,7 +86,7 @@ class JobsPane(Widget):
     def _populate_table(self, jobs: list) -> None:
         table = self.query_one(DataTable)
         table.clear()
-        self.app._jobs = jobs
+        self.app.bee_jobs = jobs
         for j in jobs:
             table.add_row(
                 j.job_type or "??",

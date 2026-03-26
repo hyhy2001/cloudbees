@@ -62,7 +62,7 @@ class ControllerPane(Widget):
     def _populate_table(self, controllers: list) -> None:
         table = self.query_one(DataTable)
         table.clear()
-        self.app._controllers = controllers
+        self.app.bee_controllers = controllers
         for c in controllers:
             status = "[green]YES[/green]" if c.online else "[red]NO[/red]"
             table.add_row(

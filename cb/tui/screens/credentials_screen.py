@@ -77,7 +77,7 @@ class CredentialsPane(Widget):
     def _populate_table(self, creds: list) -> None:
         table = self.query_one(DataTable)
         table.clear()
-        self.app._creds = creds
+        self.app.bee_creds = creds
         for c in creds:
             table.add_row(
                 c.id[:22], c.type_name[:22],
