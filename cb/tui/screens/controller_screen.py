@@ -11,6 +11,7 @@ from cb.tui.widgets.loader import AsciiLoader
 class ControllerPane(Widget):
     """Tab 1: List all controllers, select one to activate."""
 
+    PANE_TITLE = "Controllers"
     DEFAULT_CSS = "ControllerPane { height: 1fr; }"
 
     BINDINGS = [
@@ -37,10 +38,11 @@ class ControllerPane(Widget):
         self.query_one(DataTable).display = not loading
 
     def watch__error(self, error: str) -> None:
+        title = self.query_one(".panel-title", Static)
         if error:
-            self.query_one(".panel-title", Static).update(
-                f"[red]Controllers -- {error}[/red]"
-            )
+            title.update(f"[red]{self.PANE_TITLE} -- {error}[/red]")
+        else:
+            title.update(self.PANE_TITLE)  # reset to default on clear
 
     @work(thread=True, exclusive=True, name="load-controllers")
     def _load_controllers(self) -> None:

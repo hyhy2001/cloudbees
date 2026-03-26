@@ -52,6 +52,8 @@ class CredentialsPane(Widget):
     def watch__error(self, error: str) -> None:
         if error:
             self.query_one("#store-label", Label).update(f"[red]Error: {error}[/red]")
+        else:
+            self._update_store_label()  # reset to store indicator
 
     @work(thread=True, exclusive=True, name="load-creds")
     def _load_creds(self) -> None:
@@ -94,7 +96,7 @@ class CredentialsPane(Widget):
 
     def action_delete_cred(self) -> None:
         table = self.query_one(DataTable)
-        creds = getattr(self.app, "_creds", [])
+        creds = getattr(self.app, "bee_creds", [])
         if not creds or table.cursor_row < 0 or table.cursor_row >= len(creds):
             return
         cred = creds[table.cursor_row]

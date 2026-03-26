@@ -11,6 +11,7 @@ from cb.tui.widgets.loader import AsciiLoader
 class NodesPane(Widget):
     """Tab 3: List agent nodes; toggle offline status."""
 
+    PANE_TITLE = "Nodes / Agents"
     DEFAULT_CSS = "NodesPane { height: 1fr; }"
 
     BINDINGS = [
@@ -38,10 +39,11 @@ class NodesPane(Widget):
         self.query_one(DataTable).display = not loading
 
     def watch__error(self, error: str) -> None:
+        title = self.query_one(".panel-title", Static)
         if error:
-            self.query_one(".panel-title", Static).update(
-                f"[red]Nodes -- {error}[/red]"
-            )
+            title.update(f"[red]{self.PANE_TITLE} -- {error}[/red]")
+        else:
+            title.update(self.PANE_TITLE)
 
     @work(thread=True, exclusive=True, name="load-nodes")
     def _load_nodes(self) -> None:

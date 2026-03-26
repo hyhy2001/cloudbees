@@ -34,6 +34,7 @@ def _status(color: str) -> str:
 class JobsPane(Widget):
     """Tab 4: List jobs, run selected job."""
 
+    PANE_TITLE = "Jobs"
     DEFAULT_CSS = "JobsPane { height: 1fr; }"
 
     BINDINGS = [
@@ -61,10 +62,11 @@ class JobsPane(Widget):
         self.query_one(DataTable).display = not loading
 
     def watch__error(self, error: str) -> None:
+        title = self.query_one(".panel-title", Static)
         if error:
-            self.query_one(".panel-title", Static).update(
-                f"[red]Jobs -- {error}[/red]"
-            )
+            title.update(f"[red]{self.PANE_TITLE} -- {error}[/red]")
+        else:
+            title.update(self.PANE_TITLE)
 
     @work(thread=True, exclusive=True, name="load-jobs")
     def _load_jobs(self) -> None:
