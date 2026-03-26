@@ -35,7 +35,7 @@ def cmd_list(ctx, show_all):
         
         if not show_all:
             profile_name = ctx.obj.get("profile") or "default"
-            tracked = get_tracked_resources("node", profile_name)
+            tracked = get_tracked_resources("node", profile_name, controller_name=_client(ctx).base_url)
             tracked_set = set(tracked)
             
             display_nodes = [n for n in all_nodes if n.name in tracked_set]
@@ -135,7 +135,7 @@ def cmd_create(ctx, name, remote_dir, executors, labels, description, host, port
             java_path=java_path,
         )
         from cb.db.repositories.resource_repo import track_resource
-        track_resource("node", name, ctx.obj.get("profile") or "default")
+        track_resource("node", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Node '{name}' created.")
         if host:
             cred_display = cred_id or 'None'
@@ -157,7 +157,7 @@ def cmd_copy(ctx, source_name, new_name):
     try:
         copy_node(_client(ctx), source_name, new_name)
         from cb.db.repositories.resource_repo import track_resource
-        track_resource("node", new_name, ctx.obj.get("profile") or "default")
+        track_resource("node", new_name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Node '{new_name}' created (copied from '{source_name}').")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
@@ -176,7 +176,7 @@ def cmd_delete(ctx, name, yes):
             click.confirm(f"Delete node '{name}'?", abort=True)
         delete_node(_client(ctx), name)
         from cb.db.repositories.resource_repo import untrack_resource
-        untrack_resource("node", name, ctx.obj.get("profile") or "default")
+        untrack_resource("node", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Node '{name}' deleted.")
     except click.Abort:
         click.echo("Cancelled.")

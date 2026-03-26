@@ -42,7 +42,7 @@ def cmd_list(ctx, show_all):
         
         if not show_all:
             profile_name = ctx.obj.get("profile") or "default"
-            tracked = get_tracked_resources("job", profile_name)
+            tracked = get_tracked_resources("job", profile_name, controller_name=_client(ctx).base_url)
             tracked_set = set(tracked)
             
             display_jobs = [j for j in all_jobs if j.name in tracked_set]
@@ -113,7 +113,7 @@ def create_freestyle(ctx, name, description, shell, chdir, node):
             shell = click.prompt("Shell command", default="echo hello")
         create_freestyle_job(_client(ctx), name=name, desc=description, shell_cmd=shell, chdir=chdir, node=node)
         from cb.db.repositories.resource_repo import track_resource
-        track_resource("job", name, ctx.obj.get("profile") or "default")
+        track_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Freestyle job '{name}' created." + (f" on node '{node}'" if node else ""))
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
@@ -145,7 +145,7 @@ def create_pipeline(ctx, name, description, script, script_file, node):
             script = "\n".join(lines)
         create_pipeline_job(_client(ctx), name=name, desc=description, script=script, node=node)
         from cb.db.repositories.resource_repo import track_resource
-        track_resource("job", name, ctx.obj.get("profile") or "default")
+        track_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Pipeline job '{name}' created." + (f" on node '{node}'" if node else ""))
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
@@ -162,7 +162,7 @@ def create_folder(ctx, name, description):
     try:
         create_folder(_client(ctx), name=name, desc=description)
         from cb.db.repositories.resource_repo import track_resource
-        track_resource("job", name, ctx.obj.get("profile") or "default")
+        track_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Folder '{name}' created.")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
@@ -202,7 +202,7 @@ def cmd_delete(ctx, name, yes):
                 click.echo("Proceeding with local removal anyway.")
         
         # Always remove from local tracking
-        untrack_resource("job", name, ctx.obj.get("profile") or "default")
+        untrack_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Job '{name}' removed from local database.")
         
     except click.Abort:

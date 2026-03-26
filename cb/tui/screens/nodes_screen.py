@@ -70,15 +70,25 @@ class NodesPane(Widget):
                 self._error = "Not logged in."
                 return
             from cb.services.node_service import list_nodes
-            nodes = list_nodes(client)
-            # Filter: mine = nodes whose labels contain the username
-            username = getattr(self.app, "_username", "")
-            if self._mine_only and username:
-                nodes = [
-                    n for n in nodes
-                    if username.lower() in (n.labels or "").lower()
-                    or n.name.lower() == username.lower()
-                ] or nodes  # fallback: show all if no match
+            from cb.db.repositories.resource_repo import get_tracked_resources
+            import cb.dtos.node as node_dto
+
+            all_nodes = list_nodes(client)
+            if self._mine_only:
+                profile_name = getattr(self.app, "_username", "") or "default"
+                tracked = get_tracked_resources("node", profile_name, controller_name=client.base_url, db_path=self.app._db_path)
+                tracked_set = set(tracked)
+
+                display_nodes = [n for n in all_nodes if n.name in tracked_set]
+                server_names = {n.name for n in all_nodes}
+
+                missing = tracked_set - server_names
+                for m in list(missing):
+                    display_nodes.append(node_dto.NodeDTO(name=m, offline=True, num_executors=0, labels="[DELETED_ON_SERVER]"))
+                nodes = display_nodes
+            else:
+                nodes = all_nodes
+
             self.app.call_from_thread(self._populate_table, nodes)
         except Exception as exc:
             self._error = str(exc)

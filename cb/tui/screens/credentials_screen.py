@@ -19,6 +19,7 @@ class CredentialsPane(Widget):
 
     BINDINGS = [
         ("f5", "refresh",      "Refresh"),
+        ("a",  "toggle_all",   "Mine/All"),
         ("s",  "toggle_store", "Toggle Store"),
         ("c",  "create_cred",  "Create"),
         ("d",  "delete_cred",  "Delete"),
@@ -26,6 +27,7 @@ class CredentialsPane(Widget):
 
     _loading: reactive[bool] = reactive(True)
     _error:   reactive[str]  = reactive("")
+    _show_all: reactive[bool] = reactive(False)
     # Default: "user" store -- shows only current user's credentials
     _store:   reactive[str]  = reactive("user")
 
@@ -49,13 +51,18 @@ class CredentialsPane(Widget):
 
     def _update_store_label(self) -> None:
         store_display = (
-            "[green]user (mine)[/green]"
+            "[green]user[/green]"
             if self._store == "user"
             else "[yellow]system (shared)[/yellow]"
         )
+        show_display = "[yellow](all)[/yellow]" if self._show_all else "[green](mine)[/green]"
         self.query_one("#store-label", Label).update(
-            f"[bold]Credential store:[/bold] {store_display}  [dim](S to toggle)[/dim]"
+            f"[bold]Store:[/bold] {store_display} {show_display}  [dim](S: store, A: all/mine)[/dim]"
         )
+
+    def watch__show_all(self, show: bool) -> None:
+        self._update_store_label()
+        self._load_creds()
 
     def watch__loading(self, loading: bool) -> None:
         self.query_one(AsciiLoader).display = loading
@@ -81,11 +88,31 @@ class CredentialsPane(Widget):
                 self._error = "Not logged in. Press L."
                 return
             from cb.services.credential_service import list_credentials
-            creds = list_credentials(
+            from cb.db.repositories.resource_repo import get_tracked_resources
+            import cb.dtos.credential as cred_dto
+
+            username_str = getattr(self.app, "_username", "")
+            all_creds = list_credentials(
                 client,
-                username=getattr(self.app, "_username", ""),
+                username=username_str,
                 store=self._store,
             )
+
+            if not self._show_all:
+                profile_name = username_str or "default"
+                tracked = get_tracked_resources("credential", profile_name, controller_name=client.base_url, db_path=self.app._db_path)
+                tracked_set = set(tracked)
+
+                display_creds = [c for c in all_creds if c.id in tracked_set]
+                server_ids = {c.id for c in all_creds}
+                
+                missing = tracked_set - server_ids
+                for m in list(missing):
+                    display_creds.append(cred_dto.CredentialDTO(id=m, type_name="[DELETED]", description="[DELETED_ON_SERVER]"))
+                creds = display_creds
+            else:
+                creds = all_creds
+
             self.app.call_from_thread(self._populate_table, creds)
         except Exception as exc:
             self._error = str(exc)
@@ -134,6 +161,10 @@ class CredentialsPane(Widget):
         invalidate_prefix("credentials.", self.app._db_path)
         self._load_creds()
 
+    def action_toggle_all(self) -> None:
+        self._show_all = not self._show_all
+        # watch__show_all will trigger _load_creds automatically
+
     def action_toggle_store(self) -> None:
         self._store = "user" if self._store == "system" else "system"
 
@@ -154,6 +185,8 @@ class CredentialsPane(Widget):
                 username=getattr(self.app, "_username", ""),
                 store=self._store,
             )
+            from cb.db.repositories.resource_repo import untrack_resource
+            untrack_resource("credential", cred_id, getattr(self.app, "_username", "") or "default", controller_name=client.base_url, db_path=self.app._db_path)
             self.app.call_from_thread(
                 self.app.notify, f"Deleted: {cred_id}", title="Credential Deleted"
             )
@@ -180,6 +213,8 @@ class CredentialsPane(Widget):
                 client, cred_id=cred_id, username_cred=username, password=password,
                 username=getattr(self.app, "_username", ""), store=store,
             )
+            from cb.db.repositories.resource_repo import track_resource
+            track_resource("credential", cred_id, getattr(self.app, "_username", "") or "default", controller_name=client.base_url, db_path=self.app._db_path)
             self.app.call_from_thread(
                 self.app.notify, f"Created: {cred_id}", title="Credential Created"
             )

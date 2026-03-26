@@ -37,11 +37,13 @@ class JobsPane(Widget):
 
     BINDINGS = [
         ("f5", "refresh", "Refresh"),
+        ("a",  "toggle_all", "Mine/All"),
         ("r",  "run_job", "Run"),
     ]
 
     _loading: reactive[bool] = reactive(True)
     _error:   reactive[str]  = reactive("")
+    _show_all: reactive[bool] = reactive(False)
 
     def compose(self) -> ComposeResult:
         yield Static(self.PANE_TITLE, classes="panel-title")
@@ -69,7 +71,11 @@ class JobsPane(Widget):
         if error:
             title.update(f"[red]{self.PANE_TITLE} -- {error}[/red]")
         else:
-            title.update(self.PANE_TITLE)
+            self.watch__show_all(self._show_all)
+
+    def watch__show_all(self, show: bool) -> None:
+        suffix = "  [yellow](all)[/yellow]" if show else "  [green](mine)[/green]"
+        self.query_one(".panel-title", Static).update(f"{self.PANE_TITLE}{suffix}")
 
     @work(thread=True, exclusive=True, name="load-jobs")
     def _load_jobs(self) -> None:
@@ -81,7 +87,26 @@ class JobsPane(Widget):
                 self._error = "Not logged in."
                 return
             from cb.services.job_service import list_jobs
-            jobs = list_jobs(client)
+            from cb.db.repositories.resource_repo import get_tracked_resources
+            import cb.dtos.job as job_dto
+
+            all_jobs = list_jobs(client)
+            if not self._show_all:
+                profile_name = getattr(self.app, "_username", "") or "default"
+                tracked = get_tracked_resources("job", profile_name, controller_name=client.base_url, db_path=self.app._db_path)
+                tracked_set = set(tracked)
+
+                display_jobs = [j for j in all_jobs if j.name in tracked_set]
+                server_names = {j.name for j in all_jobs}
+                
+                missing = tracked_set - server_names
+                for m in list(missing):
+                    display_jobs.append(job_dto.JobDTO(name=m, url="", color="[DELETED_ON_SERVER]"))
+                    
+                jobs = display_jobs
+            else:
+                jobs = all_jobs
+
             self.app.call_from_thread(self._populate_table, jobs)
         except Exception as exc:
             self._error = str(exc)
@@ -130,6 +155,10 @@ class JobsPane(Widget):
         client = self.app.ctrl_client or self.app.oc_client
         if client:
             invalidate_prefix("jobs.", self.app._db_path)
+        self._load_jobs()
+
+    def action_toggle_all(self) -> None:
+        self._show_all = not self._show_all
         self._load_jobs()
 
     def action_run_job(self) -> None:

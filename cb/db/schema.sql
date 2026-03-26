@@ -51,9 +51,10 @@ CREATE TABLE IF NOT EXISTS pipelines (
 );
 
 CREATE TABLE IF NOT EXISTS user_resources (
-    resource_type TEXT NOT NULL,
-    name          TEXT NOT NULL,
-    profile_name  TEXT NOT NULL,
-    created_at    INTEGER NOT NULL,
-    PRIMARY KEY (resource_type, name, profile_name)
+    resource_type   TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    profile_name    TEXT NOT NULL,
+    controller_name TEXT NOT NULL DEFAULT '',
+    created_at      INTEGER NOT NULL,
+    PRIMARY KEY (resource_type, name, profile_name, controller_name)
 );
