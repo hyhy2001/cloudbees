@@ -1,4 +1,7 @@
-/* bee.tcss — Textual CSS for the bee CloudBees TUI */
+/* bee.tcss — ASCII-safe styling for bee CloudBees TUI
+   All borders use the textual "ascii" style: + - |
+   Compatible with any terminal, no Unicode box-drawing required.
+*/
 
 /* ── Base ───────────────────────────────────────── */
 Screen {
@@ -13,15 +16,16 @@ Header {
     text-style: bold;
 }
 
-/* ── Footer / Status ────────────────────────────── */
+/* ── Footer ─────────────────────────────────────── */
 Footer {
     background: #161b22;
     color: #8b949e;
 }
 
-/* ── Tabs sidebar ───────────────────────────────── */
+/* ── Tabs ───────────────────────────────────────── */
 TabbedContent {
     height: 1fr;
+    border: ascii #30363d;
 }
 
 TabPane {
@@ -49,6 +53,7 @@ DataTable {
     height: 1fr;
     background: #0d1117;
     color: #c9d1d9;
+    border: ascii #30363d;
 }
 
 DataTable > .datatable--header {
@@ -66,24 +71,29 @@ DataTable > .datatable--hover {
     background: #21262d;
 }
 
-/* ── Labels / Badges ────────────────────────────── */
+/* ── Status colours ─────────────────────────────── */
 .success { color: #3fb950; }
 .error   { color: #f85149; }
 .warning { color: #d29922; }
 .dim     { color: #8b949e; }
 .url     { color: #58a6ff; }
 
-/* ── Status bar strip ───────────────────────────── */
+/* ── Panel title ────────────────────────────────── */
+.panel-title {
+    color: #58a6ff;
+    text-style: bold;
+    margin-bottom: 1;
+    padding: 0 1;
+    border-bottom: ascii #30363d;
+}
+
+/* ── Status bar ─────────────────────────────────── */
 #status-bar {
     height: 1;
     background: #161b22;
     color: #8b949e;
     padding: 0 1;
 }
-
-#status-bar .status-ok     { color: #3fb950; }
-#status-bar .status-error  { color: #f85149; }
-#status-bar .status-ctrl   { color: #f0883e; text-style: bold; }
 
 /* ── Modals ─────────────────────────────────────── */
 ModalScreen {
@@ -92,9 +102,9 @@ ModalScreen {
 
 #modal-box {
     background: #161b22;
-    border: solid #30363d;
+    border: ascii #58a6ff;
     padding: 1 2;
-    width: 60;
+    width: 62;
     height: auto;
     max-height: 30;
 }
@@ -103,17 +113,24 @@ ModalScreen {
     color: #58a6ff;
     text-style: bold;
     margin-bottom: 1;
+    border-bottom: ascii #30363d;
+    padding-bottom: 1;
+}
+
+#modal-box Static {
+    color: #8b949e;
+    margin-bottom: 0;
 }
 
 #modal-box Input {
     background: #21262d;
-    border: solid #30363d;
+    border: ascii #30363d;
     color: #c9d1d9;
     margin-bottom: 1;
 }
 
 #modal-box Input:focus {
-    border: solid #1f6feb;
+    border: ascii #58a6ff;
 }
 
 #modal-box Button {
@@ -134,12 +151,13 @@ Button.-error {
     color: #ffffff;
 }
 
-/* ── Credential store toggle ────────────────────── */
+/* ── Credential store label ─────────────────────── */
 #store-label {
     background: #21262d;
     color: #f0883e;
     padding: 0 1;
     margin-bottom: 1;
+    border: ascii #30363d;
 }
 
 /* ── Loading indicator ──────────────────────────── */
@@ -148,13 +166,7 @@ LoadingIndicator {
     color: #58a6ff;
 }
 
-/* ── Static / info panels ───────────────────────── */
-.panel-title {
-    color: #58a6ff;
-    text-style: bold underline;
-    margin-bottom: 1;
-}
-
+/* ── Static info panels ─────────────────────────── */
 .kv-label {
     color: #8b949e;
     width: 18;
@@ -163,4 +175,16 @@ LoadingIndicator {
 .kv-value {
     color: #c9d1d9;
     text-style: bold;
+}
+
+/* ── Vertical containers ────────────────────────── */
+Vertical {
+    border: ascii #30363d;
+    padding: 1;
+}
+
+/* ── Settings screen ────────────────────────────── */
+#sys-info {
+    padding: 1;
+    border: ascii #30363d;
 }

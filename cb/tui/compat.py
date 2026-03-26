@@ -1,58 +1,46 @@
 """Terminal compatibility helpers.
 
-Detects whether the current terminal supports Unicode (UTF-8) and
-truecolor/256-color. Provides a safe symbol set so the TUI degrades
-gracefully on ASCII-only / limited terminals.
+Symbol strategy:
+- DEFAULT: ASCII symbols (| + - = [ ] > *) — works on any terminal.
+- Set BEE_UNICODE=1 to enable Unicode symbols (●, ▶, ⚙, 🐝 …)
+  only if you are sure your terminal supports them.
+
+Border strategy:
+- Textual CSS uses `border: ascii` in bee.tcss → + - | chars only.
 
 Usage:
-    from cb.tui.compat import SYM, supports_unicode
-
-    print(SYM.ok)        →  "●" (UTF-8) or "[OK]" (ASCII)
-    print(SYM.running)   →  "▶" (UTF-8) or  ">" (ASCII)
+    from cb.tui.compat import SYM
+    print(SYM.ok)      →  "[*]"   (ASCII) or "●" (Unicode)
+    print(SYM.running) →  ">"     (ASCII) or "▶" (Unicode)
 """
 from __future__ import annotations
 
-import locale
 import os
 import sys
 
 
-def supports_unicode() -> bool:
-    """Return True if the terminal/locale is UTF-8 capable.
+def wants_unicode() -> bool:
+    """Return True only when the user explicitly opts IN to Unicode mode.
 
-    Detection order (first match wins):
-    1. BEE_ASCII_ONLY=1  → always False (forced ASCII)
-    2. LANG / LC_ALL / LC_CTYPE env vars → check for "UTF"
-    3. sys.stdout.encoding                → check for "UTF"
-
-    LANG=C and LANG=POSIX are treated as ASCII-only.
+    ASCII is the safe default.  Unicode requires BEE_UNICODE=1.
     """
-    # 1. Explicit opt-out
-    if os.environ.get("BEE_ASCII_ONLY", "").lower() in ("1", "true", "yes"):
-        return False
-
-    # 2. Check POSIX locale env vars — most reliable on Linux corporate boxes
-    for var in ("LC_ALL", "LC_CTYPE", "LANG"):
-        val = os.environ.get(var, "").upper()
-        if not val:
-            continue
-        # "C", "POSIX", "C.ASCII" → ASCII only
-        if val in ("C", "POSIX") or val.startswith("C.") or val.startswith("POSIX."):
-            return False
-        # "en_US.UTF-8", "UTF-8", "C.UTF-8" → has Unicode
-        if "UTF" in val:
-            return True
-
-    # 3. Fallback: Python's detected stdout encoding
-    enc = (sys.stdout.encoding or "").upper()
-    return "UTF" in enc
+    if os.environ.get("BEE_UNICODE", "").lower() in ("1", "true", "yes"):
+        # Still verify the terminal actually speaks UTF-8
+        active = (
+            os.environ.get("LC_ALL")
+            or os.environ.get("LANG")
+            or ""
+        ).upper()
+        enc = (sys.stdout.encoding or "").upper()
+        return "UTF" in active or "UTF" in enc
+    return False
 
 
-_UNICODE = supports_unicode()
+_UNICODE = wants_unicode()
 
 
 class _Symbols:
-    """Terminal-safe symbol set. Falls back to ASCII equivalents."""
+    """Terminal-safe symbol set."""
 
     def __init__(self, unicode_mode: bool) -> None:
         if unicode_mode:
@@ -66,26 +54,27 @@ class _Symbols:
             self.gear     = "⚙"
             self.warn_tri = "⚠"
             self.bee      = "🐝"
-            self.bullet   = "·"
+            self.sep      = "─"
+            self.pipe     = "│"
         else:
-            # Pure ASCII replacements
-            self.ok       = "[*]"
-            self.fail     = "[X]"
-            self.warn     = "[!]"
+            # Pure ASCII (default)
+            self.ok       = "[OK]"
+            self.fail     = "[!]"
+            self.warn     = "[~]"
             self.aborted  = "[-]"
             self.notbuilt = "[ ]"
             self.disabled = "[D]"
             self.running  = ">"
-            self.gear     = "[S]"
+            self.gear     = "[*]"
             self.warn_tri = "[!]"
-            self.bee      = "[bee]"
-            self.bullet   = "-"
+            self.bee      = "bee"
+            self.sep      = "-"
+            self.pipe     = "|"
 
 
 SYM = _Symbols(_UNICODE)
 
 
 def get_border_style() -> str:
-    """Return Textual border style appropriate for the terminal."""
-    # 'round' uses box-drawing characters (Unicode); 'ascii' uses + - |
-    return "round" if _UNICODE else "ascii"
+    """Return 'ascii' always (uses + - | chars)."""
+    return "ascii"

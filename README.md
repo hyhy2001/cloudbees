@@ -129,6 +129,9 @@ bee --ui
 
 Built with **[Textual](https://textual.textualize.io/)** — async-first, non-blocking UI. All API calls run in background threads so the interface stays responsive at all times.
 
+> **ASCII-first design** — borders use `|` `+` `-` characters, works on any Linux terminal including `LANG=C` / POSIX.  
+> Set `BEE_UNICODE=1` to opt in to Unicode symbols on supported terminals.
+
 **Tabs:**
 ```
 [1] Controller   [2] Credentials   [3] Nodes   [4] Jobs   [5] Settings
