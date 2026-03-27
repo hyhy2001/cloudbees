@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # -------------------------------------------------------------
+  # OPTION 1: CloudBees CI Operations Center (Requires License!)
+  # -------------------------------------------------------------
+  # Run: docker compose up cjoc -d
+  # Note: You will need a CloudBees Enterprise / Trial License to pass the setup screen.
+  cjoc:
+    image: cloudbees/cloudbees-core-oc:latest
+    container_name: cjoc_test
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    environment:
+      # Automatically skip the initial setup wizard if you want to configure via CasC
+      - JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
+    volumes:
+      - cjoc_data:/var/jenkins_home
+
+  # -------------------------------------------------------------
+  # OPTION 2: Open Source Jenkins (Free, 100% API compatible!)
+  # -------------------------------------------------------------
+  # Run: docker compose up jenkins -d
+  # Note: Drop-in replacement for the Controller API. No license required.
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins_test
+    user: root
+    ports:
+      - "8081:8080"
+      - "50001:50000"
+    environment:
+      # Install exactly the plugins you need (Optional)
+      # - JENKINS_OPTS="--pluginroot=/var/jenkins_home/plugins"
+      # - JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
+      - TZ=UTC
+    volumes:
+      - jenkins_data:/var/jenkins_home
+      # Mount docker socket if you want agents to spin up docker containers
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  cjoc_data:
+  jenkins_data:
