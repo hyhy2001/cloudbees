@@ -92,7 +92,7 @@ def get_client(
                 
         return CloudBeesClient(base_url, session["raw_token"], db_path=db_path)
 
-    raise AuthError("Not logged in or session expired. Run: bee login")
+    raise AuthError("Not logged in or session expired. Run: bee auth login")
 
 
 def switch_default(profile_name: str, db_path: Path | None = None) -> ProfileDTO:
