@@ -35,7 +35,7 @@ class NodesPane(VimNavMixin, Widget):
 
     _loading:   reactive[bool] = reactive(True)
     _error:     reactive[str]  = reactive("")
-    _mine_only: reactive[bool] = reactive(False)
+    _mine_only: reactive[bool] = reactive(True)
 
     def compose(self) -> ComposeResult:
         yield Static("", classes="pane-header", id="nodes-header")
@@ -109,11 +109,16 @@ class NodesPane(VimNavMixin, Widget):
     def _load_nodes(self) -> None:
         self._loading = True
         self._error   = ""
+        self._load_worker()
+
+    @work(thread=True, exclusive=True)
+    def _load_worker(self) -> None:
+        client = getattr(self.app, "ctrl_client", None)
+        if not client:
+            self._loading = False
+            self._error = "Not logged in — press L"
+            return
         try:
-            client = self.app.ctrl_client or self.app.oc_client
-            if not client:
-                self._error = "Not logged in — press L"
-                return
             from cb.services.node_service import list_nodes
             from cb.db.repositories.resource_repo import get_tracked_resources
             import cb.dtos.node as node_dto
@@ -175,7 +180,7 @@ class NodesPane(VimNavMixin, Widget):
     @work(thread=True, exclusive=True, name="open-detail")
     def _open_detail_worker(self, node) -> None:
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
             if getattr(self.app, "_username", "") and client:
                 from cb.services.node_service import get_node
                 detailed_node = get_node(client, node.name)
@@ -238,7 +243,7 @@ class NodesPane(VimNavMixin, Widget):
         from cb.tui.widgets.modals import ConfirmModal
         self.app.push_screen(
             ConfirmModal(f"Mark node '{name}' {action}?"),
-            lambda ok: self._do_toggle(name) if ok else None,
+            lambda ok: self._do_toggle(name, is_offline) if ok else None,
         )
 
     def _confirm_delete(self, name: str) -> None:
@@ -249,14 +254,15 @@ class NodesPane(VimNavMixin, Widget):
         )
 
     @work(thread=True, name="toggle-node")
-    def _do_toggle(self, name: str) -> None:
+    def _do_toggle(self, node_name: str, to_offline: bool) -> None:
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
+            if not client: return
             from cb.services.node_service import toggle_offline
-            toggle_offline(client, name)
+            toggle_offline(client, node_name)
             self.app.call_from_thread(
                 self.app.notify,
-                f"{SYM.ok} Toggled: [bold]{name}[/bold]",
+                f"{SYM.ok} Toggled: [bold]{node_name}[/bold]",
                 title="Node Updated",
             )
             self._load_nodes()
@@ -266,14 +272,15 @@ class NodesPane(VimNavMixin, Widget):
             )
 
     @work(thread=True, name="delete-node")
-    def _do_delete(self, name: str) -> None:
+    def _do_delete(self, node_name: str) -> None:
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
+            if not client: return
             from cb.services.node_service import delete_node
-            delete_node(client, name)
+            delete_node(client, node_name)
             from cb.db.repositories.resource_repo import untrack_resource
             profile = "default"
-            untrack_resource("node", name, profile,
+            untrack_resource("node", node_name, profile,
                              controller_name=client.base_url,
                              db_path=self.app._db_path)
             self.app.call_from_thread(
@@ -291,7 +298,8 @@ class NodesPane(VimNavMixin, Widget):
     def _do_create(self, name: str, remote_dir: str,
                    num_executors: int = 1, labels: str = "") -> None:
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
+            if not client: return
             from cb.services.node_service import create_permanent_node
             create_permanent_node(
                 client, name=name, remote_dir=remote_dir,

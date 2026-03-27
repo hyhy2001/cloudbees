@@ -29,7 +29,7 @@ class CredentialsPane(VimNavMixin, Widget):
 
     _loading:  reactive[bool] = reactive(True)
     _error:    reactive[str]  = reactive("")
-    _show_all: reactive[bool] = reactive(True)
+    _show_all: reactive[bool] = reactive(False)
     _store:    reactive[str]  = reactive("user")
 
     def compose(self) -> ComposeResult:
@@ -112,11 +112,12 @@ class CredentialsPane(VimNavMixin, Widget):
     def _load_creds(self) -> None:
         self._loading = True
         self._error   = ""
+        client = self.app.ctrl_client
+        if not client:
+            self._error = "Not logged in — press L"
+            self._loading = False
+            return
         try:
-            client = self.app.ctrl_client or self.app.oc_client
-            if not client:
-                self._error = "Not logged in — press L"
-                return
             from cb.services.credential_service import list_credentials
             from cb.db.repositories.resource_repo import get_tracked_resources
             import cb.dtos.credential as cred_dto
@@ -134,6 +135,8 @@ class CredentialsPane(VimNavMixin, Widget):
                 tracked_set   = set(tracked)
                 display_creds = [c for c in all_creds if c.id in tracked_set]
                 server_ids    = {c.id for c in all_creds}
+                import logging
+                logging.getLogger(__name__).info(f"TUI creds tracked={tracked_set} server_ids={server_ids} base_url={client.base_url}")
                 for m in tracked_set - server_ids:
                     display_creds.append(
                         cred_dto.CredentialDTO(id=m, type_name="[DELETED]",
@@ -145,6 +148,8 @@ class CredentialsPane(VimNavMixin, Widget):
 
             self.app.call_from_thread(self._populate_table, creds)
         except Exception as exc:
+            import logging
+            logging.getLogger(__name__).exception("Creds load failed")
             self._error = str(exc)
         finally:
             self._loading = False
@@ -175,7 +180,7 @@ class CredentialsPane(VimNavMixin, Widget):
     @work(thread=True, exclusive=True, name="open-detail")
     def _open_detail_worker(self, cred) -> None:
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
             if getattr(self.app, "_username", "") and client:
                 from cb.services.credential_service import get_credential
                 detailed_cred = get_credential(client, cred.id, username=getattr(self.app, "_username", ""), store=self._store)
@@ -236,7 +241,8 @@ class CredentialsPane(VimNavMixin, Widget):
     @work(thread=True, name="delete-cred")
     def _do_delete(self, cred_id: str) -> None:
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
+            if not client: return
             from cb.services.credential_service import delete_credential
             delete_credential(
                 client, cred_id,
@@ -263,7 +269,8 @@ class CredentialsPane(VimNavMixin, Widget):
     def _do_create(self, cred_id: str, username: str, password: str,
                    store: str) -> None:
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
+            if not client: return
             from cb.services.credential_service import create_username_password
             create_username_password(
                 client, cred_id=cred_id, username_cred=username, password=password,

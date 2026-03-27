@@ -84,7 +84,8 @@ class LogScreen(Screen):
     def _fetch_log(self) -> None:
         log_view = self.query_one("#log-view", RichLog)
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
+            if not client: return
             if not client:
                 self.app.call_from_thread(
                     log_view.write,

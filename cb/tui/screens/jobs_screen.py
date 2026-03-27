@@ -60,7 +60,7 @@ class JobsPane(VimNavMixin, Widget):
 
     _loading:   reactive[bool] = reactive(True)
     _error:     reactive[str]  = reactive("")
-    _show_all:  reactive[bool] = reactive(True)
+    _show_all:  reactive[bool] = reactive(False)
 
     def compose(self) -> ComposeResult:
         yield Static("", classes="pane-header", id="jobs-header")
@@ -135,9 +135,10 @@ class JobsPane(VimNavMixin, Widget):
         self._loading = True
         self._error   = ""
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
             if not client:
                 self._error = "Not logged in — press L"
+                self._loading = False
                 return
             from cb.services.job_service import list_jobs
             from cb.db.repositories.resource_repo import get_tracked_resources
@@ -196,7 +197,7 @@ class JobsPane(VimNavMixin, Widget):
     @work(thread=True, exclusive=True, name="open-detail")
     def _open_detail_worker(self, job) -> None:
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
             if getattr(self.app, "_username", "") and client:
                 from cb.services.job_service import get_job
                 detailed_job = get_job(client, job.name)
@@ -229,7 +230,7 @@ class JobsPane(VimNavMixin, Widget):
 
     def action_refresh(self) -> None:
         from cb.cache.manager import invalidate_prefix
-        client = self.app.ctrl_client or self.app.oc_client
+        client = getattr(self.app, "ctrl_client", None)
         if client:
             invalidate_prefix("jobs.", self.app._db_path)
         self._load_jobs()
@@ -302,8 +303,10 @@ class JobsPane(VimNavMixin, Widget):
 
     @work(thread=True, name="run-job")
     def _do_run(self, name: str) -> None:
+        self.app.call_from_thread(self.app.notify, f"Starting job: {name}...", title="Run")
+        client = getattr(self.app, "ctrl_client", None)
+        if not client: return
         try:
-            client = self.app.ctrl_client or self.app.oc_client
             from cb.services.job_service import trigger_job
             trigger_job(client, name)
             self.app.call_from_thread(
@@ -320,7 +323,8 @@ class JobsPane(VimNavMixin, Widget):
     @work(thread=True, name="stop-job")
     def _do_stop(self, name: str, build_num: int) -> None:
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
+            if not client: return
             from cb.services.job_service import stop_build
             stop_build(client, name, build_num)
             self.app.call_from_thread(
@@ -337,7 +341,8 @@ class JobsPane(VimNavMixin, Widget):
     @work(thread=True, name="delete-job")
     def _do_delete(self, name: str) -> None:
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
+            if not client: return
             from cb.services.job_service import delete_job
             delete_job(client, name)
             from cb.db.repositories.resource_repo import untrack_resource
@@ -360,7 +365,8 @@ class JobsPane(VimNavMixin, Widget):
     def _create_job(self, name: str, job_type: str, desc: str = "",
                     shell_cmd: str = "", script: str = "") -> None:
         try:
-            client = self.app.ctrl_client or self.app.oc_client
+            client = getattr(self.app, "ctrl_client", None)
+            if not client: return
             from cb.services.job_service import (
                 create_freestyle_job, create_pipeline_job, create_folder
             )
