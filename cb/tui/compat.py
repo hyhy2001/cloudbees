@@ -1,16 +1,11 @@
 """Terminal compatibility helpers.
 
 Symbol strategy:
-- DEFAULT: ASCII symbols (| + - = [ ] > *) - works on any terminal.
-- Set BEE_UNICODE=1 to enable Unicode symbols only on terminals that support them.
+- DEFAULT: Unicode symbols (works on modern terminals / UTF-8 locales).
+- Set BEE_ASCII=1 to fall back to pure ASCII for legacy terminals.
 
 Border strategy:
-- Textual CSS uses `border: ascii` in bee.tcss -> + - | chars only.
-
-Usage:
-    from cb.tui.compat import SYM
-    print(SYM.ok)      ->  "[OK]"  (ASCII) or "O" (Unicode branch)
-    print(SYM.running) ->  ">"     (ASCII, always)
+- Textual CSS: `border: ascii` for ASCII mode, `border: round` for Unicode.
 """
 from __future__ import annotations
 
@@ -18,62 +13,76 @@ import os
 import sys
 
 
-def wants_unicode() -> bool:
-    """Return True only when the user explicitly opts IN to Unicode mode.
-
-    ASCII is the safe default. Unicode requires BEE_UNICODE=1.
-    """
-    if os.environ.get("BEE_UNICODE", "").lower() in ("1", "true", "yes"):
-        active = (
-            os.environ.get("LC_ALL")
-            or os.environ.get("LANG")
-            or ""
-        ).upper()
-        enc = (sys.stdout.encoding or "").upper()
-        return "UTF" in active or "UTF" in enc
-    return False
+def _is_ascii_forced() -> bool:
+    """Return True when user explicitly opts OUT of Unicode via BEE_ASCII=1."""
+    return os.environ.get("BEE_ASCII", "").lower() in ("1", "true", "yes")
 
 
-_UNICODE = wants_unicode()
+def _has_utf8() -> bool:
+    """Detect if the terminal can render UTF-8."""
+    enc = (sys.stdout.encoding or "").upper()
+    lang = (
+        os.environ.get("LC_ALL")
+        or os.environ.get("LANG")
+        or ""
+    ).upper()
+    return "UTF" in enc or "UTF" in lang
+
+
+# Unicode is ON by default on UTF-8 terminals; opt-out via BEE_ASCII=1
+_UNICODE = _has_utf8() and not _is_ascii_forced()
 
 
 class _Symbols:
-    """Terminal-safe symbol set."""
+    """Terminal-safe symbol set. Unicode by default, ASCII fallback."""
 
     def __init__(self, unicode_mode: bool) -> None:
-        # ASCII mode (default) -- pure 7-bit characters only
-        self.ok       = "[OK]"
-        self.fail     = "[!]"
-        self.warn     = "[~]"
-        self.aborted  = "[-]"
-        self.notbuilt = "[ ]"
-        self.disabled = "[D]"
-        self.running  = ">"
-        self.gear     = "[*]"
-        self.warn_tri = "[!]"
-        self.bee      = "bee"
-        self.sep      = "-"
-        self.pipe     = "|"
-
         if unicode_mode:
-            # Override to Unicode only when BEE_UNICODE=1 AND UTF-8 locale
-            self.ok       = "(OK)"
-            self.fail     = "(X)"
-            self.warn     = "(!)"
-            self.aborted  = "(-)"
-            self.notbuilt = "( )"
-            self.disabled = "(D)"
-            self.running  = ">>"
-            self.gear     = "(*)"
-            self.warn_tri = "(!)"
-            self.bee      = "[bee]"
-            self.sep      = "="
+            # Rich Unicode symbols for modern terminals
+            self.ok       = "✓"
+            self.fail     = "✗"
+            self.warn     = "⚠"
+            self.aborted  = "◇"
+            self.notbuilt = "○"
+            self.disabled = "⊘"
+            self.running  = "●"
+            self.gear     = "⚙"
+            self.warn_tri = "▲"
+            self.bee      = "🐝"
+            self.sep      = "─"
+            self.pipe     = "│"
+            self.arrow    = "›"
+            self.dot      = "·"
+            self.online   = "◉"
+            self.offline  = "◌"
+            self.selected = "▶"
+            self.spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        else:
+            # Pure ASCII fallback (7-bit safe)
+            self.ok       = "[OK]"
+            self.fail     = "[!!]"
+            self.warn     = "[~~]"
+            self.aborted  = "[--]"
+            self.notbuilt = "[  ]"
+            self.disabled = "[DI]"
+            self.running  = "[>>]"
+            self.gear     = "[**]"
+            self.warn_tri = "[/!]"
+            self.bee      = "bee"
+            self.sep      = "-"
             self.pipe     = "|"
+            self.arrow    = ">"
+            self.dot      = "."
+            self.online   = "[O]"
+            self.offline  = "[ ]"
+            self.selected = ">"
+            self.spinner_frames = ["[ |  ]", "[ /  ]", "[ -- ]", "[ \\  ]"]
 
 
 SYM = _Symbols(_UNICODE)
+UNICODE_MODE = _UNICODE
 
 
 def get_border_style() -> str:
-    """Return 'ascii' always (uses + - | chars)."""
-    return "ascii"
+    """Return Textual border style token."""
+    return "round" if _UNICODE else "ascii"

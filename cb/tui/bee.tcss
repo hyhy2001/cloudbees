@@ -1,11 +1,13 @@
-/* bee.tcss -- ASCII-safe styling for bee CloudBees TUI
-   All borders use the textual "ascii" style: + - |
-   Compatible with any terminal, no Unicode box-drawing required.
+/* bee.tcss — k9s-inspired dark theme for bee CloudBees TUI
+   Modern, information-dense layout with rich color accents.
+   Unicode borders used by default; falls back gracefully.
 */
 
-/* -- Base ----------------------------------------- */
+/* ── Base ─────────────────────────────────────────────────── */
 * {
-    scrollbar-size: 0 0; /* completely disables unicode scrollbars */
+    scrollbar-size: 1 1;
+    scrollbar-color: #30363d #0d1117;
+    scrollbar-corner-color: #0d1117;
 }
 
 Screen {
@@ -13,63 +15,186 @@ Screen {
     color: #c9d1d9;
 }
 
-/* -- Header --------------------------------------- */
+/* ── Header ───────────────────────────────────────────────── */
 Header {
-    background: #161b22;
+    background: #010409;
+    color: #58a6ff;
+    text-style: bold;
+    height: 1;
+}
+
+HeaderIcon {
+    width: 4;
+    content-align: left middle;
+    color: #f0883e;
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+Footer {
+    background: #010409;
+    color: #484f58;
+    height: 1;
+}
+
+FooterKey > .footer-key--key {
+    background: #1c2128;
     color: #58a6ff;
     text-style: bold;
 }
 
-/* HeaderIcon width: keeps it compact after we set icon to '>' (1 char) */
-HeaderIcon {
-    width: 3;
-    content-align: left middle;
-}
-
-/* -- Footer --------------------------------------- */
-Footer {
-    background: #161b22;
+FooterKey > .footer-key--description {
     color: #8b949e;
 }
 
-/* Highlight the key label in Footer */
-FooterKey > .footer-key--key {
-    background: #21262d;
-    color: #58a6ff;
-}
-
-/* -- Tabs ----------------------------------------- */
+/* ── Tabs ─────────────────────────────────────────────────── */
 TabbedContent {
     height: 1fr;
-    border: ascii #30363d;
 }
 
-TabPane {
+TabbedContent > TabPane {
+    padding: 0;
+}
+
+/* ── Context-aware hint bar (above footer) ────────────────── */
+#ctx-footer {
+    height: 1;
+    background: #161b22;
+    color: #484f58;
     padding: 0 1;
+    border-top: tall #21262d;
+}
+
+Tabs {
+    background: #010409;
+    height: 3;
 }
 
 Tab {
-    background: #161b22;
-    color: #8b949e;
+    background: #010409;
+    color: #484f58;
+    padding: 0 2;
 }
 
-Tab:focus, Tab.-active {
-    background: #1f6feb;
-    color: #ffffff;
+Tab.-active {
+    background: #161b22;
+    color: #79c0ff;
     text-style: bold;
 }
 
 Tab:hover {
-    background: #21262d;
+    background: #1c2128;
     color: #c9d1d9;
 }
 
-/* -- DataTable ------------------------------------ */
+/* Textual native underline indicator for active tab */
+Tabs > #tabs-list > Tab.-active {
+    color: #79c0ff;
+}
+
+/* ── Context / Status bar ─────────────────────────────────── */
+#ctx-bar {
+    height: 1;
+    background: #161b22;
+    color: #8b949e;
+    padding: 0 1;
+    border-top: tall #21262d;
+}
+
+/* ── Panel title (section headers inside panes) ──────────── */
+.pane-header {
+    height: 1;
+    background: #161b22;
+    color: #58a6ff;
+    text-style: bold;
+    padding: 0 1;
+    border-bottom: tall #21262d;
+}
+
+/* ── Filter / store label bar ────────────────────────────── */
+.filter-bar {
+    height: 1;
+    background: #1c2128;
+    color: #8b949e;
+    padding: 0 1;
+}
+
+/* ── Action toolbar (clickable buttons) ──────────────────── */
+.action-bar {
+    height: 3;
+    background: #0d1117;
+    border-bottom: tall #21262d;
+    padding: 0 1;
+}
+
+/* Base action button */
+.abtn {
+    background: #21262d;
+    color: #8b949e;
+    border: tall #30363d;
+    height: 3;
+    min-width: 12;
+    margin-right: 1;
+    text-style: none;
+}
+
+.abtn:hover {
+    background: #30363d;
+    color: #c9d1d9;
+}
+
+/* Green — create / run */
+.abtn-success {
+    background: #1a3b25;
+    color: #3fb950;
+    border: tall #238636;
+}
+
+.abtn-success:hover {
+    background: #238636;
+    color: #ffffff;
+}
+
+/* Red — delete / stop */
+.abtn-danger {
+    background: #3d1212;
+    color: #f85149;
+    border: tall #6e2020;
+}
+
+.abtn-danger:hover {
+    background: #6e2020;
+    color: #ffffff;
+}
+
+/* Blue — log / toggle / info */
+.abtn-info {
+    background: #112030;
+    color: #58a6ff;
+    border: tall #1f6feb;
+}
+
+.abtn-info:hover {
+    background: #1f6feb;
+    color: #ffffff;
+}
+
+/* Muted — scope / store toggles */
+.abtn-muted {
+    background: #0d1117;
+    color: #484f58;
+    border: tall #21262d;
+}
+
+.abtn-muted:hover {
+    background: #1c2128;
+    color: #8b949e;
+}
+
+/* ── DataTable ────────────────────────────────────────────── */
 DataTable {
-    height: 1fr;
     background: #0d1117;
     color: #c9d1d9;
-    border: ascii #30363d;
+    height: 1fr;
 }
 
 DataTable > .datatable--header {
@@ -78,84 +203,156 @@ DataTable > .datatable--header {
     text-style: bold;
 }
 
+DataTable > .datatable--header-hover {
+    background: #21262d;
+    color: #79c0ff;
+}
+
 DataTable > .datatable--cursor {
     background: #1f6feb;
     color: #ffffff;
+    text-style: bold;
 }
 
 DataTable > .datatable--hover {
-    background: #21262d;
+    background: #1c2128;
 }
 
-/* -- Status colours ------------------------------- */
+DataTable > .datatable--fixed {
+    background: #161b22;
+    color: #58a6ff;
+}
+
+DataTable > .datatable--even-row {
+    background: #0d1117;
+}
+
+DataTable > .datatable--odd-row {
+    background: #111820;
+}
+
+/* ── Context detail panel (inline, below table) ──────────── */
+#detail-panel {
+    height: 6;
+    background: #161b22;
+    border-top: tall #21262d;
+    padding: 0 1;
+}
+
+#detail-panel-content {
+    height: 1fr;
+    color: #8b949e;
+}
+
+/* ── Log viewer ───────────────────────────────────────────── */
+#log-view {
+    background: #010409;
+    color: #3fb950;
+    border: round #30363d;
+    height: 1fr;
+    padding: 0 1;
+}
+
+/* ── Status colours ───────────────────────────────────────── */
 .success { color: #3fb950; }
 .error   { color: #f85149; }
 .warning { color: #d29922; }
-.dim     { color: #8b949e; }
+.info    { color: #58a6ff; }
+.dim     { color: #484f58; }
 .url     { color: #58a6ff; }
+.muted   { color: #6e7681; }
+.accent  { color: #f0883e; }
 
-/* -- Panel title ---------------------------------- */
-.panel-title {
+/* ── Loader / spinner ─────────────────────────────────────── */
+AsciiLoader {
     color: #58a6ff;
     text-style: bold;
-    margin-bottom: 1;
-    padding: 0 1;
-    border-bottom: ascii #30363d;
+    padding: 1 2;
 }
 
-/* -- Status bar ----------------------------------- */
-#status-bar {
-    height: 1;
-    background: #161b22;
-    color: #8b949e;
-    padding: 0 1;
-}
-
-/* -- Modals --------------------------------------- */
+/* ── Modals ───────────────────────────────────────────────── */
 ModalScreen {
     align: center middle;
+    background: rgba(1, 4, 9, 0.85);
 }
 
 #modal-box {
     background: #161b22;
-    border: ascii #58a6ff;
+    border: round #30363d;
     padding: 1 2;
-    width: 62;
+    width: 64;
     height: auto;
-    max-height: 30;
+    max-height: 36;
 }
 
-#modal-box Label {
+.modal-title {
     color: #58a6ff;
     text-style: bold;
+    height: 1;
     margin-bottom: 1;
-    border-bottom: ascii #30363d;
+    border-bottom: tall #21262d;
     padding-bottom: 1;
 }
 
-#modal-box Static {
-    color: #8b949e;
-    margin-bottom: 0;
+.modal-section {
+    color: #6e7681;
+    height: 1;
+    margin-top: 1;
 }
 
 #modal-box Input {
-    background: #21262d;
-    border: ascii #30363d;
+    background: #0d1117;
+    border: tall #30363d;
     color: #c9d1d9;
-    margin-bottom: 1;
+    margin-bottom: 0;
 }
 
 #modal-box Input:focus {
-    border: ascii #58a6ff;
+    border: tall #1f6feb;
 }
 
-#modal-box Button {
+#modal-box Select {
+    background: #0d1117;
+    border: tall #30363d;
+    color: #c9d1d9;
+}
+
+#modal-box TextArea {
+    background: #0d1117;
+    border: tall #30363d;
+    color: #3fb950;
+    height: 8;
+    margin-bottom: 0;
+}
+
+#modal-box TextArea:focus {
+    border: tall #1f6feb;
+}
+
+.btn-row {
+    height: 3;
+    align: left middle;
     margin-top: 1;
+}
+
+/* ── Buttons ──────────────────────────────────────────────── */
+Button {
+    background: #21262d;
+    color: #c9d1d9;
+    border: tall #30363d;
+    min-width: 10;
+}
+
+Button:hover {
+    background: #30363d;
+    color: #ffffff;
 }
 
 Button.-primary {
     background: #1f6feb;
     color: #ffffff;
+    border: tall #388bfd;
+    text-style: bold;
 }
 
 Button.-primary:hover {
@@ -163,61 +360,110 @@ Button.-primary:hover {
 }
 
 Button.-error {
+    background: #6e2020;
+    color: #f85149;
+    border: tall #b62324;
+}
+
+Button.-error:hover {
     background: #b62324;
     color: #ffffff;
 }
 
-/* -- Credential store label ----------------------- */
-#store-label {
-    background: #21262d;
-    color: #f0883e;
-    padding: 0 1;
-    margin-bottom: 1;
-    border: ascii #30363d;
+Button.-success {
+    background: #1a3b25;
+    color: #3fb950;
+    border: tall #238636;
 }
 
+Button.-success:hover {
+    background: #238636;
+    color: #ffffff;
+}
 
+/* ── Credential store label ───────────────────────────────── */
+#store-label {
+    background: #1c2128;
+    color: #f0883e;
+    padding: 0 1;
+    height: 1;
+}
 
-/* -- Static info panels --------------------------- */
+/* ── Key-value pairs (detail panel + screens) ─────────────── */
 .kv-label {
-    color: #8b949e;
-    width: 18;
+    color: #6e7681;
+    width: 16;
+    text-style: bold;
 }
 
 .kv-value {
     color: #c9d1d9;
-    text-style: bold;
 }
 
-/* -- Vertical containers in detail screen only ---- */
-#detail-info {
-    border: ascii #30363d;
-    padding: 1;
-    margin-bottom: 1;
-}
-
-/* -- Settings screen ------------------------------ */
-#sys-info {
-    padding: 1;
-    border: ascii #30363d;
-}
-
-/* -- Detail screen -------------------------------- */
 .kv-row {
     height: 1;
 }
 
-#detail-actions {
-    margin-top: 1;
+/* ── Detail screen ────────────────────────────────────────── */
+#detail-info {
+    border: round #21262d;
+    padding: 0 1;
+    margin: 0 0 1 0;
     height: auto;
+}
+
+#detail-actions {
+    height: 3;
     padding: 0 1;
 }
 
 #detail-actions Button {
     margin-right: 1;
-    min-width: 14;
+    min-width: 16;
 }
 
-#detail-spacer {
+/* ── Settings screen ──────────────────────────────────────── */
+#sys-info {
+    padding: 1 2;
+    border: round #21262d;
+    margin: 1;
+}
+
+/* ── Log screen ───────────────────────────────────────────── */
+LogScreen {
+    background: #010409;
+}
+
+#log-header {
+    background: #161b22;
+    color: #58a6ff;
+    text-style: bold;
     height: 1;
+    padding: 0 1;
+}
+
+/* ── Jobs pane specific ───────────────────────────────────── */
+JobsPane {
+    height: 1fr;
+}
+
+/* ── Controller pane ──────────────────────────────────────── */
+ControllerPane {
+    height: 1fr;
+}
+
+/* ── Nodes pane ───────────────────────────────────────────── */
+NodesPane {
+    height: 1fr;
+}
+
+/* ── Credentials pane ─────────────────────────────────────── */
+CredentialsPane {
+    height: 1fr;
+}
+
+/* ── Settings pane ────────────────────────────────────────── */
+SettingsPane {
+    height: 1fr;
+    padding: 0;
 }

@@ -144,17 +144,21 @@ Built with **[Textual](https://textual.textualize.io/)** — async-first, non-bl
 | `q` | Quit (session saved) |
 | `1`–`5` | Jump to screen |
 | `↑` / `↓` | Navigate list |
-| `Enter` | Select / confirm action |
+| `Enter` | Open detail screen |
 | `L` | Login |
 | `X` | Logout (clears session) |
-| `r` | Run selected job (Jobs screen) |
-| `o` | Toggle node offline/online (Nodes screen) |
-| `S` | Toggle credential store: system ↔ user (Credentials screen) |
-| `c` | Create credential (Credentials screen) |
+| `r` | Run selected job (Jobs) |
+| `s` | Stop last build (Jobs) · Toggle store: system↔user (Credentials) |
+| `l` | View build log with colour-coding (Jobs) |
+| `n` | Create new item (Jobs / Nodes) |
 | `d` | Delete selected item |
+| `o` | Toggle node offline/online (Nodes) |
+| `c` | Create credential (Credentials) · Clear cache (Settings) |
+| `a` | Toggle Mine / All scope (all resource tabs) |
+| `?` | Show keyboard help overlay |
 | `F5` | Force refresh (bypass cache, re-fetch from API) |
 | `F2` | Toggle dark/light mode |
-| `Esc` | Close modal / cancel action |
+| `Esc` | Close modal / go back |
 
 > **Session:** Login once → session saved encrypted in SQLite. Reopen TUI/CLI anytime without re-entering credentials. `X` to logout.
 
