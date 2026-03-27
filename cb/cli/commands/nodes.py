@@ -137,6 +137,8 @@ def cmd_create(ctx, name, remote_dir, executors, labels, description, host, port
         from cb.db.repositories.resource_repo import track_resource
         track_resource("node", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Node '{name}' created.")
+        url = f"{_client(ctx).base_url.rstrip('/')}/computer/{name}/"
+        click.echo(f"  Link: {url}")
         if host:
             cred_display = cred_id or 'None'
             click.echo(f"  SSH Node will auto-connect to {host}:{port} using cred: '{cred_display}'")

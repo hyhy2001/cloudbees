@@ -128,6 +128,12 @@ def cmd_create(ctx, cred_id, username, password, description, scope, store):
         from cb.db.repositories.resource_repo import track_resource
         track_resource("credential", cred_id, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Credential '{cred_id}' created in {store} store.")
+        if store == "user":
+            usr = _username(ctx)
+            url = f"{_client(ctx).base_url.rstrip('/')}/user/{usr}/credentials/store/user/domain/_/credential/{cred_id}/"
+        else:
+            url = f"{_client(ctx).base_url.rstrip('/')}/credentials/store/system/domain/_/credential/{cred_id}/"
+        click.echo(f"  Link: {url}")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)

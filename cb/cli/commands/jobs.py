@@ -128,6 +128,8 @@ def create_freestyle(ctx, name, description, shell, chdir, node):
         from cb.db.repositories.resource_repo import track_resource
         track_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Freestyle job '{name}' created." + (f" on node '{node}'" if node else ""))
+        url = f"{_client(ctx).base_url.rstrip('/')}/job/{name}/"
+        click.echo(f"  Link: {url}")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)
@@ -160,6 +162,8 @@ def create_pipeline(ctx, name, description, script, script_file, node):
         from cb.db.repositories.resource_repo import track_resource
         track_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Pipeline job '{name}' created." + (f" on node '{node}'" if node else ""))
+        url = f"{_client(ctx).base_url.rstrip('/')}/job/{name}/"
+        click.echo(f"  Link: {url}")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)
@@ -177,6 +181,8 @@ def create_folder(ctx, name, description):
         from cb.db.repositories.resource_repo import track_resource
         track_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         click.echo(f"[OK] Folder '{name}' created.")
+        url = f"{_client(ctx).base_url.rstrip('/')}/job/{name}/"
+        click.echo(f"  Link: {url}")
     except Exception as exc:
         click.echo(f"[ERROR] {exc}", err=True)
         raise SystemExit(1)
