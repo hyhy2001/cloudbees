@@ -65,13 +65,6 @@ class JobsPane(VimNavMixin, Widget):
     def compose(self) -> ComposeResult:
         yield Static("", classes="pane-header", id="jobs-header")
         yield Static("", classes="filter-bar", id="jobs-filter")
-        with Horizontal(id="jobs-action-bar", classes="action-bar"):
-            yield Button(f"{SYM.running} Run  [dim][r][/dim]",  id="abtn-run",    classes="abtn abtn-success")
-            yield Button(f"{SYM.fail}  Stop [dim][s][/dim]",  id="abtn-stop",   classes="abtn abtn-danger")
-            yield Button(f"{SYM.arrow} Log  [dim][l][/dim]",  id="abtn-log",    classes="abtn abtn-info")
-            yield Button(f"{SYM.gear} New   [dim][n][/dim]",  id="abtn-new",    classes="abtn")
-            yield Button(f"{SYM.warn} Delete[dim][d][/dim]",  id="abtn-delete", classes="abtn abtn-danger")
-            yield Button(f"{SYM.dot}  All/Mine[dim][a][/dim]",id="abtn-toggle", classes="abtn abtn-muted")
         yield AsciiLoader(id="loader")
         yield DataTable(id="jobs-table", cursor_type="row", zebra_stripes=True)
         with Vertical(id="detail-panel"):
@@ -86,21 +79,6 @@ class JobsPane(VimNavMixin, Widget):
         t.display = False
         self._update_header()
         self._load_jobs()
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle action toolbar button clicks."""
-        dispatch = {
-            "abtn-run":    self.action_run_job,
-            "abtn-stop":   self.action_stop_job,
-            "abtn-log":    self.action_view_log,
-            "abtn-new":    self.action_create_job,
-            "abtn-delete": self.action_delete_job,
-            "abtn-toggle": self.action_toggle_all,
-        }
-        fn = dispatch.get(event.button.id)
-        if fn:
-            self.query_one(DataTable).focus()  # refocus table after click
-            fn()
 
     def on_focus(self) -> None:
         try:
@@ -168,7 +146,7 @@ class JobsPane(VimNavMixin, Widget):
             all_jobs = list_jobs(client)
 
             if not self._show_all:
-                profile_name = getattr(self.app, "_username", "") or "default"
+                profile_name = "default"
                 tracked  = get_tracked_resources(
                     "job", profile_name,
                     controller_name=client.base_url,
@@ -213,24 +191,39 @@ class JobsPane(VimNavMixin, Widget):
         if not jobs or not (0 <= t.cursor_row < len(jobs)):
             return
         job = jobs[t.cursor_row]
-        from cb.tui.screens.detail_screen import DetailScreen
-        info = [
-            ("Name",       job.name),
-            ("Status",     job.color),
-            ("Type",       job.job_type or "-"),
-            ("Last Build", str(job.last_build_number or "—")),
-            ("URL",        getattr(job, "url", "") or "-"),
-            ("Description", (job.description or "-")[:60]),
-        ]
-        actions = [
-            ("r", f"{SYM.running} Run Build",   lambda j=job: self._confirm_run(j.name)),
-            ("s", f"{SYM.fail}  Stop Build",   lambda j=job: self._confirm_stop(j)),
-            ("l", f"{SYM.arrow} View Log",      lambda j=job: self._view_log(j.name)),
-            ("d", f"{SYM.warn}  Delete Job",    lambda j=job: self._confirm_delete(j.name)),
-        ]
-        self.app.push_screen(
-            DetailScreen(f"Job: {job.name}", info, actions)
-        )
+        self._open_detail_worker(job)
+
+    @work(thread=True, exclusive=True, name="open-detail")
+    def _open_detail_worker(self, job) -> None:
+        try:
+            client = self.app.ctrl_client or self.app.oc_client
+            if getattr(self.app, "_username", "") and client:
+                from cb.services.job_service import get_job
+                detailed_job = get_job(client, job.name)
+                if detailed_job:
+                    job = detailed_job
+                    
+            from cb.tui.screens.detail_screen import DetailScreen
+            info = [
+                ("Name",       job.name),
+                ("Status",     job.color),
+                ("Type",       job.job_type or "-"),
+                ("Last Build", str(job.last_build_number or "—")),
+                ("URL",        getattr(job, "url", "") or "-"),
+                ("Description", (job.description or "-")[:60]),
+            ]
+            actions = [
+                ("r", f"{SYM.running} Run Build",   lambda j=job: self._confirm_run(j.name)),
+                ("s", f"{SYM.fail}  Stop Build",   lambda j=job: self._confirm_stop(j)),
+                ("l", f"{SYM.arrow} View Log",      lambda j=job: self._view_log(j.name)),
+                ("d", f"{SYM.warn}  Delete Job",    lambda j=job: self._confirm_delete(j.name)),
+            ]
+            self.app.call_from_thread(
+                self.app.push_screen,
+                DetailScreen(f"Job: {job.name}", info, actions)
+            )
+        except Exception as e:
+            self.app.call_from_thread(self.app.notify, f"Error: {e}", severity="error")
 
     # ── Key bindings ───────────────────────────────────────────
 
@@ -348,7 +341,7 @@ class JobsPane(VimNavMixin, Widget):
             from cb.services.job_service import delete_job
             delete_job(client, name)
             from cb.db.repositories.resource_repo import untrack_resource
-            profile = getattr(self.app, "_username", "") or "default"
+            profile = "default"
             untrack_resource("job", name, profile,
                              controller_name=client.base_url,
                              db_path=self.app._db_path)
@@ -380,7 +373,7 @@ class JobsPane(VimNavMixin, Widget):
                 create_folder(client, name, desc=desc)
 
             from cb.db.repositories.resource_repo import track_resource
-            profile = getattr(self.app, "_username", "") or "default"
+            profile = "default"
             track_resource("job", name, profile,
                            controller_name=client.base_url,
                            db_path=self.app._db_path)

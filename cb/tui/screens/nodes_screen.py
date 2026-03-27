@@ -40,11 +40,6 @@ class NodesPane(VimNavMixin, Widget):
     def compose(self) -> ComposeResult:
         yield Static("", classes="pane-header", id="nodes-header")
         yield Static("", classes="filter-bar",  id="nodes-filter")
-        with Horizontal(id="nodes-action-bar", classes="action-bar"):
-            yield Button(f"{SYM.online} Toggle [dim][o][/dim]",  id="nabtn-toggle", classes="abtn abtn-info")
-            yield Button(f"{SYM.gear}  New    [dim][n][/dim]",   id="nabtn-new",    classes="abtn")
-            yield Button(f"{SYM.warn}  Delete [dim][d][/dim]",   id="nabtn-delete", classes="abtn abtn-danger")
-            yield Button(f"{SYM.dot}   All/Mine[dim][a][/dim]",  id="nabtn-scope",  classes="abtn abtn-muted")
         yield AsciiLoader(id="loader")
         yield DataTable(id="nodes-table", cursor_type="row", zebra_stripes=True)
         with Vertical(id="detail-panel"):
@@ -59,21 +54,6 @@ class NodesPane(VimNavMixin, Widget):
         t.display = False
         self._update_header()
         self._load_nodes()
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        dispatch = {
-            "nabtn-toggle": self.action_toggle_offline,
-            "nabtn-new":    self.action_create_node,
-            "nabtn-delete": self.action_delete_node,
-            "nabtn-scope":  self.action_toggle_all,
-        }
-        fn = dispatch.get(event.button.id)
-        if fn:
-            try:
-                self.query_one(DataTable).focus()
-            except Exception:
-                pass
-            fn()
 
     def on_focus(self) -> None:
         try:
@@ -141,7 +121,7 @@ class NodesPane(VimNavMixin, Widget):
             all_nodes = list_nodes(client)
 
             if self._mine_only:
-                profile = getattr(self.app, "_username", "") or "default"
+                profile = "default"
                 tracked = get_tracked_resources(
                     "node", profile,
                     controller_name=client.base_url,
@@ -190,21 +170,35 @@ class NodesPane(VimNavMixin, Widget):
         if not nodes or not (0 <= t.cursor_row < len(nodes)):
             return
         node = nodes[t.cursor_row]
-        from cb.tui.screens.detail_screen import DetailScreen
-        labels = node.labels if isinstance(node.labels, str) else " ".join(node.labels)
-        action_label = f"{SYM.online} Mark ONLINE" if node.offline else f"{SYM.offline} Mark OFFLINE"
-        info = [
-            ("Name",      node.name),
-            ("Status",    "OFFLINE" if node.offline else "ONLINE"),
-            ("Executors", str(node.num_executors)),
-            ("Labels",    labels or "-"),
-            ("Desc",      node.description or "-"),
-        ]
-        actions = [
-            ("o", action_label, lambda n=node: self._confirm_toggle(n.name, n.offline)),
-            ("d", f"{SYM.warn} Delete Node", lambda n=node: self._confirm_delete(n.name)),
-        ]
-        self.app.push_screen(DetailScreen(f"Node: {node.name}", info, actions))
+        self._open_detail_worker(node)
+
+    @work(thread=True, exclusive=True, name="open-detail")
+    def _open_detail_worker(self, node) -> None:
+        try:
+            client = self.app.ctrl_client or self.app.oc_client
+            if getattr(self.app, "_username", "") and client:
+                from cb.services.node_service import get_node
+                detailed_node = get_node(client, node.name)
+                if detailed_node:
+                    node = detailed_node
+                    
+            from cb.tui.screens.detail_screen import DetailScreen
+            labels = node.labels if isinstance(node.labels, str) else " ".join(node.labels)
+            action_label = f"{SYM.online} Mark ONLINE" if node.offline else f"{SYM.offline} Mark OFFLINE"
+            info = [
+                ("Name",      node.name),
+                ("Status",    "OFFLINE" if node.offline else "ONLINE"),
+                ("Executors", str(node.num_executors)),
+                ("Labels",    labels or "-"),
+                ("Desc",      node.description or "-"),
+            ]
+            actions = [
+                ("o", action_label, lambda n=node: self._confirm_toggle(n.name, n.offline)),
+                ("d", f"{SYM.warn} Delete Node", lambda n=node: self._confirm_delete(n.name)),
+            ]
+            self.app.call_from_thread(self.app.push_screen, DetailScreen(f"Node: {node.name}", info, actions))
+        except Exception as e:
+            self.app.call_from_thread(self.app.notify, f"Error: {e}", severity="error")
 
     # ── Bindings ───────────────────────────────────────────────
 
@@ -278,7 +272,7 @@ class NodesPane(VimNavMixin, Widget):
             from cb.services.node_service import delete_node
             delete_node(client, name)
             from cb.db.repositories.resource_repo import untrack_resource
-            profile = getattr(self.app, "_username", "") or "default"
+            profile = "default"
             untrack_resource("node", name, profile,
                              controller_name=client.base_url,
                              db_path=self.app._db_path)
@@ -304,7 +298,7 @@ class NodesPane(VimNavMixin, Widget):
                 num_executors=num_executors, labels=labels,
             )
             from cb.db.repositories.resource_repo import track_resource
-            profile = getattr(self.app, "_username", "") or "default"
+            profile = "default"
             track_resource("node", name, profile,
                            controller_name=client.base_url,
                            db_path=self.app._db_path)

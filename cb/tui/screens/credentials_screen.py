@@ -35,11 +35,6 @@ class CredentialsPane(VimNavMixin, Widget):
     def compose(self) -> ComposeResult:
         yield Static("", classes="pane-header", id="creds-header")
         yield Static("", classes="filter-bar",  id="creds-filter")
-        with Horizontal(id="creds-action-bar", classes="action-bar"):
-            yield Button(f"{SYM.gear} Create  [dim][c][/dim]",    id="cbtn-create", classes="abtn abtn-success")
-            yield Button(f"{SYM.warn} Delete  [dim][d][/dim]",    id="cbtn-delete", classes="abtn abtn-danger")
-            yield Button(f"{SYM.pipe} Store   [dim][S][/dim]",    id="cbtn-store",  classes="abtn abtn-info")
-            yield Button(f"{SYM.dot}  All/Mine[dim][a][/dim]",    id="cbtn-scope",  classes="abtn abtn-muted")
         yield AsciiLoader(id="loader")
         yield DataTable(id="creds-table", cursor_type="row", zebra_stripes=True)
         with Vertical(id="detail-panel"):
@@ -54,21 +49,6 @@ class CredentialsPane(VimNavMixin, Widget):
         t.display = False
         self._update_header()
         self._load_creds()
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        dispatch = {
-            "cbtn-create": self.action_create_cred,
-            "cbtn-delete": self.action_delete_cred,
-            "cbtn-store":  self.action_toggle_store,
-            "cbtn-scope":  self.action_toggle_all,
-        }
-        fn = dispatch.get(event.button.id)
-        if fn:
-            try:
-                self.query_one(DataTable).focus()
-            except Exception:
-                pass
-            fn()
 
     def on_focus(self) -> None:
         try:
@@ -145,7 +125,7 @@ class CredentialsPane(VimNavMixin, Widget):
             all_creds = list_credentials(client, username=username_str, store=self._store)
 
             if not self._show_all:
-                profile = username_str or "default"
+                profile = "default"
                 tracked  = get_tracked_resources(
                     "credential", profile,
                     controller_name=client.base_url,
@@ -190,20 +170,32 @@ class CredentialsPane(VimNavMixin, Widget):
         if not creds or not (0 <= t.cursor_row < len(creds)):
             return
         cred = creds[t.cursor_row]
-        from cb.tui.screens.detail_screen import DetailScreen
-        info = [
-            ("ID",          cred.id),
-            ("Type",        cred.type_name),
-            ("Description", cred.description or ""),
-            ("Scope",       cred.scope),
-            ("Store",       self._store),
-        ]
-        actions = [
-            ("d", f"{SYM.warn} Delete", lambda c=cred: self._confirm_delete(c.id)),
-        ]
-        self.app.push_screen(
-            DetailScreen(f"Credential: {cred.id}", info, actions)
-        )
+        self._open_detail_worker(cred)
+
+    @work(thread=True, exclusive=True, name="open-detail")
+    def _open_detail_worker(self, cred) -> None:
+        try:
+            client = self.app.ctrl_client or self.app.oc_client
+            if getattr(self.app, "_username", "") and client:
+                from cb.services.credential_service import get_credential
+                detailed_cred = get_credential(client, cred.id, username=getattr(self.app, "_username", ""), store=self._store)
+                if detailed_cred:
+                    cred = detailed_cred
+                    
+            from cb.tui.screens.detail_screen import DetailScreen
+            info = [
+                ("ID",          cred.id),
+                ("Type",        cred.type_name),
+                ("Description", cred.description or ""),
+                ("Scope",       cred.scope),
+                ("Store",       self._store),
+            ]
+            actions = [
+                ("d", f"{SYM.warn} Delete", lambda c=cred: self._confirm_delete(c.id)),
+            ]
+            self.app.call_from_thread(self.app.push_screen, DetailScreen(f"Credential: {cred.id}", info, actions))
+        except Exception as e:
+            self.app.call_from_thread(self.app.notify, f"Error: {e}", severity="error")
 
     # ── Bindings ───────────────────────────────────────────────
 
@@ -252,7 +244,7 @@ class CredentialsPane(VimNavMixin, Widget):
                 store=self._store,
             )
             from cb.db.repositories.resource_repo import untrack_resource
-            profile = getattr(self.app, "_username", "") or "default"
+            profile = "default"
             untrack_resource("credential", cred_id, profile,
                              controller_name=client.base_url,
                              db_path=self.app._db_path)
@@ -278,7 +270,7 @@ class CredentialsPane(VimNavMixin, Widget):
                 username=getattr(self.app, "_username", ""), store=store,
             )
             from cb.db.repositories.resource_repo import track_resource
-            profile = getattr(self.app, "_username", "") or "default"
+            profile = "default"
             track_resource("credential", cred_id, profile,
                            controller_name=client.base_url,
                            db_path=self.app._db_path)

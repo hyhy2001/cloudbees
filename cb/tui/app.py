@@ -330,4 +330,4 @@ def main(db_path: Optional[Path] = None) -> None:
     """Entry point called from cb/main.py."""
     _ensure_utf8_safe()
     app = BeeApp(db_path=db_path)
-    app.run()
+    app.run(mouse=False)
