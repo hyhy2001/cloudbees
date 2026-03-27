@@ -55,11 +55,24 @@ def cmd_list(ctx, show_all):
             
             jobs = display_jobs
         headers = ["Name", "Type", "Status", "Build#", "Description"]
+        def _map_color(color: str) -> str:
+            base = color.replace("_anime", "")
+            is_running = "_anime" in color
+            state = {
+                "blue": "OK",
+                "red": "FAIL",
+                "yellow": "WARN",
+                "aborted": "ABORTED",
+                "notbuilt": "NEW",
+                "disabled": "DISABLED",
+            }.get(base, base.upper() if base else "UNKNOWN")
+            return f"{state} (Run)" if is_running else state
+
         rows = [
             [
                 j.name[:30],
                 j.job_type or "?",
-                j.color[:10],
+                _map_color(j.color)[:14],
                 str(j.last_build_number or "-"),
                 (j.description or "")[:30],
             ]
