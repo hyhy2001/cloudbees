@@ -149,7 +149,7 @@ Built with **[Textual](https://textual.textualize.io/)** — async-first, non-bl
 | `X` | Logout (clears session) |
 | `r` | Run selected job (Jobs) |
 | `s` | Stop last build (Jobs) · Toggle store: system↔user (Credentials) |
-| `l` | View build log with colour-coding (Jobs) |
+| `l` | View live streaming build log (Jobs) |
 | `n` | Create new item (Jobs / Nodes) |
 | `d` | Delete selected item |
 | `o` | Toggle node offline/online (Nodes) |
@@ -161,6 +161,8 @@ Built with **[Textual](https://textual.textualize.io/)** — async-first, non-bl
 | `Esc` | Close modal / go back |
 
 > **Session:** Login once → session saved encrypted in SQLite. Reopen TUI/CLI anytime without re-entering credentials. `X` to logout.
+> 
+> **Resource Tracking:** Resources (Jobs, Nodes, Credentials) created via `bee` are persistently tracked. The TUI and CLI default to filtering by **MINE**, showing only your items. Press `a` (or pass `--all`) to toggle to **ALL** items. Live streaming logs use Jenkins progressive API to tail logs without hanging the UI.
 
 ---
 
@@ -229,6 +231,7 @@ cloudbees/
 
 | Version | Changes |
 |---------|---------|
+| `0.4.0` | **Live Log Streaming** (Progressive API polling), Persistent Resource Tracking (MINE vs ALL), Smart CLI Status Formatting (`NEW (Run)`, `OK`, `FAIL`), offline-capable routing |
 | `0.3.0` | **Textual TUI** (async workers, non-blocking UI), dual credential store (system/user), shorter TTLs (30–60s), Python 3.9+, `--store` CLI option |
 | `0.2.0` | Controller, Credential, Node management; Job create; local `./lib` install |
 | `0.1.0` | Initial release — auth, job list/run/stop, TUI, encrypted storage, cache |
