@@ -35,6 +35,9 @@ class LogScreen(Screen):
         super().__init__(**kwargs)
         self._job_name    = job_name
         self._build_number = build_number
+        self._log_offset = 0
+        self._is_streaming = False
+        self._poll_timer = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -48,15 +51,21 @@ class LogScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        self._fetch_log()
+        self._start_stream()
 
     def action_go_back(self) -> None:
+        if self._poll_timer:
+            self._poll_timer.stop()
         self.app.pop_screen()
 
     def action_refresh_log(self) -> None:
+        if self._poll_timer:
+            self._poll_timer.stop()
         log_view = self.query_one("#log-view", RichLog)
         log_view.clear()
-        self._fetch_log()
+        self._log_offset = 0
+        self._is_streaming = False
+        self._start_stream()
 
     # ── Vim scroll actions ──────────────────────────────────────
 
@@ -80,12 +89,11 @@ class LogScreen(Screen):
         log = self.query_one("#log-view", RichLog)
         log.scroll_page_up()
 
-    @work(thread=True, name="fetch-log")
-    def _fetch_log(self) -> None:
+    @work(thread=True, name="fetch-log", exclusive=True)
+    def _start_stream(self) -> None:
         log_view = self.query_one("#log-view", RichLog)
         try:
             client = getattr(self.app, "ctrl_client", None)
-            if not client: return
             if not client:
                 self.app.call_from_thread(
                     log_view.write,
@@ -93,47 +101,87 @@ class LogScreen(Screen):
                 )
                 return
 
-            from cb.services.job_service import get_last_build_log, get_build_log
-
             self.app.call_from_thread(
                 log_view.write,
-                f"[dim]Fetching log for [bold]{self._job_name}[/bold]...[/dim]"
+                f"[dim]Streaming log for [bold]{self._job_name}[/bold]...[/dim]\n"
             )
 
-            if self._build_number:
-                text = get_build_log(client, self._job_name, self._build_number)
-            else:
-                text = get_last_build_log(client, self._job_name)
-
-            self.app.call_from_thread(log_view.clear)
-
-            if not text or text.strip() == "(No builds found)":
-                self.app.call_from_thread(
-                    log_view.write,
-                    f"[yellow]{SYM.warn} No build log found for '{self._job_name}'.[/yellow]"
-                )
-                return
-
-            # Write log lines with colour-coding
-            for line in text.splitlines():
-                stripped = line.strip()
-                if not stripped:
-                    self.app.call_from_thread(log_view.write, "")
-                    continue
-                # Colour-code common log patterns
-                if any(k in stripped.upper() for k in ("ERROR", "FAILED", "FAILURE", "EXCEPTION")):
-                    self.app.call_from_thread(log_view.write, f"[red]{line}[/red]")
-                elif any(k in stripped.upper() for k in ("WARN", "WARNING")):
-                    self.app.call_from_thread(log_view.write, f"[yellow]{line}[/yellow]")
-                elif any(k in stripped.upper() for k in ("SUCCESS", "FINISHED", "COMPLETED")):
-                    self.app.call_from_thread(log_view.write, f"[green]{line}[/green]")
-                elif stripped.startswith("[Pipeline]") or stripped.startswith("+ "):
-                    self.app.call_from_thread(log_view.write, f"[blue]{line}[/blue]")
-                else:
-                    self.app.call_from_thread(log_view.write, line)
+            # Do an initial synchronous poll
+            self._poll_log()
+            
+            if self._is_streaming:
+                self.app.call_from_thread(self._schedule_poll)
 
         except Exception as exc:
             self.app.call_from_thread(
                 log_view.write,
+                f"[red]{SYM.fail} Error starting stream: {exc}[/red]"
+            )
+
+    def _schedule_poll(self) -> None:
+        """Schedule the next poll iteration."""
+        if self._poll_timer:
+            self._poll_timer.stop()
+        self._poll_timer = self.set_timer(2.0, self._poll_log_worker)
+
+    @work(thread=True, name="poll-log", exclusive=True)
+    def _poll_log_worker(self) -> None:
+        """Background worker that executes the progressive fetch."""
+        self._poll_log()
+        if self._is_streaming:
+            self.app.call_from_thread(self._schedule_poll)
+        else:
+            self.app.call_from_thread(
+                self.query_one("#log-view", RichLog).write,
+                f"\n[dim]{SYM.ok} Stream finished.[/dim]"
+            )
+
+    def _poll_log(self) -> None:
+        log_view = self.query_one("#log-view", RichLog)
+        try:
+            client = getattr(self.app, "ctrl_client", None)
+            if not client: return
+
+            from cb.services.job_service import stream_build_log, stream_last_build_log
+
+            if self._build_number:
+                text, new_offset, has_more = stream_build_log(client, self._job_name, self._build_number, self._log_offset)
+            else:
+                text, new_offset, has_more = stream_last_build_log(client, self._job_name, self._log_offset)
+
+            self._is_streaming = has_more
+            self._log_offset = new_offset
+
+            if text:
+                self._write_lines(text, log_view)
+
+            if not has_more and self._log_offset == 0 and not text:
+                self.app.call_from_thread(
+                    log_view.write,
+                    f"[yellow]{SYM.warn} No build log found for '{self._job_name}'.[/yellow]"
+                )
+
+        except Exception as exc:
+            self._is_streaming = False
+            self.app.call_from_thread(
+                log_view.write,
                 f"[red]{SYM.fail} Error fetching log: {exc}[/red]"
             )
+
+    def _write_lines(self, text: str, log_view: RichLog) -> None:
+        """Color code and write log chunks to UI."""
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                self.app.call_from_thread(log_view.write, "")
+                continue
+            if any(k in stripped.upper() for k in ("ERROR", "FAILED", "FAILURE", "EXCEPTION")):
+                self.app.call_from_thread(log_view.write, f"[red]{line}[/red]")
+            elif any(k in stripped.upper() for k in ("WARN", "WARNING")):
+                self.app.call_from_thread(log_view.write, f"[yellow]{line}[/yellow]")
+            elif any(k in stripped.upper() for k in ("SUCCESS", "FINISHED", "COMPLETED")):
+                self.app.call_from_thread(log_view.write, f"[green]{line}[/green]")
+            elif stripped.startswith("[Pipeline]") or stripped.startswith("+ "):
+                self.app.call_from_thread(log_view.write, f"[blue]{line}[/blue]")
+            else:
+                self.app.call_from_thread(log_view.write, line)

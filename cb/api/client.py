@@ -205,6 +205,33 @@ class CloudBeesClient:
         except httpx.RequestError as exc:
             raise ConnectionError(str(exc)) from exc
 
+    def get_progressive_text(self, path: str, start: int = 0) -> tuple[str, int, bool]:
+        """GET progressive text log, returning (text, new_offset, has_more)"""
+        if path.startswith("http://") or path.startswith("https://"):
+            url = path
+        else:
+            url = f"{self.base_url}{path}"
+            
+        try:
+            resp = httpx.get(
+                url,
+                params={"start": start},
+                headers=self._headers(),
+                timeout=self._timeout,
+                follow_redirects=True,
+                verify=False
+            )
+            if resp.status_code == 404:
+                return "", start, False
+            if not resp.is_success:
+                raise APIError(resp.status_code, resp.text[:200])
+
+            new_size = int(resp.headers.get("X-Text-Size", start))
+            has_more = resp.headers.get("X-More-Data", "false").lower() == "true"
+            return resp.text, new_size, has_more
+        except httpx.RequestError as exc:
+            raise ConnectionError(str(exc)) from exc
+
     def post(self, path: str, invalidate: Optional[str] = None, **kwargs: Any) -> Any:
         """POST with CSRF crumb injection and optional cache invalidation."""
         result = self._write_request("POST", path, **kwargs)

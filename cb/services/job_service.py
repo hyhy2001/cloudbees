@@ -141,6 +141,15 @@ def get_last_build_log(client: CloudBeesClient, job_name: str) -> str:
         return "(No builds found)"
     return get_build_log(client, job_name, build_num)
 
+def stream_build_log(client: CloudBeesClient, job_name: str, build_num: int, start: int = 0) -> tuple[str, int, bool]:
+    """Progressively stream the build console log."""
+    return client.get_progressive_text(f"/job/{job_name}/{build_num}/logText/progressiveText", start=start)
+
+def stream_last_build_log(client: CloudBeesClient, job_name: str, start: int = 0) -> tuple[str, int, bool]:
+    build_num = get_last_build_number(client, job_name)
+    if build_num is None:
+        return "", start, False
+    return stream_build_log(client, job_name, build_num, start)
 
 def get_build_history(client: CloudBeesClient, job_name: str, count: int = 10) -> List[BuildDTO]:
     """Return recent build history."""
