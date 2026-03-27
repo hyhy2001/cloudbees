@@ -104,22 +104,7 @@ bee node online <name>
 bee node delete <name> [--yes]
 ```
 
-### Users
 
-```bash
-bee users list [-o json|table]
-bee users get <user-id>
-```
-
-### System
-
-```bash
-bee system health
-bee system version
-bee system cache-clear
-```
-
----
 
 ## TUI Mode
 
@@ -198,7 +183,7 @@ All `GET` responses cached in SQLite with short TTLs for fast refresh:
 | `nodes.list/detail` | 30 s |
 | Default (other resources) | 30 s |
 
-`F5` or `bee system cache-clear` bypasses the cache and forces a live API call.
+`F5` bypasses the cache and forces a live API call from the TUI.
 
 ---
 
@@ -213,7 +198,7 @@ cloudbees/
 └── cb/
     ├── api/            # HTTP client, CSRF crumb, XML builder
     ├── cache/          # SQLite TTL cache (manager + policy)
-    ├── cli/commands/   # auth, controller, jobs, credentials, nodes, users, system
+    ├── cli/commands/   # auth, controller, jobs, credentials, nodes
     ├── crypto/         # Encryption utilities (reserved)
     ├── db/             # SQLite schema, connection, repositories
     ├── dtos/           # Dataclass DTOs (Job, Node, Credential, Auth…)
