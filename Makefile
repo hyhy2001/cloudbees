@@ -21,6 +21,7 @@ install:
 	@echo "Creating virtual environment and installing..."
 	@python3 -m venv .venv
 	@./.venv/bin/pip install .
+	@source .venv/bin/activate
 
 init:
 	@if [ ! -d ".venv" ]; then \
