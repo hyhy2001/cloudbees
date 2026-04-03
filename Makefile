@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 PYTHON   := python3
-DEPS     := click httpx cryptography textual
+DEPS     := textual rich
 ABS_PATH := $(shell pwd)
 BIN_DIR  := $(HOME)/.local/bin
 
@@ -9,18 +9,25 @@ help:
 	@echo ""
 	@echo "  bee 🐝 — CloudBees CLI"
 	@echo ""
-	@echo "    make install     Setup (run once)"
+	@echo "    make init        Setup bee and add to bin dir (checks deps)"
+	@echo "    make install     Install local dependencies (run once)"
 	@echo "    make uninstall   Remove bee"
 	@echo "    make run         make run ARGS='job list'"
 	@echo "    make ui          Launch TUI"
 	@echo ""
 
 install:
+	@echo "Installing dependencies..."
 	@mkdir -p ./lib
-	@~/.local/bin/pip install --target=./lib $(DEPS) -q 2>/dev/null || \
-	 pip install --target=./lib $(DEPS) -q 2>/dev/null || \
-	 pip3 install --target=./lib $(DEPS) -q 2>/dev/null || \
-	 echo "[WARN] pip failed — run: pip install --target=./lib $(DEPS)"
+	@pip3 install --target=./lib $(DEPS) -q 2>/dev/null || \
+	 echo "[WARN] pip3 failed — run: pip3 install --target=./lib $(DEPS)"
+
+init:
+	@if [ ! -d "./lib" ] || [ -z "$$(ls -A ./lib 2>/dev/null)" ]; then \
+		$(MAKE) install; \
+	else \
+		echo "Dependencies already installed in ./lib, skipping install."; \
+	fi
 	@mkdir -p $(BIN_DIR)
 	@printf '#!/bin/sh\n$(PYTHON) $(ABS_PATH)/run.py "$$@"\n' > $(BIN_DIR)/bee
 	@chmod +x $(BIN_DIR)/bee
@@ -34,14 +41,18 @@ install:
 
 uninstall:
 	@rm -f $(BIN_DIR)/bee && echo "[OK] Removed bee"
+	@rm -rf ./lib && echo "[OK] Removed local dependencies (./lib)"
 
 run:
-	$(PYTHON) run.py $(ARGS)
+	@if [ -z "$(ARGS)" ]; then \
+		echo "💡 Hint: Provide commands via ARGS (e.g., make run ARGS='job list')"; \
+	fi
+	$(BIN_DIR)/bee $(ARGS)
 
 ui:
-	$(PYTHON) run.py --ui
+	$(BIN_DIR)/bee --ui
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
-.PHONY: help install uninstall run ui clean
+.PHONY: help init install uninstall run ui clean
