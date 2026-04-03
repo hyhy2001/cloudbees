@@ -17,31 +17,20 @@ help:
 	@echo ""
 
 install:
-	@echo "Installing dependencies..."
-	@mkdir -p ./lib
-	@pip3 install --target=./lib $(DEPS) -q 2>/dev/null || \
-	 echo "[WARN] pip3 failed — run: pip3 install --target=./lib $(DEPS)"
+	@echo "Installing cloudbees-cli locally..."
+	@pip3 install --user .
 
 init:
-	@if [ ! -d "./lib" ] || [ -z "$$(ls -A ./lib 2>/dev/null)" ]; then \
-		$(MAKE) install; \
-	else \
-		echo "Dependencies already installed in ./lib, skipping install."; \
-	fi
-	@mkdir -p $(BIN_DIR)
-	@printf '#!/bin/sh\n$(PYTHON) $(ABS_PATH)/run.py "$$@"\n' > $(BIN_DIR)/bee
-	@chmod +x $(BIN_DIR)/bee
+	@$(MAKE) install
 	@echo ""
-	@echo "  [OK] bee installed to $(BIN_DIR)/bee"
+	@echo "  [OK] bee installed via pip"
 	@echo ""
-	@echo "  If 'bee' is not found, add to PATH:"
-	@echo "    bash/zsh : export PATH=\"$(BIN_DIR):\$$PATH\""
-	@echo "    csh/tcsh : setenv PATH $(BIN_DIR):\$$PATH"
+	@echo "  If 'bee' is not found, verify ~/.local/bin is in your PATH."
 	@echo ""
 
 uninstall:
-	@rm -f $(BIN_DIR)/bee && echo "[OK] Removed bee"
-	@rm -rf ./lib && echo "[OK] Removed local dependencies (./lib)"
+	@pip3 uninstall bee-cloudbees-cli -y && echo "[OK] Removed bee"
+	@rm -rf ./lib && echo "[OK] Removed old local dependencies if any"
 
 run:
 	@if [ -z "$(ARGS)" ]; then \
