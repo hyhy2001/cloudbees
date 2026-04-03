@@ -7,7 +7,7 @@ BIN_DIR  := $(HOME)/.local/bin
 
 help:
 	@echo ""
-	@echo "  bee 🐝 — CloudBees CLI"
+	@echo "  bee - CloudBees CLI"
 	@echo ""
 	@echo "    make init        Setup bee and add to bin dir (checks deps)"
 	@echo "    make install     Install local dependencies (run once)"
