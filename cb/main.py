@@ -1,6 +1,5 @@
 """bee -- CloudBees CLI + TUI entry point."""
 
-from __future__ import annotations
 import os
 import sys
 import logging
