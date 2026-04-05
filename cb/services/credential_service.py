@@ -98,16 +98,45 @@ def delete_credential(
     )
 
 
+import xml.etree.ElementTree as ET
+
 def update_credential(
     client: CloudBeesClient,
     cred_id: str,
-    xml_str: str,
+    username_cred: Optional[str] = None,
+    password: Optional[str] = None,
+    desc: Optional[str] = None,
     username: str = "",
     store: str = "system",
 ) -> None:
     user_seg = _get_user_seg(username, store)
+    
+    xml_str = client.get_text(f"{user_seg}/credential/{cred_id}/config.xml")
+    root = ET.fromstring(xml_str)
+    
+    if username_cred is not None:
+        elem = root.find("username")
+        if elem is None:
+            elem = ET.SubElement(root, "username")
+        elem.text = username_cred
+        
+    if password is not None:
+        elem = root.find("password")
+        if elem is None:
+            elem = ET.SubElement(root, "password")
+        # Ensure hudson.util.Secret wrapping isn't messed up by raw injection, 
+        # but CloudBees accepts plaintext strings here via post_xml and automatically encrypts.
+        elem.text = password
+        
+    if desc is not None:
+        elem = root.find("description")
+        if elem is None:
+            elem = ET.SubElement(root, "description")
+        elem.text = desc
+
+    updated_xml = "<?xml version='1.1' encoding='UTF-8'?>\n" + ET.tostring(root, encoding="unicode")
     client.post_xml(
         f"{user_seg}/credential/{cred_id}/config.xml",
-        xml_str=xml_str,
+        xml_str=updated_xml,
         invalidate="credentials.",
     )

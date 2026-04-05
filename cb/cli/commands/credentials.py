@@ -2,6 +2,7 @@ from __future__ import annotations
 """cb cred -- list, get, create (username+password), delete."""
 
 import click
+from cb.cli.console import console, print_error
 from cb.cli.formatters import format_table, format_kv
 from cb.services.credential_service import CREDENTIAL_STORES
 
@@ -64,14 +65,14 @@ def cmd_list(ctx, output, show_all, store):
 
         if output == "json":
             import json
-            click.echo(json.dumps([c.to_dict() for c in creds], indent=2))
+            console.print(json.dumps([c.to_dict() for c in creds], indent=2))
         else:
             headers = ["ID", "Type", "Description", "Scope"]
             rows = [[c.id, c.type_name[:25], (c.description or "")[:35], c.scope] for c in creds]
-            click.echo(format_table(headers, rows))
-            click.echo(f"  {len(creds)} credential(s)  [store: {store}]")
+            console.print(format_table(headers, rows))
+            console.print(f"  {len(creds)} credential(s)  [store: {store}]")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -88,9 +89,9 @@ def cmd_get(ctx, cred_id, store):
         for k in list(data.keys()):
             if any(s in k.lower() for s in ("password", "secret", "key", "token")):
                 data[k] = "[HIDDEN]"
-        click.echo(format_kv(data))
+        console.print(format_kv(data))
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -127,15 +128,15 @@ def cmd_create(ctx, cred_id, username, password, description, scope, store):
         )
         from cb.db.repositories.resource_repo import track_resource
         track_resource("credential", cred_id, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
-        click.echo(f"[OK] Credential '{cred_id}' created in {store} store.")
+        console.print(f"[success]OK[/success] Credential '{cred_id}' created in {store} store.")
         if store == "user":
             usr = _username(ctx)
             url = f"{_client(ctx).base_url.rstrip('/')}/user/{usr}/credentials/store/user/domain/_/credential/{cred_id}/"
         else:
             url = f"{_client(ctx).base_url.rstrip('/')}/credentials/store/system/domain/_/credential/{cred_id}/"
-        click.echo(f"  Link: {url}")
+        console.print(f"  Link: {url}")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -153,25 +154,39 @@ def cmd_delete(ctx, cred_id, yes, store):
         delete_credential(_client(ctx), cred_id, username=_username(ctx), store=store)
         from cb.db.repositories.resource_repo import untrack_resource
         untrack_resource("credential", cred_id, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
-        click.echo(f"[OK] Credential '{cred_id}' deleted from {store} store.")
+        console.print(f"[success]OK[/success] Credential '{cred_id}' deleted from {store} store.")
     except click.Abort:
-        click.echo("Cancelled.")
+        console.print("Cancelled.")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
 @cred_group.command("update")
 @click.argument("cred_id")
-@click.argument("xml_file", type=click.File("r"))
-@_STORE_OPTION
+@click.option("--username-cred", default=None, help="New username or ID")
+@click.option("--password", default=None, prompt=False, hide_input=True, help="New password")
+@click.option("--description", default=None, help="New description")
+@click.option("--store", default="system", type=click.Choice(("system", "user")),
+              help="Which store (default: system)")
 @click.pass_context
-def cmd_update(ctx, cred_id, xml_file, store):
-    """Update a credential using a config.xml file."""
+def cmd_update(ctx, cred_id, username_cred, password, description, store):
+    """Update an existing credential."""
     from cb.services.credential_service import update_credential
     try:
-        update_credential(_client(ctx), cred_id, xml_file.read(), username=_username(ctx), store=store)
-        click.echo(f"[OK] Credential '{cred_id}' updated.")
+        if password is not None and not password:
+            password = click.prompt("New Password", hide_input=True)
+            
+        update_credential(
+            _client(ctx), 
+            cred_id, 
+            username_cred=username_cred, 
+            password=password, 
+            desc=description, 
+            username=_username(ctx), 
+            store=store
+        )
+        console.print(f"[success]OK[/success] Credential '{cred_id}' updated.")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)

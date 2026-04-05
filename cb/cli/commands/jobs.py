@@ -6,6 +6,7 @@ import time
 import datetime
 
 import click
+from cb.cli.console import console, print_error
 from cb.cli.formatters import format_table, format_kv
 
 
@@ -78,10 +79,10 @@ def cmd_list(ctx, show_all):
             ]
             for j in jobs
         ]
-        click.echo(format_table(headers, rows))
-        click.echo(f"  {len(jobs)} job(s)  [FS=Freestyle  PL=Pipeline  FD=Folder]")
+        console.print(format_table(headers, rows))
+        console.print(f"  {len(jobs)} job(s)  [FS=Freestyle  PL=Pipeline  FD=Folder]")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -97,9 +98,9 @@ def cmd_get(ctx, name):
     try:
         job = get_job(_client(ctx), name)
         data = job.to_dict()
-        click.echo(format_kv(data))
+        console.print(format_kv(data))
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -127,11 +128,11 @@ def create_freestyle(ctx, name, description, shell, chdir, node):
         create_freestyle_job(_client(ctx), name=name, desc=description, shell_cmd=shell, chdir=chdir, node=node)
         from cb.db.repositories.resource_repo import track_resource
         track_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
-        click.echo(f"[OK] Freestyle job '{name}' created." + (f" on node '{node}'" if node else ""))
+        console.print(f"[success]OK[/success] Freestyle job '{name}' created." + (f" on node '{node}'" if node else ""))
         url = f"{_client(ctx).base_url.rstrip('/')}/job/{name}/"
-        click.echo(f"  Link: {url}")
+        console.print(f"  Link: {url}")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -150,7 +151,7 @@ def create_pipeline(ctx, name, description, script, script_file, node):
             with open(script_file, "r") as f:
                 script = f.read()
         elif not script:
-            click.echo("Enter Pipeline script (end with a line containing only '---'):")
+            console.print("Enter Pipeline script (end with a line containing only '---'):")
             lines = []
             while True:
                 line = click.prompt("", default="", prompt_suffix="")
@@ -161,11 +162,11 @@ def create_pipeline(ctx, name, description, script, script_file, node):
         create_pipeline_job(_client(ctx), name=name, desc=description, script=script, node=node)
         from cb.db.repositories.resource_repo import track_resource
         track_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
-        click.echo(f"[OK] Pipeline job '{name}' created." + (f" on node '{node}'" if node else ""))
+        console.print(f"[success]OK[/success] Pipeline job '{name}' created." + (f" on node '{node}'" if node else ""))
         url = f"{_client(ctx).base_url.rstrip('/')}/job/{name}/"
-        click.echo(f"  Link: {url}")
+        console.print(f"  Link: {url}")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -180,11 +181,11 @@ def create_folder(ctx, name, description):
         create_folder(_client(ctx), name=name, desc=description)
         from cb.db.repositories.resource_repo import track_resource
         track_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
-        click.echo(f"[OK] Folder '{name}' created.")
+        console.print(f"[success]OK[/success] Folder '{name}' created.")
         url = f"{_client(ctx).base_url.rstrip('/')}/job/{name}/"
-        click.echo(f"  Link: {url}")
+        console.print(f"  Link: {url}")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -210,24 +211,24 @@ def cmd_delete(ctx, name, yes):
         # Try to delete on server
         try:
             delete_job(client, name)
-            click.echo(f"[OK] Job '{name}' deleted from server.")
+            console.print(f"[success]OK[/success] Job '{name}' deleted from server.")
         except Exception as e:
             # If 404, job doesn't exist on server
             if "404" in str(e):
-                click.echo(f"[INFO] Job '{name}' not found on server, removing from local tracking only.")
+                console.print(f"[info]INFO[/info] Job '{name}' not found on server, removing from local tracking only.")
             # For other errors, show the error but still remove from local tracking
             else:
-                click.echo(f"[WARN] Could not delete job on server: {e}")
-                click.echo("Proceeding with local removal anyway.")
+                console.print(f"[warning]WARN[/warning] Could not delete job on server: {e}")
+                console.print("Proceeding with local removal anyway.")
         
         # Always remove from local tracking
         untrack_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
-        click.echo(f"[OK] Job '{name}' removed from local database.")
+        console.print(f"[success]OK[/success] Job '{name}' removed from local database.")
         
     except click.Abort:
-        click.echo("Cancelled.")
+        console.print("Cancelled.")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -255,52 +256,50 @@ def cmd_run(ctx, name, wait, timeout):
                 before = get_last_build_number(client, name) or 0
             except Exception as e:
                 # If we can't get the last build number, just use 0
-                click.echo(f"[WARN] Could not get current build number: {e}")
-                click.echo("Will use 0 as reference.")
+                console.print(f"[warning]WARN[/warning] Could not get current build number: {e}")
+                console.print("Will use 0 as reference.")
                 before = 0
         
         # Try to trigger the job
         try:
             trigger_job(client, name)
-            click.echo(f"[OK] Triggered: {name}")
+            console.print(f"[success]OK[/success] Triggered: {name}")
         except Exception as e:
             # Just show error without removing from local tracking
-            click.echo(f"[ERROR] Could not trigger job: {e}")
+            console.print(f"[ERROR] Could not trigger job: {e}")
             return
 
         if not wait:
             return
 
         # Wait for new build to appear (up to 15s)
-        click.echo("  Waiting for build to start...", nl=False)
-        deadline = time.time() + 15
         new_build_num = None
-        while time.time() < deadline:
-            try:
-                current = get_last_build_number(client, name)
-                if current and current > before:
-                    new_build_num = current
-                    break
-            except Exception:
-                # If we can't get the build number, just continue polling
-                pass
-            time.sleep(2)
-            click.echo(".", nl=False)
-        click.echo()
+        with console.status("Waiting for build to start...", spinner="dots"):
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                try:
+                    current = get_last_build_number(client, name)
+                    if current and current > before:
+                        new_build_num = current
+                        break
+                except Exception:
+                    pass
+                time.sleep(2)
 
         if not new_build_num:
-            click.echo("  Could not determine build number. Check Jenkins manually.")
+            console.print("  Could not determine build number. Check Jenkins manually.")
             return
 
-        click.echo(f"  Build #{new_build_num} -- waiting for completion (timeout={timeout}s)...")
         try:
-            build = wait_for_build(client, name, new_build_num, timeout=timeout)
+            with console.status(f"Build #{new_build_num} -- waiting for completion (timeout={timeout}s)...", spinner="dots"):
+                build = wait_for_build(client, name, new_build_num, timeout=timeout)
             result = build.result or "IN_PROGRESS"
-            click.echo(f"  Result: {result}")
+            color = "success" if result == "SUCCESS" else ("error" if result == "FAILURE" else "warning")
+            console.print(f"  Result: [{color}]{result}[/{color}]")
         except Exception as e:
-            click.echo(f"[ERROR] Error while waiting for build: {e}")
+            print_error(f"Error while waiting for build: {e}")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -316,9 +315,9 @@ def cmd_stop(ctx, name, build_number):
     from cb.services.job_service import stop_build
     try:
         stop_build(_client(ctx), name, build_number)
-        click.echo(f"[OK] Stop requested: {name} #{build_number}")
+        console.print(f"[success]OK[/success] Stop requested: {name} #{build_number}")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -345,18 +344,18 @@ def cmd_log(ctx, name, build_number, follow):
             try:
                 build_number = get_last_build_number(client, name)
                 if build_number is None:
-                    click.echo("No builds found.")
+                    console.print("No builds found.")
                     return
             except Exception as e:
                 # Just show error without removing from local tracking
-                click.echo(f"[ERROR] Could not get last build number: {e}")
+                console.print(f"[ERROR] Could not get last build number: {e}")
                 return
 
         # Try to get the log
         try:
             if not follow:
                 log = get_build_log(client, name, build_number)
-                click.echo(log)
+                console.print(log)
                 return
             
             # Follow mode -- poll until done
@@ -365,7 +364,7 @@ def cmd_log(ctx, name, build_number, follow):
                 log = get_build_log(client, name, build_number)
                 new_content = log[shown:]
                 if new_content:
-                    click.echo(new_content, nl=False)
+                    console.print(new_content, end="")
                     shown = len(log)
                 build = get_build_detail(client, name, build_number)
                 if not build.building:
@@ -373,12 +372,12 @@ def cmd_log(ctx, name, build_number, follow):
                 time.sleep(3)
         except Exception as e:
             # Just show error without removing from local tracking
-            click.echo(f"[ERROR] Could not get build log: {e}")
+            console.print(f"[ERROR] Could not get build log: {e}")
             return
     except KeyboardInterrupt:
         pass
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -395,7 +394,7 @@ def cmd_status(ctx, name, count):
     try:
         builds = get_build_history(_client(ctx), name, count=count)
         if not builds:
-            click.echo("No builds found.")
+            console.print("No builds found.")
             return
 
         headers = ["Build#", "Result", "Duration", "Timestamp"]
@@ -406,22 +405,47 @@ def cmd_status(ctx, name, count):
             result = b.result if b.result else ("RUNNING" if b.building else "-")
             rows.append([str(b.number), result, dur, ts])
 
-        click.echo(format_table(headers, rows))
+        console.print(format_table(headers, rows))
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
-@jobs_group.command("update")
+@jobs_group.group("update")
+def cmd_update():
+    """Update an existing job's configuration."""
+
+@cmd_update.command("freestyle")
 @click.argument("name")
-@click.argument("xml_file", type=click.File("r"))
+@click.option("--description", default=None, help="Job description")
+@click.option("--shell", default=None, help="Shell command to run")
+@click.option("--node", default=None, help="Restrict job to a specific node/label")
 @click.pass_context
-def cmd_update(ctx, name, xml_file):
-    """Update a job using a config.xml file."""
-    from cb.services.job_service import update_job
+def update_freestyle(ctx, name, description, shell, node):
+    """Update a Freestyle project's configuration."""
+    from cb.services.job_service import update_job_freestyle
     try:
-        update_job(_client(ctx), name, xml_file.read())
-        click.echo(f"[OK] Job '{name}' updated.")
+        update_job_freestyle(_client(ctx), name=name, desc=description, shell_cmd=shell, node=node)
+        console.print(f"[success]OK[/success] Freestyle job '{name}' updated.")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
+        raise SystemExit(1)
+
+@cmd_update.command("pipeline")
+@click.argument("name")
+@click.option("--description", default=None, help="Job description")
+@click.option("--script", default=None, help="Inline Pipeline script")
+@click.option("--script-file", default=None, type=click.Path(exists=True), help="Read script from file")
+@click.pass_context
+def update_pipeline(ctx, name, description, script, script_file):
+    """Update a Pipeline job's configuration."""
+    from cb.services.job_service import update_job_pipeline
+    try:
+        if script_file:
+            with open(script_file, "r") as f:
+                script = f.read()
+        update_job_pipeline(_client(ctx), name=name, desc=description, script=script)
+        console.print(f"[success]OK[/success] Pipeline job '{name}' updated.")
+    except Exception as exc:
+        print_error(str(exc), exc)
         raise SystemExit(1)

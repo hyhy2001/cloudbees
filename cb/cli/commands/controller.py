@@ -2,6 +2,7 @@ from __future__ import annotations
 """cb controller -- list, info, select, current."""
 
 import click
+from cb.cli.console import console, print_error
 from cb.cli.formatters import format_table, format_kv
 
 
@@ -35,10 +36,10 @@ def cmd_list(ctx):
             ]
             for c in controllers
         ]
-        click.echo(format_table(headers, rows))
-        click.echo(f"  {len(controllers)} controller(s)")
+        console.print(format_table(headers, rows))
+        console.print(f"  {len(controllers)} controller(s)")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -51,9 +52,9 @@ def cmd_info(ctx, name):
     import dataclasses
     try:
         caps = get_controller_capabilities(_client(ctx), name)
-        click.echo(format_kv(dataclasses.asdict(caps)))
+        console.print(format_kv(dataclasses.asdict(caps)))
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -68,7 +69,7 @@ def cmd_select(ctx, name):
         controllers = list_controllers(client)
         match = next((c for c in controllers if c.name == name), None)
         if not match:
-            click.echo(f"[ERROR] Controller '{name}' not found.", err=True)
+            console.print(f"[ERROR] Controller '{name}' not found.", err=True)
             raise SystemExit(1)
             
         url = match.url
@@ -76,12 +77,12 @@ def cmd_select(ctx, name):
         url = resolve_controller_url(client, url)
             
         select_controller(match.name, url, ctx.obj.get("db_path"))
-        click.echo(f"[OK] Active controller: {match.name}")
-        click.echo(f"     Resolved URL: {url}")
+        console.print(f"[success]OK[/success] Active controller: {match.name}")
+        console.print(f"     Resolved URL: {url}")
     except SystemExit:
         raise
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -92,7 +93,7 @@ def cmd_current(ctx):
     from cb.services.controller_service import get_active_controller
     active = get_active_controller(ctx.obj.get("db_path"))
     if active:
-        click.echo(f"Active controller: {active[0]}")
-        click.echo(f"URL              : {active[1]}")
+        console.print(f"Active controller: {active[0]}")
+        console.print(f"URL              : {active[1]}")
     else:
-        click.echo("No active controller selected. Use: cb controller select <name>")
+        console.print("No active controller selected. Use: cb controller select <name>")

@@ -128,10 +128,50 @@ def toggle_offline(client: CloudBeesClient, name: str, reason: str = "") -> None
     )
 
 
-def update_node(client: CloudBeesClient, name: str, xml_str: str) -> None:
-    """Update node using a config.xml string."""
+import xml.etree.ElementTree as ET
+
+def update_node(
+    client: CloudBeesClient,
+    name: str,
+    remote_dir: Optional[str] = None,
+    num_executors: Optional[int] = None,
+    labels: Optional[str] = None,
+    desc: Optional[str] = None,
+) -> None:
+    """Update node using partial fields safely without overriding others."""
+    # 1. Fetch current xml
+    xml_str = client.get_text(f"/computer/{name}/config.xml")
+    root = ET.fromstring(xml_str)
+    
+    # 2. Update fields if provided
+    if desc is not None:
+        elem = root.find("description")
+        if elem is None:
+            elem = ET.SubElement(root, "description")
+        elem.text = desc
+        
+    if remote_dir is not None:
+        elem = root.find("remoteFS")
+        if elem is None:
+            elem = ET.SubElement(root, "remoteFS")
+        elem.text = remote_dir
+        
+    if num_executors is not None:
+        elem = root.find("numExecutors")
+        if elem is None:
+            elem = ET.SubElement(root, "numExecutors")
+        elem.text = str(num_executors)
+        
+    if labels is not None:
+        elem = root.find("label")
+        if elem is None:
+            elem = ET.SubElement(root, "label")
+        elem.text = labels
+
+    # 3. Serialize and post
+    updated_xml = "<?xml version='1.1' encoding='UTF-8'?>\n" + ET.tostring(root, encoding="unicode")
     client.post_xml(
         f"/computer/{name}/config.xml",
-        xml_str=xml_str,
+        xml_str=updated_xml,
         invalidate="nodes.",
     )

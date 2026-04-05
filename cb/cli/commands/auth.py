@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import click
+from cb.cli.console import console, print_error
 from cb.services.auth_service import login, logout
 from cb.db.repositories.profile_repo import list_profiles, delete_profile
 from cb.cli.formatters import format_table
@@ -24,10 +25,10 @@ def cmd_login(ctx, url, username, token, profile):
         p = login(server_url=url, username=username, password=token,
                   profile_name=profile, is_default=True,
                   db_path=ctx.obj.get("db_path"))
-        click.echo(f"[OK] Logged in as '{p.username}' on {p.server_url}")
-        click.echo(f"     Profile: {p.name}")
+        console.print(f"[success]OK[/success] Logged in as '{p.username}' on {p.server_url}")
+        console.print(f"     Profile: {p.name}")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -37,7 +38,7 @@ def cmd_login(ctx, url, username, token, profile):
 def cmd_logout(ctx, profile):
     """Remove stored token for a profile."""
     logout(profile_name=profile, db_path=ctx.obj.get("db_path"))
-    click.echo("[OK] Logged out.")
+    console.print("[success]OK[/success] Logged out.")
 
 
 @auth_group.command("delete")
@@ -47,9 +48,9 @@ def cmd_delete(ctx, profile):
     """Delete a saved profile."""
     try:
         delete_profile(profile, db_path=ctx.obj.get("db_path"))
-        click.echo(f"[OK] Profile '{profile}' deleted.")
+        console.print(f"[success]OK[/success] Profile '{profile}' deleted.")
     except Exception as exc:
-        click.echo(f"[ERROR] Failed to delete profile: {exc}", err=True)
+        console.print(f"[ERROR] Failed to delete profile: {exc}", err=True)
         raise SystemExit(1)
 
 
@@ -59,10 +60,10 @@ def cmd_profiles(ctx):
     """List all saved profiles."""
     profiles = list_profiles(ctx.obj.get("db_path"))
     if not profiles:
-        click.echo("No profiles found. Run: cb login")
+        console.print("No profiles found. Run: cb login")
         return
     rows = [
         [p.name, p.server_url, p.username, "*" if p.is_default else ""]
         for p in profiles
     ]
-    click.echo(format_table(["Profile", "Server", "Username", "Default"], rows))
+    console.print(format_table(["Profile", "Server", "Username", "Default"], rows))

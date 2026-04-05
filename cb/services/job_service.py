@@ -238,9 +238,87 @@ def delete_job(client: CloudBeesClient, name: str) -> None:
         raise e
 
 
-def update_job(client: CloudBeesClient, name: str, xml_str: str) -> None:
+import xml.etree.ElementTree as ET
+
+def _get_job_config(client: CloudBeesClient, name: str) -> ET.Element:
+    xml_str = client.get_text(f"/job/{name}/config.xml")
+    return ET.fromstring(xml_str)
+
+def _post_job_config(client: CloudBeesClient, name: str, root: ET.Element) -> None:
+    # Need to include the XML declaration
+    xml_str = "<?xml version='1.1' encoding='UTF-8'?>\n" + ET.tostring(root, encoding="unicode")
     client.post_xml(
         f"/job/{name}/config.xml",
         xml_str=xml_str,
         invalidate="jobs.",
     )
+
+def update_job_freestyle(
+    client: CloudBeesClient,
+    name: str,
+    desc: Optional[str] = None,
+    shell_cmd: Optional[str] = None,
+    node: Optional[str] = None,
+) -> None:
+    root = _get_job_config(client, name)
+    
+    if desc is not None:
+        desc_elem = root.find("description")
+        if desc_elem is None:
+            desc_elem = ET.SubElement(root, "description")
+        desc_elem.text = desc
+
+    if node is not None:
+        node_elem = root.find("assignedNode")
+        if node_elem is None:
+            node_elem = ET.SubElement(root, "assignedNode")
+        node_elem.text = node
+        
+        roam_elem = root.find("canRoam")
+        if roam_elem is None:
+            roam_elem = ET.SubElement(root, "canRoam")
+        roam_elem.text = "false" if node else "true"
+
+    if shell_cmd is not None:
+        builders = root.find("builders")
+        if builders is None:
+            builders = ET.SubElement(root, "builders")
+        shell_elem = builders.find("hudson.tasks.Shell")
+        if shell_elem is None:
+            shell_elem = ET.SubElement(builders, "hudson.tasks.Shell")
+        cmd_elem = shell_elem.find("command")
+        if cmd_elem is None:
+            cmd_elem = ET.SubElement(shell_elem, "command")
+        cmd_elem.text = shell_cmd
+
+    _post_job_config(client, name, root)
+
+
+def update_job_pipeline(
+    client: CloudBeesClient,
+    name: str,
+    desc: Optional[str] = None,
+    script: Optional[str] = None,
+) -> None:
+    root = _get_job_config(client, name)
+    
+    if desc is not None:
+        desc_elem = root.find("description")
+        if desc_elem is None:
+            desc_elem = ET.SubElement(root, "description")
+        desc_elem.text = desc
+
+    if script is not None:
+        definition = root.find("definition")
+        if definition is None:
+            definition = ET.SubElement(root, "definition", {"class": "org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition", "plugin": "workflow-cps"})
+        script_elem = definition.find("script")
+        if script_elem is None:
+            script_elem = ET.SubElement(definition, "script")
+        script_elem.text = script
+        sandbox = definition.find("sandbox")
+        if sandbox is None:
+            sandbox = ET.SubElement(definition, "sandbox")
+            sandbox.text = "true"
+
+    _post_job_config(client, name, root)

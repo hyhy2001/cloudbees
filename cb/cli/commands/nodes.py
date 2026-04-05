@@ -2,6 +2,7 @@ from __future__ import annotations
 """cb node -- list, get, create, copy, delete, offline, online."""
 
 import click
+from cb.cli.console import console, print_error
 from cb.cli.formatters import format_table, format_kv
 
 
@@ -58,10 +59,10 @@ def cmd_list(ctx, show_all):
             ]
             for n in nodes
         ]
-        click.echo(format_table(headers, rows))
-        click.echo(f"  {len(nodes)} node(s)")
+        console.print(format_table(headers, rows))
+        console.print(f"  {len(nodes)} node(s)")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -82,9 +83,9 @@ def cmd_get(ctx, name):
             "remote_dir": node.remote_dir,
             "description": node.description,
         }
-        click.echo(format_kv(data))
+        console.print(format_kv(data))
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -114,7 +115,7 @@ def cmd_create(ctx, name, remote_dir, executors, labels, description, host, port
         try:
             get_node(_client(ctx), name)
             # Node exists
-            click.echo(f"[INFO] Node '{name}' already exists.")
+            console.print(f"[info]INFO[/info] Node '{name}' already exists.")
             return
         except Exception as e:
             # Continue only if the error is 404 (not found)
@@ -136,16 +137,16 @@ def cmd_create(ctx, name, remote_dir, executors, labels, description, host, port
         )
         from cb.db.repositories.resource_repo import track_resource
         track_resource("node", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
-        click.echo(f"[OK] Node '{name}' created.")
+        console.print(f"[success]OK[/success] Node '{name}' created.")
         url = f"{_client(ctx).base_url.rstrip('/')}/computer/{name}/"
-        click.echo(f"  Link: {url}")
+        console.print(f"  Link: {url}")
         if host:
             cred_display = cred_id or 'None'
-            click.echo(f"  SSH Node will auto-connect to {host}:{port} using cred: '{cred_display}'")
+            console.print(f"  SSH Node will auto-connect to {host}:{port} using cred: '{cred_display}'")
         else:
-            click.echo(f"  Connect it via: Manage Jenkins -> Nodes -> {name} -> Agent command")
+            console.print(f"  Connect it via: Manage Jenkins -> Nodes -> {name} -> Agent command")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -160,9 +161,9 @@ def cmd_copy(ctx, source_name, new_name):
         copy_node(_client(ctx), source_name, new_name)
         from cb.db.repositories.resource_repo import track_resource
         track_resource("node", new_name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
-        click.echo(f"[OK] Node '{new_name}' created (copied from '{source_name}').")
+        console.print(f"[success]OK[/success] Node '{new_name}' created (copied from '{source_name}').")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -179,11 +180,11 @@ def cmd_delete(ctx, name, yes):
         delete_node(_client(ctx), name)
         from cb.db.repositories.resource_repo import untrack_resource
         untrack_resource("node", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
-        click.echo(f"[OK] Node '{name}' deleted.")
+        console.print(f"[success]OK[/success] Node '{name}' deleted.")
     except click.Abort:
-        click.echo("Cancelled.")
+        console.print("Cancelled.")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -196,9 +197,9 @@ def cmd_offline(ctx, name, reason):
     from cb.services.node_service import toggle_offline
     try:
         toggle_offline(_client(ctx), name, reason)
-        click.echo(f"[OK] Node '{name}' toggled offline.")
+        console.print(f"[success]OK[/success] Node '{name}' toggled offline.")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
@@ -210,22 +211,32 @@ def cmd_online(ctx, name):
     from cb.services.node_service import toggle_offline
     try:
         toggle_offline(_client(ctx), name, "")
-        click.echo(f"[OK] Node '{name}' toggled online.")
+        console.print(f"[success]OK[/success] Node '{name}' toggled online.")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
 
 
 @node_group.command("update")
 @click.argument("name")
-@click.argument("xml_file", type=click.File("r"))
+@click.option("--description", default=None, help="Node description")
+@click.option("--remote-dir", default=None, help="Remote root directory (e.g. /home/jenkins)")
+@click.option("--executors", type=int, default=None, help="Number of executors")
+@click.option("--labels", default=None, help="Labels (space separated)")
 @click.pass_context
-def cmd_update(ctx, name, xml_file):
-    """Update a node using a config.xml file."""
+def cmd_update(ctx, name, description, remote_dir, executors, labels):
+    """Update a node's configuration."""
     from cb.services.node_service import update_node
     try:
-        update_node(_client(ctx), name, xml_file.read())
-        click.echo(f"[OK] Node '{name}' updated.")
+        update_node(
+            _client(ctx), 
+            name, 
+            remote_dir=remote_dir, 
+            num_executors=executors, 
+            labels=labels, 
+            desc=description
+        )
+        console.print(f"[success]OK[/success] Node '{name}' updated.")
     except Exception as exc:
-        click.echo(f"[ERROR] {exc}", err=True)
+        print_error(str(exc), exc)
         raise SystemExit(1)
