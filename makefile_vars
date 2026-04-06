@@ -1,3 +1,2 @@
 VERSION         := 
 RIDE_ROOT       := 
-LD_LIBRARY_PATH := 

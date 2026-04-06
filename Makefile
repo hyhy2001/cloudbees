@@ -10,8 +10,8 @@ export LC_ALL := en_US.UTF-8
 
 export VERSION
 export RIDE_ROOT
-export LD_LIBRARY_PATH
-export PATH            := $(shell pwd)/.venv/bin:$(PATH)
+export LD_LIBRARY_PATH := /usr/local/gcc-9.2.0/lib64:$(RIDE_ROOT)/local/openssl/lib64:$(RIDE_ROOT)/local/serf-1.3.10/lib:$(RIDE_ROOT)/local/svn/lib:$(RIDE_ROOT)/local/Python-3.10.0/lib
+export PATH            := $(shell pwd)/.venv/bin:$(RIDE_ROOT)/local/Python-3.10.0/bin:$(RIDE_ROOT)/local/openssl/bin:$(RIDE_ROOT)/local/svn/bin:$(RIDE_ROOT)/local/sqlite/bin:$(PATH)
 
 help:
 	@echo ""
