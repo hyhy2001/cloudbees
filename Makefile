@@ -5,11 +5,13 @@ SHELL    := /bin/bash
 export LANG := en_US.UTF-8
 export LC_ALL := en_US.UTF-8
 
-# Variables to be filled by the user
-export VERSION         := 
-export RIDE_ROOT       := 
+# User Configuration File
+-include makefile_vars
+
+export VERSION
+export RIDE_ROOT
+export LD_LIBRARY_PATH
 export PATH            := $(shell pwd)/.venv/bin:$(PATH)
-export LD_LIBRARY_PATH := 
 
 help:
 	@echo ""
