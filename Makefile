@@ -1,10 +1,15 @@
 .DEFAULT_GOAL := help
 
 SHELL    := /bin/bash
-PYTHON   := python3
-DEPS     := textual rich
-ABS_PATH := $(shell pwd)
-BIN_DIR  := $(HOME)/.local/bin
+
+export LANG := en_US.UTF-8
+export LC_ALL := en_US.UTF-8
+
+# Variables to be filled by the user
+export VERSION         := 
+export RIDE_ROOT       := 
+export PATH            := $(shell pwd)/.venv/bin:$(PATH)
+export LD_LIBRARY_PATH := 
 
 help:
 	@echo ""
@@ -20,14 +25,21 @@ help:
 install:
 	@echo "Creating virtual environment and installing..."
 	@python3 -m venv .venv
+	@echo "export LANG=en_US.UTF-8" >> .venv/bin/activate
+	@echo "export LC_ALL=en_US.UTF-8" >> .venv/bin/activate
+	@echo "export VERSION=\"$(VERSION)\"" >> .venv/bin/activate
+	@echo "export RIDE_ROOT=\"$(RIDE_ROOT)\"" >> .venv/bin/activate
+	@echo "export LD_LIBRARY_PATH=\"$(LD_LIBRARY_PATH)\"" >> .venv/bin/activate
+	@echo "setenv LANG en_US.UTF-8" >> .venv/bin/activate.csh
+	@echo "setenv LC_ALL en_US.UTF-8" >> .venv/bin/activate.csh
+	@echo "setenv VERSION \"$(VERSION)\"" >> .venv/bin/activate.csh
+	@echo "setenv RIDE_ROOT \"$(RIDE_ROOT)\"" >> .venv/bin/activate.csh
+	@echo "setenv LD_LIBRARY_PATH \"$(LD_LIBRARY_PATH)\"" >> .venv/bin/activate.csh
 	@./.venv/bin/pip install .
-	@source .venv/bin/activate
 
 init:
 	@if [ ! -d ".venv" ]; then \
 		$(MAKE) install; \
-	else \
-		source .venv/bin/activate; \
 	fi
 	@echo ""
 	@echo "  [OK] bee installed securely in ./.venv/bin/bee"
@@ -43,12 +55,12 @@ uninstall:
 
 run:
 	@if [ -z "$(ARGS)" ]; then \
-		echo "💡 Hint: You can also run 'source .venv/bin/activate' to use 'bee' directly."; \
+		echo "  [Hint] You can also run 'source .venv/bin/activate' to use 'bee' directly."; \
 	fi
-	source .venv/bin/activate && bee $(ARGS)
+	bee $(ARGS)
 
 ui:
-	source .venv/bin/activate && bee --ui
+	bee --ui
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
