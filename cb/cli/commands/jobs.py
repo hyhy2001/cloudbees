@@ -100,6 +100,11 @@ def cmd_get(ctx, name):
         client = _client(ctx)
         job = get_job(client, name)
         
+        if not job:
+            from cb.cli.console import console
+            console.print(f"[error]ERROR[/error] Job '{name}' not found.")
+            raise SystemExit(1)
+            
         if hasattr(job, "to_dict"):
             data = job.to_dict()
         else:
