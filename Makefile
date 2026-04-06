@@ -46,7 +46,6 @@ install:
 		echo "setenv RIDE_ROOT \"$(RIDE_ROOT)\""; \
 		echo "setenv LD_LIBRARY_PATH \"$(LD_LIBRARY_PATH)\""; \
 	} >> .venv/bin/activate.csh
-	@./.venv/bin/pip install --upgrade pip setuptools wheel
 	@./.venv/bin/pip install .
 
 init:
