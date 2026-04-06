@@ -26,6 +26,8 @@ help:
 
 install:
 	@echo "Creating virtual environment and installing..."
+	@echo "=> Using Python at: $$(command -v python3)"
+	@echo "=> Python version: $$(python3 --version)"
 	@python3 -m venv .venv
 	@{ \
 		echo "export LANG=en_US.UTF-8"; \
