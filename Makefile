@@ -27,16 +27,21 @@ help:
 install:
 	@echo "Creating virtual environment and installing..."
 	@python3 -m venv .venv
-	@echo "export LANG=en_US.UTF-8" >> .venv/bin/activate
-	@echo "export LC_ALL=en_US.UTF-8" >> .venv/bin/activate
-	@echo "export VERSION=\"$(VERSION)\"" >> .venv/bin/activate
-	@echo "export RIDE_ROOT=\"$(RIDE_ROOT)\"" >> .venv/bin/activate
-	@echo "export LD_LIBRARY_PATH=\"$(LD_LIBRARY_PATH)\"" >> .venv/bin/activate
-	@echo "setenv LANG en_US.UTF-8" >> .venv/bin/activate.csh
-	@echo "setenv LC_ALL en_US.UTF-8" >> .venv/bin/activate.csh
-	@echo "setenv VERSION \"$(VERSION)\"" >> .venv/bin/activate.csh
-	@echo "setenv RIDE_ROOT \"$(RIDE_ROOT)\"" >> .venv/bin/activate.csh
-	@echo "setenv LD_LIBRARY_PATH \"$(LD_LIBRARY_PATH)\"" >> .venv/bin/activate.csh
+	@{ \
+		echo "export LANG=en_US.UTF-8"; \
+		echo "export LC_ALL=en_US.UTF-8"; \
+		echo "export VERSION=\"$(VERSION)\""; \
+		echo "export RIDE_ROOT=\"$(RIDE_ROOT)\""; \
+		echo "export LD_LIBRARY_PATH=\"$(LD_LIBRARY_PATH)\""; \
+	} >> .venv/bin/activate
+	@{ \
+		echo "setenv LANG en_US.UTF-8"; \
+		echo "setenv LC_ALL en_US.UTF-8"; \
+		echo "setenv VERSION \"$(VERSION)\""; \
+		echo "setenv RIDE_ROOT \"$(RIDE_ROOT)\""; \
+		echo "setenv LD_LIBRARY_PATH \"$(LD_LIBRARY_PATH)\""; \
+	} >> .venv/bin/activate.csh
+	@./.venv/bin/pip install --upgrade pip setuptools wheel
 	@./.venv/bin/pip install .
 
 init:
