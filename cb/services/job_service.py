@@ -27,6 +27,7 @@ def list_jobs(
 def get_job(client: CloudBeesClient, name: str) -> Optional[JobDTO]:
     """Get job details by finding it in the list of all jobs."""
     try:
+        data = None
         # First try the direct approach with a simplified query
         try:
             data = client.get(

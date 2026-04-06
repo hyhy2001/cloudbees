@@ -101,7 +101,6 @@ def cmd_get(ctx, name):
         job = get_job(client, name)
         
         if not job:
-            from cb.cli.console import console
             console.print(f"[error]ERROR[/error] Job '{name}' not found.")
             raise SystemExit(1)
             
