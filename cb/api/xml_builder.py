@@ -16,11 +16,53 @@ def _xml_str(root: ET.Element) -> str:
 # -- Job XML ---------------------------------------------------
 
 
+def inject_email_publisher(publishers: ET.Element, email: str, email_cond: str):
+    """Helper to inject ExtendedEmailPublisher into publishers block."""
+    ext_mail = ET.SubElement(publishers, "hudson.plugins.emailext.ExtendedEmailPublisher", {"plugin": "email-ext"})
+    ET.SubElement(ext_mail, "recipientList").text = email
+    ET.SubElement(ext_mail, "configuredTriggers")
+    cur_triggers = ext_mail.find("configuredTriggers")
+    
+    def _add_email_trigger(parent, tag_name):
+        evt = ET.SubElement(parent, tag_name)
+        eml = ET.SubElement(evt, "email")
+        ET.SubElement(eml, "subject").text = "$PROJECT_DEFAULT_SUBJECT"
+        ET.SubElement(eml, "body").text = "$PROJECT_DEFAULT_CONTENT"
+        ET.SubElement(eml, "recipientList").text = ""
+        rp = ET.SubElement(eml, "recipientProviders")
+        ET.SubElement(rp, "hudson.plugins.emailext.plugins.recipients.ListRecipientProvider")
+        ET.SubElement(eml, "attachmentsPattern").text = ""
+        ET.SubElement(eml, "attachBuildLog").text = "false"
+        ET.SubElement(eml, "compressBuildLog").text = "false"
+        ET.SubElement(eml, "replyTo").text = "$PROJECT_DEFAULT_REPLYTO"
+        ET.SubElement(eml, "contentType").text = "project"
+
+    if email_cond in ("failed", "always"):
+        _add_email_trigger(cur_triggers, "hudson.plugins.emailext.plugins.trigger.FailureTrigger")
+    if email_cond in ("success", "always"):
+        _add_email_trigger(cur_triggers, "hudson.plugins.emailext.plugins.trigger.SuccessTrigger")
+        
+    ET.SubElement(ext_mail, "contentType").text = "default"
+    ET.SubElement(ext_mail, "defaultSubject").text = "$DEFAULT_SUBJECT"
+    ET.SubElement(ext_mail, "defaultContent").text = "$DEFAULT_CONTENT"
+    ET.SubElement(ext_mail, "attachmentsPattern").text = ""
+    ET.SubElement(ext_mail, "presendScript").text = "$DEFAULT_PRESEND_SCRIPT"
+    ET.SubElement(ext_mail, "postsendScript").text = "$DEFAULT_POSTSEND_SCRIPT"
+    ET.SubElement(ext_mail, "attachBuildLog").text = "false"
+    ET.SubElement(ext_mail, "compressBuildLog").text = "false"
+    ET.SubElement(ext_mail, "replyTo").text = "$DEFAULT_REPLYTO"
+    ET.SubElement(ext_mail, "from").text = ""
+    ET.SubElement(ext_mail, "saveOutput").text = "false"
+    ET.SubElement(ext_mail, "disabled").text = "false"
+
 def build_freestyle_xml(
         desc: str = "", 
         shell_cmd: str = "echo hello", 
         node: str | None = None,
-        chdir: str | None = None
+        chdir: str | None = None,
+        schedule: str | None = None,
+        email: str | None = None,
+        email_cond: str = "failed"
 ) -> str:
     """Freestyle project config.xml."""
     root = ET.Element("project")
@@ -32,18 +74,32 @@ def build_freestyle_xml(
     if node:
         ET.SubElement(root, "assignedNode").text = node
     ET.SubElement(root, "disabled").text = "false"
+    
+    triggers = ET.SubElement(root, "triggers")
+    if schedule:
+        timer = ET.SubElement(triggers, "hudson.triggers.TimerTrigger")
+        ET.SubElement(timer, "spec").text = schedule
+        
     builders = ET.SubElement(root, "builders")
     shell = ET.SubElement(builders, "hudson.tasks.Shell")
     final_cmd = f"cd {chdir} && {shell_cmd}" if chdir else shell_cmd
     ET.SubElement(shell, "command").text = final_cmd
-    ET.SubElement(root, "publishers")
+    
+    publishers = ET.SubElement(root, "publishers")
+    if email:
+        inject_email_publisher(publishers, email, email_cond)
+
     ET.SubElement(root, "buildWrappers")
     return _xml_str(root)
 
 
 
-def build_pipeline_xml(desc: str = "", script: str = "pipeline { agent any\n  stages { stage('Build') { steps { echo 'Hello' } } } }", 
-                       node: str | None = None) -> str:
+def build_pipeline_xml(
+        desc: str = "", 
+        script: str = "pipeline { agent any\n  stages { stage('Build') { steps { echo 'Hello' } } } }", 
+        node: str | None = None,
+        schedule: str | None = None
+) -> str:
     """Pipeline (WorkflowJob) config.xml."""
     root = ET.Element(
         "flow-definition",
@@ -62,7 +118,12 @@ def build_pipeline_xml(desc: str = "", script: str = "pipeline { agent any\n  st
     )
     ET.SubElement(defn, "script").text = script
     ET.SubElement(defn, "sandbox").text = "true"
-    ET.SubElement(root, "triggers")
+    
+    triggers = ET.SubElement(root, "triggers")
+    if schedule:
+        timer = ET.SubElement(triggers, "hudson.triggers.TimerTrigger")
+        ET.SubElement(timer, "spec").text = schedule
+        
     ET.SubElement(root, "disabled").text = "false"
     return _xml_str(root)
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, List
 
 from cb.api.client import CloudBeesClient
-from cb.api.xml_builder import build_freestyle_xml, build_pipeline_xml, build_folder_xml
+from cb.api.xml_builder import build_freestyle_xml, build_pipeline_xml, build_folder_xml, inject_email_publisher
 from cb.dtos.job import JobDTO, BuildDTO
 
 
@@ -188,8 +188,11 @@ def create_freestyle_job(
     shell_cmd: str = "echo hello",
     chdir=None,
     node: Optional[str] = None,
+    schedule: Optional[str] = None,
+    email: Optional[str] = None,
+    email_cond: str = "failed",
 ) -> None:
-    xml = build_freestyle_xml(desc=desc, shell_cmd=shell_cmd, chdir=chdir, node=node)
+    xml = build_freestyle_xml(desc=desc, shell_cmd=shell_cmd, chdir=chdir, node=node, schedule=schedule, email=email, email_cond=email_cond)
     client.post_xml(
         f"/createItem?name={name}",
         xml_str=xml,
@@ -203,10 +206,21 @@ def create_pipeline_job(
     desc: str = "",
     script: str = "",
     node: Optional[str] = None,
+    schedule: Optional[str] = None,
+    email: Optional[str] = None,
+    email_cond: str = "failed",
 ) -> None:
     if not script:
-        script = "pipeline {\n  agent any\n  stages {\n    stage('Build') {\n      steps { echo 'Hello' }\n    }\n  }\n}"
-    xml = build_pipeline_xml(desc=desc, script=script, node=node)
+        script = "pipeline {\n  agent any\n  stages {\n    stage('Build') {\n      steps { echo 'Hello' }\n    }\n  }\n"
+        if email:
+            if email_cond == "always":
+                script += f"  post {{\n    always {{\n      mail to: '{email}', subject: 'Build Result', body: 'Build finished'\n    }}\n  }}\n"
+            elif email_cond == "success":
+                script += f"  post {{\n    success {{\n      mail to: '{email}', subject: 'Build Success', body: 'Build succeeded'\n    }}\n  }}\n"
+            else:
+                script += f"  post {{\n    failure {{\n      mail to: '{email}', subject: 'Build Failed', body: 'Build failed'\n    }}\n  }}\n"
+        script += "}"
+    xml = build_pipeline_xml(desc=desc, script=script, node=node, schedule=schedule)
     client.post_xml(
         f"/createItem?name={name}",
         xml_str=xml,
@@ -259,6 +273,9 @@ def update_job_freestyle(
     desc: Optional[str] = None,
     shell_cmd: Optional[str] = None,
     node: Optional[str] = None,
+    schedule: Optional[str] = None,
+    email: Optional[str] = None,
+    email_cond: Optional[str] = None,
 ) -> None:
     root = _get_job_config(client, name)
     
@@ -291,6 +308,26 @@ def update_job_freestyle(
             cmd_elem = ET.SubElement(shell_elem, "command")
         cmd_elem.text = shell_cmd
 
+    if schedule is not None:
+        triggers = root.find("triggers")
+        if triggers is None:
+            triggers = ET.SubElement(root, "triggers")
+        for t in triggers.findall("hudson.triggers.TimerTrigger"):
+            triggers.remove(t)
+        if schedule:
+            timer = ET.SubElement(triggers, "hudson.triggers.TimerTrigger")
+            spec = ET.SubElement(timer, "spec")
+            spec.text = schedule
+
+    if email is not None:
+        publishers = root.find("publishers")
+        if publishers is None:
+            publishers = ET.SubElement(root, "publishers")
+        for p in publishers.findall("hudson.plugins.emailext.ExtendedEmailPublisher"):
+            publishers.remove(p)
+        if email:
+            inject_email_publisher(publishers, email, email_cond or "failed")
+
     _post_job_config(client, name, root)
 
 
@@ -299,6 +336,7 @@ def update_job_pipeline(
     name: str,
     desc: Optional[str] = None,
     script: Optional[str] = None,
+    schedule: Optional[str] = None,
 ) -> None:
     root = _get_job_config(client, name)
     
@@ -320,5 +358,16 @@ def update_job_pipeline(
         if sandbox is None:
             sandbox = ET.SubElement(definition, "sandbox")
             sandbox.text = "true"
+
+    if schedule is not None:
+        triggers = root.find("triggers")
+        if triggers is None:
+            triggers = ET.SubElement(root, "triggers")
+        for t in triggers.findall("hudson.triggers.TimerTrigger"):
+            triggers.remove(t)
+        if schedule:
+            timer = ET.SubElement(triggers, "hudson.triggers.TimerTrigger")
+            spec = ET.SubElement(timer, "spec")
+            spec.text = schedule
 
     _post_job_config(client, name, root)
