@@ -94,10 +94,20 @@ def cmd_list(ctx, show_all):
 @click.pass_context
 def cmd_get(ctx, name):
     """Show job details and last build info."""
-    from cb.services.job_service import get_job
+    from cb.services.job_service import get_job, get_job_config_summary
+    import dataclasses
     try:
-        job = get_job(_client(ctx), name)
-        data = job.to_dict()
+        client = _client(ctx)
+        job = get_job(client, name)
+        
+        if hasattr(job, "to_dict"):
+            data = job.to_dict()
+        else:
+            data = dataclasses.asdict(job) if dataclasses.is_dataclass(job) else vars(job)
+            
+        summary = get_job_config_summary(client, name)
+        data.update(summary)
+        
         console.print(format_kv(data))
     except Exception as exc:
         print_error(str(exc), exc)
@@ -238,18 +248,44 @@ def cmd_delete(ctx, name, yes):
         raise SystemExit(1)
 
 
+# -- copy ------------------------------------------------------
+
+
+@jobs_group.command("copy")
+@click.argument("source")
+@click.argument("destination")
+@click.pass_context
+def cmd_copy(ctx, source, destination):
+    """Clone an existing job."""
+    from cb.services.job_service import copy_job
+    
+    try:
+        client = _client(ctx)
+        copy_job(client, source, destination)
+        
+        from cb.db.repositories.resource_repo import track_resource
+        track_resource("job", destination, ctx.obj.get("profile") or "default", controller_name=client.base_url)
+        console.print(f"[success]OK[/success] Job '{source}' cloned to '{destination}'.")
+        url = f"{client.base_url.rstrip('/')}/job/{destination}/"
+        console.print(f"  Link: {url}")
+    except Exception as exc:
+        print_error(str(exc), exc)
+        raise SystemExit(1)
+
+
 # -- run -------------------------------------------------------
 
 
 @jobs_group.command("run")
 @click.argument("name")
+@click.option("--param", "-p", multiple=True, help="Parameter in KEY=value format")
 @click.option("--wait", is_flag=True, default=False, help="Wait for build to finish")
 @click.option("--timeout", default=120, show_default=True, help="Max wait time in seconds")
 @click.pass_context
-def cmd_run(ctx, name, wait, timeout):
+def cmd_run(ctx, name, param, wait, timeout):
     """Trigger a job build."""
     from cb.services.job_service import (
-        trigger_job, get_last_build_number, wait_for_build
+        trigger_job, trigger_job_with_params, get_last_build_number, wait_for_build
     )
     
     try:
@@ -268,7 +304,17 @@ def cmd_run(ctx, name, wait, timeout):
         
         # Try to trigger the job
         try:
-            trigger_job(client, name)
+            if param:
+                param_dict = {}
+                for p in param:
+                    if "=" in p:
+                        k, v = p.split("=", 1)
+                        param_dict[k] = v
+                    else:
+                        param_dict[p] = ""
+                trigger_job_with_params(client, name, param_dict)
+            else:
+                trigger_job(client, name)
             console.print(f"[success]OK[/success] Triggered: {name}")
         except Exception as e:
             # Just show error without removing from local tracking

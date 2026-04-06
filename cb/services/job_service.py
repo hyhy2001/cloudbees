@@ -241,6 +241,16 @@ def create_folder(
     )
 
 
+def copy_job(client: CloudBeesClient, src_name: str, dest_name: str) -> None:
+    """Clones an existing job by mirroring its config.xml."""
+    xml_str = client.get_text(f"/job/{src_name}/config.xml")
+    client.post_xml(
+        f"/createItem?name={dest_name}",
+        xml_str=xml_str,
+        invalidate="jobs.",
+    )
+
+
 def delete_job(client: CloudBeesClient, name: str) -> None:
     try:
         client.post(f"/job/{name}/doDelete")
@@ -266,6 +276,38 @@ def _post_job_config(client: CloudBeesClient, name: str, root: ET.Element) -> No
         xml_str=xml_str,
         invalidate="jobs.",
     )
+
+def get_job_config_summary(client: CloudBeesClient, name: str) -> dict:
+    """Read the config.xml and extract schedule and email information."""
+    summary = {"schedule": "-", "email": "-"}
+    try:
+        root = _get_job_config(client, name)
+        # 1. Triggers / Schedule
+        triggers = root.find("triggers")
+        if triggers is not None:
+            timer = triggers.find("hudson.triggers.TimerTrigger")
+            if timer is not None:
+                spec = timer.find("spec")
+                if spec is not None and spec.text:
+                    summary["schedule"] = spec.text.strip()
+        
+        # 2. Publishers / Email (Freestyle usually)
+        publishers = root.find("publishers")
+        if publishers is not None:
+            ext_mail = publishers.find("hudson.plugins.emailext.ExtendedEmailPublisher")
+            if ext_mail is not None:
+                rl = ext_mail.find("recipientList")
+                if rl is not None and rl.text:
+                    summary["email"] = rl.text.strip()
+            else:
+                mailer = publishers.find("hudson.tasks.Mailer")
+                if mailer is not None:
+                    rec = mailer.find("recipients")
+                    if rec is not None and rec.text:
+                        summary["email"] = rec.text.strip() + " (Built-in Mailer)"
+    except Exception:
+        pass
+    return summary
 
 def update_job_freestyle(
     client: CloudBeesClient,
