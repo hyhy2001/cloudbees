@@ -28,6 +28,9 @@ install:
 	@echo "Creating virtual environment and installing..."
 	@echo "=> Using Python at: $$(command -v python3)"
 	@echo "=> Python version: $$(python3 --version)"
+	@echo "=> RIDE_ROOT: $(RIDE_ROOT)"
+	@echo "=> VERSION: $(VERSION)"
+	@echo "=> LD_LIBRARY_PATH: $(LD_LIBRARY_PATH)"
 	@python3 -m venv .venv
 	@{ \
 		echo "export LANG=en_US.UTF-8"; \
