@@ -41,8 +41,8 @@ sleep 2
 echo "[demo] sourcing: $venv_activate"
 source "$venv_activate"
 
-echo "[demo] running bee command: $BEE_CMD"
-$BEE_CMD
+echo "[demo] running bee command via bs: $BEE_CMD"
+bs -os "RHEL7 RHEL8" tcsh -c "$BEE_CMD"
 set CMD_STATUS = $status
 
 echo "[demo] bee command exit code: $CMD_STATUS"
