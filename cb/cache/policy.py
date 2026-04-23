@@ -4,18 +4,18 @@ from __future__ import annotations
 # How long each resource type stays in cache.
 # Kept short so status changes (node offline, job result) appear quickly.
 TTL: dict[str, int] = {
-    "jobs.list":                  30,
-    "jobs.detail":                30,
-    "controllers.list":           60,
-    "controllers.detail":         60,
-    "controllers.capabilities":   60,
-    "credentials.list":           60,
-    "credentials.detail":         60,
-    "nodes.list":                 30,
-    "nodes.detail":               30,
+    "jobs.list":                  10,
+    "jobs.detail":                10,
+    "controllers.list":           10,
+    "controllers.detail":         10,
+    "controllers.capabilities":   10,
+    "credentials.list":           10,
+    "credentials.detail":         10,
+    "nodes.list":                 10,
+    "nodes.detail":               10,
 }
 
-DEFAULT_TTL = 30
+DEFAULT_TTL = 10
 
 
 def get_ttl(resource_key: str) -> int:

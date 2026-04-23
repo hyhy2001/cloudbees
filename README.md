@@ -298,11 +298,11 @@ Terminal rendering mode:
 
 SQLite TTL cache is used for GET calls.
 
-- Controllers: 60s
-- Credentials: 60s
-- Jobs: 30s
-- Nodes: 30s
-- Default: 30s
+- Controllers: 10s
+- Credentials: 10s
+- Jobs: 10s
+- Nodes: 10s
+- Default: 10s
 
 Writes invalidate related cache prefixes automatically.
 
