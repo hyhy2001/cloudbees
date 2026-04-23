@@ -2,9 +2,9 @@
 
 # Simple demo script: log -> bee command in the middle -> log
 # Usage:
-#   csh scripts/csh/bee_in_middle.csh [BEE_CMD]
+#   csh scripts/csh/script_run_with_bee.csh [BEE_CMD]
 # Example:
-#   csh scripts/csh/bee_in_middle.csh "bee job list --all"
+#   csh scripts/csh/script_run_with_bee.csh "bee job list --all"
 # Optional:
 #   setenv BEE_DIR /path/to/cloudbees
 
@@ -12,7 +12,10 @@ set BEE_CMD = "bee job list"
 if ($#argv >= 1) set BEE_CMD = "$1"
 
 # Resolve bee project directory (BEE_DIR override, fallback to script directory).
-set bee_dir = "$env:BEE_DIR"
+set bee_dir = ""
+if ($?BEE_DIR) then
+  set bee_dir = "$BEE_DIR"
+endif
 if ("$bee_dir" == "") then
   set script_dir = `dirname "$0"`
   if ("$script_dir" == ".") then
