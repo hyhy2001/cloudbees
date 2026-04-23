@@ -60,7 +60,7 @@ class JobsPane(VimNavMixin, Widget):
 
     _loading:   reactive[bool] = reactive(True)
     _error:     reactive[str]  = reactive("")
-    _show_all:  reactive[bool] = reactive(False)
+    _show_all:  reactive[bool] = reactive(True)
 
     def compose(self) -> ComposeResult:
         yield Static("", classes="pane-header", id="jobs-header")
@@ -199,10 +199,13 @@ class JobsPane(VimNavMixin, Widget):
         try:
             client = getattr(self.app, "ctrl_client", None)
             if getattr(self.app, "_username", "") and client:
-                from cb.services.job_service import get_job
+                from cb.services.job_service import get_job, get_job_config_summary
                 detailed_job = get_job(client, job.name)
                 if detailed_job:
                     job = detailed_job
+                summary = get_job_config_summary(client, job.name)
+            else:
+                summary = {"schedule": "-", "email": "-", "email_cond": "-", "email_keywords": "-", "email_regex": "-"}
                     
             from cb.tui.screens.detail_screen import DetailScreen
             info = [
@@ -210,6 +213,11 @@ class JobsPane(VimNavMixin, Widget):
                 ("Status",     job.color),
                 ("Type",       job.job_type or "-"),
                 ("Last Build", str(job.last_build_number or "—")),
+                ("Schedule",   summary.get("schedule", "-")),
+                ("Email",      summary.get("email", "-")),
+                ("Email Cond", summary.get("email_cond", "-")),
+                ("Email Keys", summary.get("email_keywords", "-")),
+                ("Email Regex", summary.get("email_regex", "-")),
                 ("URL",        getattr(job, "url", "") or "-"),
                 ("Description", (job.description or "-")[:60]),
             ]

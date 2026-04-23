@@ -35,7 +35,7 @@ class NodesPane(VimNavMixin, Widget):
 
     _loading:   reactive[bool] = reactive(True)
     _error:     reactive[str]  = reactive("")
-    _mine_only: reactive[bool] = reactive(True)
+    _mine_only: reactive[bool] = reactive(False)
 
     def compose(self) -> ComposeResult:
         yield Static("", classes="pane-header", id="nodes-header")

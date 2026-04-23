@@ -30,7 +30,7 @@ class CredentialsPane(VimNavMixin, Widget):
     _loading:  reactive[bool] = reactive(True)
     _error:    reactive[str]  = reactive("")
     _show_all: reactive[bool] = reactive(False)
-    _store:    reactive[str]  = reactive("user")
+    _store:    reactive[str]  = reactive("system")
 
     def compose(self) -> ComposeResult:
         yield Static("", classes="pane-header", id="creds-header")
@@ -61,7 +61,7 @@ class CredentialsPane(VimNavMixin, Widget):
     def _update_header(self) -> None:
         self.query_one("#creds-header", Static).update(
             f" {SYM.gear} Credentials  "
-            f"[dim]c=create · d=delete · s=store · a=mine/all · F5=refresh[/dim]"
+            f"[dim]c=create · d=delete · S=store · a=mine/all · F5=refresh[/dim]"
         )
         store_color = "green" if self._store == "user" else "yellow"
         store_label = (
@@ -70,7 +70,7 @@ class CredentialsPane(VimNavMixin, Widget):
         scope = "[yellow]ALL[/yellow]" if self._show_all else "[green]MINE[/green]"
         self.query_one("#creds-filter", Static).update(
             f" {SYM.arrow} Store: {store_label}   Scope: {scope}  "
-            f"[dim](s=toggle store · a=toggle scope)[/dim]"
+            f"[dim](S=toggle store · a=toggle scope)[/dim]"
         )
 
     def watch__loading(self, loading: bool) -> None:

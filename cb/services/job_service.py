@@ -360,7 +360,13 @@ def _post_job_config(client: CloudBeesClient, name: str, root: ET.Element) -> No
 
 def get_job_config_summary(client: CloudBeesClient, name: str) -> dict:
     """Read the config.xml and extract schedule and email information."""
-    summary = {"schedule": "-", "email": "-"}
+    summary = {
+        "schedule": "-",
+        "email": "-",
+        "email_cond": "-",
+        "email_keywords": "-",
+        "email_regex": "-",
+    }
     try:
         root = _get_job_config(client, name)
         # 1. Triggers / Schedule
@@ -380,6 +386,17 @@ def get_job_config_summary(client: CloudBeesClient, name: str) -> dict:
                 rl = ext_mail.find("recipientList")
                 if rl is not None and rl.text:
                     summary["email"] = rl.text.strip()
+                summary["email_cond"] = _infer_email_cond_from_publisher(ext_mail)
+
+                presend = ext_mail.find("presendScript")
+                metadata = parse_email_filter_metadata(presend.text if presend is not None else None)
+                if metadata:
+                    keywords = _normalize_keywords(metadata.get("keywords"))
+                    regex = _normalize_regex(metadata.get("regex"))
+                    if keywords:
+                        summary["email_keywords"] = ", ".join(keywords)
+                    if regex:
+                        summary["email_regex"] = regex
             else:
                 mailer = publishers.find("hudson.tasks.Mailer")
                 if mailer is not None:
