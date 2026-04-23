@@ -363,18 +363,16 @@ class JobsPane(VimNavMixin, Widget):
 
     @work(thread=True, name="create-job")
     def _create_job(self, name: str, job_type: str, desc: str = "",
-                    shell_cmd: str = "", script: str = "") -> None:
+                    shell_cmd: str = "") -> None:
         try:
             client = getattr(self.app, "ctrl_client", None)
             if not client: return
             from cb.services.job_service import (
-                create_freestyle_job, create_pipeline_job, create_folder
+                create_freestyle_job, create_folder
             )
             if job_type == "freestyle":
                 create_freestyle_job(client, name, desc=desc,
                                      shell_cmd=shell_cmd or "echo hello")
-            elif job_type == "pipeline":
-                create_pipeline_job(client, name, desc=desc, script=script)
             elif job_type == "folder":
                 create_folder(client, name, desc=desc)
 

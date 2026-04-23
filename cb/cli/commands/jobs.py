@@ -12,7 +12,7 @@ from cb.cli.formatters import format_table, format_kv
 
 @click.group("job")
 def jobs_group():
-    """Manage CloudBees jobs (Freestyle, Pipeline, Folder)."""
+    """Manage CloudBees jobs (Freestyle, Folder)."""
 
 
 def _client(ctx):
@@ -135,54 +135,31 @@ def cmd_create():
 @click.option("--schedule", default=None, help="Cron format schedule (e.g., 'H 8 * * *')")
 @click.option("--email", default=None, help="Comma-separated emails to notify")
 @click.option("--email-cond", type=click.Choice(["success", "failed", "always"]), default="failed", help="When to send email")
+@click.option("--email-keyword", "email_keyword", multiple=True, help="Send mail only if build log contains keyword (repeatable)")
+@click.option("--email-regex", default=None, help="Send mail only if build log matches regex (case-insensitive)")
 @click.pass_context
-def create_freestyle(ctx, name, description, shell, chdir, node, schedule, email, email_cond):
+def create_freestyle(ctx, name, description, shell, chdir, node, schedule, email, email_cond, email_keyword, email_regex):
     """Create a Freestyle project."""
     from cb.services.job_service import create_freestyle_job
     try:
         if not shell:
             shell = click.prompt("Shell command", default="echo hello")
-        create_freestyle_job(_client(ctx), name=name, desc=description, shell_cmd=shell, chdir=chdir, node=node, schedule=schedule, email=email, email_cond=email_cond)
+        create_freestyle_job(
+            _client(ctx),
+            name=name,
+            desc=description,
+            shell_cmd=shell,
+            chdir=chdir,
+            node=node,
+            schedule=schedule,
+            email=email,
+            email_cond=email_cond,
+            email_keywords=email_keyword,
+            email_regex=email_regex,
+        )
         from cb.db.repositories.resource_repo import track_resource
         track_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
         console.print(f"[success]OK[/success] Freestyle job '{name}' created." + (f" on node '{node}'" if node else ""))
-        url = f"{_client(ctx).base_url.rstrip('/')}/job/{name}/"
-        console.print(f"  Link: {url}")
-    except Exception as exc:
-        print_error(str(exc), exc)
-        raise SystemExit(1)
-
-
-@cmd_create.command("pipeline")
-@click.argument("name")
-@click.option("--description", default="", help="Job description")
-@click.option("--script", default=None, help="Inline Pipeline script")
-@click.option("--script-file", default=None, type=click.Path(exists=True), help="Read script from file")
-@click.option("--node", default=None, help="Restrict job to a specific node/label")
-@click.option("--schedule", default=None, help="Cron format schedule (e.g., 'H 8 * * *')")
-@click.option("--email", default=None, help="Comma-separated emails to notify")
-@click.option("--email-cond", type=click.Choice(["success", "failed", "always"]), default="failed", help="When to send email")
-@click.pass_context
-def create_pipeline(ctx, name, description, script, script_file, node, schedule, email, email_cond):
-    """Create a Pipeline job."""
-    from cb.services.job_service import create_pipeline_job
-    try:
-        if script_file:
-            with open(script_file, "r") as f:
-                script = f.read()
-        elif not script:
-            console.print("Enter Pipeline script (end with a line containing only '---'):")
-            lines = []
-            while True:
-                line = click.prompt("", default="", prompt_suffix="")
-                if line == "---":
-                    break
-                lines.append(line)
-            script = "\n".join(lines)
-        create_pipeline_job(_client(ctx), name=name, desc=description, script=script, node=node, schedule=schedule, email=email, email_cond=email_cond)
-        from cb.db.repositories.resource_repo import track_resource
-        track_resource("job", name, ctx.obj.get("profile") or "default", controller_name=_client(ctx).base_url)
-        console.print(f"[success]OK[/success] Pipeline job '{name}' created." + (f" on node '{node}'" if node else ""))
         url = f"{_client(ctx).base_url.rstrip('/')}/job/{name}/"
         console.print(f"  Link: {url}")
     except Exception as exc:
@@ -479,36 +456,48 @@ def cmd_update():
 @click.option("--schedule", default=None, help="Cron format schedule (e.g., 'H 8 * * *', or '' to remove)")
 @click.option("--email", default=None, help="Comma-separated emails to notify, or '' to remove")
 @click.option("--email-cond", type=click.Choice(["success", "failed", "always"]), default=None, help="When to send email")
+@click.option("--email-keyword", "email_keyword", multiple=True, help="Replace keyword filters (repeatable)")
+@click.option("--email-regex", default=None, help="Replace regex filter (case-insensitive)")
+@click.option("--clear-email-keywords", is_flag=True, default=False, help="Clear all configured email keywords")
+@click.option("--clear-email-regex", is_flag=True, default=False, help="Clear configured email regex")
 @click.pass_context
-def update_freestyle(ctx, name, description, shell, node, schedule, email, email_cond):
+def update_freestyle(
+    ctx,
+    name,
+    description,
+    shell,
+    node,
+    schedule,
+    email,
+    email_cond,
+    email_keyword,
+    email_regex,
+    clear_email_keywords,
+    clear_email_regex,
+):
     """Update a Freestyle project's configuration."""
     from cb.services.job_service import update_job_freestyle
     try:
-        update_job_freestyle(_client(ctx), name=name, desc=description, shell_cmd=shell, node=node, schedule=schedule, email=email, email_cond=email_cond)
-        console.print(f"[success]OK[/success] Freestyle job '{name}' updated.")
-    except Exception as exc:
-        print_error(str(exc), exc)
-        raise SystemExit(1)
+        source = click.core.ParameterSource
+        keywords_input = None
+        if ctx.get_parameter_source("email_keyword") != source.DEFAULT:
+            keywords_input = list(email_keyword)
 
-@cmd_update.command("pipeline")
-@click.argument("name")
-@click.option("--description", default=None, help="Job description")
-@click.option("--script", default=None, help="Inline Pipeline script")
-@click.option("--script-file", default=None, type=click.Path(exists=True), help="Read script from file")
-@click.option("--schedule", default=None, help="Cron format schedule (e.g., 'H 8 * * *', or '' to remove)")
-@click.option("--email", default=None, help="Ignored for existing Pipelines. Please edit Groovy script manually.")
-@click.pass_context
-def update_pipeline(ctx, name, description, script, script_file, schedule, email):
-    """Update a Pipeline job's configuration."""
-    from cb.services.job_service import update_job_pipeline
-    try:
-        if script_file:
-            with open(script_file, "r") as f:
-                script = f.read()
-        if email is not None:
-             console.print("[warning]WARN[/warning] Ignoring --email in Pipeline update. Please edit the Groovy `post {}` block manually.")
-        update_job_pipeline(_client(ctx), name=name, desc=description, script=script, schedule=schedule)
-        console.print(f"[success]OK[/success] Pipeline job '{name}' updated.")
+        update_job_freestyle(
+            _client(ctx),
+            name=name,
+            desc=description,
+            shell_cmd=shell,
+            node=node,
+            schedule=schedule,
+            email=email,
+            email_cond=email_cond,
+            email_keywords=keywords_input,
+            email_regex=email_regex,
+            clear_email_keywords=clear_email_keywords,
+            clear_email_regex=clear_email_regex,
+        )
+        console.print(f"[success]OK[/success] Freestyle job '{name}' updated.")
     except Exception as exc:
         print_error(str(exc), exc)
         raise SystemExit(1)

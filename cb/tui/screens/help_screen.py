@@ -36,7 +36,7 @@ _HELP_CONTENT = f"""
   [cyan]r[/cyan]   Run selected job
   [cyan]s[/cyan]   Stop last build
   [cyan]l[/cyan]   View build log (colour-coded)
-  [cyan]n[/cyan]   Create new job (freestyle / pipeline / folder)
+  [cyan]n[/cyan]   Create new job (freestyle / folder)
   [cyan]d[/cyan]   Delete job
   [cyan]a[/cyan]   Toggle Mine / All
 

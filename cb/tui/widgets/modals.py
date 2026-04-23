@@ -4,7 +4,7 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Select, Static, TextArea
+from textual.widgets import Button, Input, Select, Static
 
 from cb.tui.compat import SYM
 
@@ -124,13 +124,12 @@ class InfoModal(ModalScreen):
 
 _JOB_TYPES = [
     ("Freestyle Project", "freestyle"),
-    ("Pipeline",          "pipeline"),
     ("Folder",            "folder"),
 ]
 
 
 class CreateJobModal(ModalScreen):
-    """Form to create a new job (freestyle / pipeline / folder)."""
+    """Form to create a new job (freestyle / folder)."""
 
     BINDINGS = [("escape", "dismiss(None)", "Cancel")]
 
@@ -161,16 +160,6 @@ class CreateJobModal(ModalScreen):
             )
             yield Input(placeholder="echo hello", id="job-shell")
 
-            yield Static(
-                "Pipeline Script  [dim](Pipeline only — leave blank for default)[/dim]",
-                classes="modal-section",
-            )
-            yield TextArea(
-                text="pipeline {\n  agent any\n  stages {\n    stage('Build') {\n      steps { echo 'Hello from bee!' }\n    }\n  }\n}",
-                id="job-script",
-                language="groovy",
-            )
-
             with Horizontal(classes="btn-row"):
                 yield Button("Create", variant="primary", id="btn-create")
                 yield Button("Cancel",                    id="btn-cancel")
@@ -194,16 +183,11 @@ class CreateJobModal(ModalScreen):
 
         desc      = self.query_one("#job-desc",   Input).value.strip()
         shell_cmd = self.query_one("#job-shell",  Input).value.strip()
-        try:
-            script = self.query_one("#job-script", TextArea).text.strip()
-        except Exception:
-            script = ""
         self.dismiss({
             "name":      name,
             "job_type":  job_type,
             "desc":      desc,
             "shell_cmd": shell_cmd,
-            "script":    script,
         })
 
 

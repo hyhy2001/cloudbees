@@ -1,222 +1,335 @@
-# bee 🐝 — CloudBees CLI + TUI
+# bee - CloudBees CLI + TUI
 
-A lightweight Python tool to manage CloudBees CI from your terminal.  
-**CLI** for scripting · **TUI** for interactive use · No `sudo` · No virtualenv required.
+`bee` is a Python terminal tool for operating CloudBees CI/Jenkins controllers.
+
+- CLI mode for scripting and automation
+- TUI mode (Textual) for interactive operations
+- Local SQLite for session, cache, and tracked resources
+
+## What It Can Do
+
+- Authentication and profile management
+- Controller discovery and active-controller selection
+- Job lifecycle: list/get/create/update/delete/run/stop/log/status/copy
+- Credential lifecycle: list/get/create/update/delete (system/user stores)
+- Node lifecycle: list/get/create/update/delete/offline/online/copy
+- TUI tabs for Controller, Credentials, Nodes, Jobs, and Settings
 
 ## Requirements
 
-- Python **3.9+**
-- Dependencies auto-installed by `make install`: `click`, `httpx`, `cryptography`, `textual`
+- Python `>=3.8`
+- `make`
+- Network access to your CloudBees/Jenkins endpoint
 
 ## Install
+
+### Recommended (project-local venv)
 
 ```bash
 git clone https://github.com/hyhy2001/cloudbees.git
 cd cloudbees
-make install
+make init
 ```
 
-> `bee` is installed to `~/.local/bin/`. If not found, add to PATH:
-> - **bash/zsh:** `export PATH="$HOME/.local/bin:$PATH"`
-> - **csh/tcsh:** `setenv PATH ~/.local/bin:$PATH`
+This creates `.venv/`, installs dependencies, and registers the `bee` console script in that venv.
 
----
+### Activate shell (optional but convenient)
+
+```bash
+source .venv/bin/activate
+bee --help
+```
+
+If you do not activate the venv, you can still run:
+
+```bash
+make run ARGS='--help'
+make ui
+```
 
 ## Quick Start
 
 ```bash
-bee --ui                           # Launch TUI (recommended)
-bee login                          # CLI login
-bee job list                       # List all jobs
-bee controller list                # List controllers
+bee auth login
+bee controller list
+bee controller select <controller-name>
+bee job list
+bee --ui
 ```
-
----
 
 ## CLI Reference
 
-### Auth
+Global options:
 
 ```bash
-bee login                    # Interactive login (saves session)
-bee auth profiles            # List saved profiles
-bee auth logout              # Remove stored token + session
+bee --version
+bee --ui
+bee --debug
 ```
 
-### Controller
+### Auth (`bee auth`)
 
 ```bash
-bee controller list               # List all controllers
-bee controller info <name>        # Controller details
-bee controller select <name>      # Set active controller
-bee controller current            # Show active controller
+# Login and save session/profile
+bee auth login \
+  --url <cloudbees_url> \
+  --username <username> \
+  --token <api_token> \
+  [--profile default]
+
+# Logout profile session token
+bee auth logout [--profile <profile_name>]
+
+# Delete a saved profile
+bee auth delete --profile <profile_name>
+
+# List all profiles
+bee auth profiles
 ```
 
-### Jobs
+### Controller (`bee controller`)
 
 ```bash
-bee job list [-o json|table]                      # List jobs
-bee job get <name>                                # Job details + last build
-bee job create freestyle <name> [--shell "cmd"]   # Create Freestyle project
-bee job create pipeline <name> [--script-file F]  # Create Pipeline job
-bee job create folder <name>                      # Create Folder
-bee job delete <name> [--yes]                     # Delete job/folder
-bee job run <name> [--wait] [--timeout 120]       # Trigger build
-bee job stop <name> <build#>                      # Stop a running build
-bee job log <name> [build#] [--follow]            # Print / stream console log
-bee job status <name> [--count 10]               # Recent build history
+# List controllers
+bee controller list
+
+# Show details and capabilities
+bee controller info <name>
+
+# Set active controller
+bee controller select <name>
+
+# Show active controller
+bee controller current
 ```
 
-| Symbol | Type |
-|--------|------|
-| `FS` | Freestyle project |
-| `PL` | Pipeline |
-| `FD` | Folder |
-
-### Credentials
+### Jobs (`bee job`)
 
 ```bash
-# Default: system store (shared, usable by Jobs and Nodes)
-bee cred list [-o json|table]
-bee cred get <id>
-bee cred create --id <id> --username <u> [--password]
-bee cred delete <id> [--yes]
+# List tracked jobs (or all jobs)
+bee job list [--all]
 
-# User store (personal, scoped to your account)
-bee cred list --store user
-bee cred create --store user --id <id> --username <u>
-bee cred delete --store user <id>
+# Show job details + config summary
+bee job get <name>
+
+# Delete job/folder
+bee job delete <name> [--yes]
+
+# Clone job configuration
+bee job copy <source> <destination>
+
+# Trigger build (optional parameters and wait)
+bee job run <name> \
+  [-p KEY=value ...] \
+  [--wait] \
+  [--timeout 120]
+
+# Stop specific build
+bee job stop <name> <build_number>
+
+# Show log (or stream)
+bee job log <name> [build_number] [-f|--follow]
+
+# Recent build history
+bee job status <name> [--count 10]
 ```
 
-| Store | Path | Accessible by |
-|-------|------|--------------|
-| `system` (default) | `/credentials/store/system/domain/_` | Jobs, Nodes, all users |
-| `user` | `/user/<username>/credentials/store/user/domain/_` | Logged-in user only |
-
-### Nodes
+Create jobs:
 
 ```bash
-bee node list [-o json|table]
+# Freestyle
+bee job create freestyle <name> \
+  [--description <text>] \
+  [--shell <command>] \
+  [--chdir <directory>] \
+  [--node <label_or_node>] \
+  [--schedule "<cron_expr>"] \
+  [--email "a@x.com,b@y.com"] \
+  [--email-cond success|failed|always] \
+  [--email-keyword <keyword> ...] \
+  [--email-regex "<regex>"]
+
+# Folder
+bee job create folder <name> [--description <text>]
+```
+
+Update jobs:
+
+```bash
+# Update Freestyle config
+bee job update freestyle <name> \
+  [--description <text>] \
+  [--shell <command>] \
+  [--node <label_or_node>] \
+  [--schedule "<cron_expr>|''"] \
+  [--email "a@x.com,b@y.com|''"] \
+  [--email-cond success|failed|always] \
+  [--email-keyword <keyword> ...] \
+  [--email-regex "<regex>"] \
+  [--clear-email-keywords] \
+  [--clear-email-regex]
+```
+
+Email anti-spam filter behavior (Freestyle):
+
+- `--email-keyword` is repeatable and matches **ANY** keyword in console output.
+- `--email-regex` matches console output with case-insensitive regex.
+- If both keyword and regex are provided, send condition is `keyword_match OR regex_match`.
+- Mail is sent only when: `(email-cond trigger) AND (content filter match)`.
+- If filter is provided without a valid recipient email, command fails fast.
+
+### Credentials (`bee cred`)
+
+```bash
+# List credentials
+bee cred list \
+  [-o|--output table|json] \
+  [--all] \
+  [--store system|user]
+
+# Read credential metadata
+bee cred get <cred_id> [--store system|user]
+
+# Create Username/Password credential
+bee cred create \
+  --username <username> \
+  [--id <cred_id>] \
+  [--password <password>] \
+  [--description <text>] \
+  [--scope GLOBAL|SYSTEM] \
+  [--store system|user]
+
+# Update credential
+bee cred update <cred_id> \
+  [--username-cred <new_username_or_id>] \
+  [--password <new_password>] \
+  [--description <new_description>] \
+  [--store system|user]
+
+# Delete credential
+bee cred delete <cred_id> [--yes] [--store system|user]
+```
+
+### Nodes (`bee node`)
+
+```bash
+# List tracked nodes (or all nodes)
+bee node list [--all]
+
+# Node details
 bee node get <name>
-bee node create --name <n> --remote-dir /home/jenkins
-bee node offline <name> [--reason "msg"]
+
+# Create node (SSH or inbound/JNLP style)
+bee node create \
+  --name <node_name> \
+  --remote-dir </path/to/workdir> \
+  [--executors 1] \
+  [--labels "<space separated labels>"] \
+  [--description <text>] \
+  [--host <ssh_host>] \
+  [--port 22] \
+  [--cred-id <credential_id>] \
+  [--java-path </path/to/java>]
+
+# Update node config
+bee node update <name> \
+  [--description <text>] \
+  [--remote-dir </path/to/workdir>] \
+  [--executors <n>] \
+  [--labels "<space separated labels>"]
+
+# Copy node config
+bee node copy <source_name> <new_name>
+
+# Toggle connectivity
+bee node offline <name> [--reason <message>]
 bee node online <name>
+
+# Delete node
 bee node delete <name> [--yes]
 ```
 
-
-
 ## TUI Mode
+
+Launch:
 
 ```bash
 bee --ui
 ```
 
-Built with **[Textual](https://textual.textualize.io/)** — async-first, non-blocking UI. All API calls run in background threads so the interface stays responsive at all times.
+Global keys:
 
-> **ASCII-first design** — borders use `|` `+` `-` characters, works on any Linux terminal including `LANG=C` / POSIX.  
-> Set `BEE_UNICODE=1` to opt in to Unicode symbols on supported terminals.
+- `q`: quit
+- `l`: login
+- `x`: logout (clear session)
+- `1`-`5`: jump tabs
+- `Tab` / `Shift+Tab`: next/previous tab
+- `F5`: refresh active tab
+- `F2`: toggle dark/light
+- `?`: help overlay
 
-**Tabs:**
-```
-[1] Controller   [2] Credentials   [3] Nodes   [4] Jobs   [5] Settings
-```
+Resource tabs:
 
-**Keys:**
+- Jobs: `r` run, `s` stop, `l` log, `n` new, `d` delete, `a` mine/all
+- Nodes: `o` offline/online, `n` new, `d` delete, `a` mine/all
+- Credentials: `c` create, `d` delete, `S` store toggle, `a` mine/all
+- Settings: `c` clear cache
 
-| Key | Action |
-|-----|--------|
-| `q` | Quit (session saved) |
-| `1`–`5` | Jump to screen |
-| `↑` / `↓` | Navigate list |
-| `Enter` | Open detail screen |
-| `L` | Login |
-| `X` | Logout (clears session) |
-| `r` | Run selected job (Jobs) |
-| `s` | Stop last build (Jobs) · Toggle store: system↔user (Credentials) |
-| `l` | View live streaming build log (Jobs) |
-| `n` | Create new item (Jobs / Nodes) |
-| `d` | Delete selected item |
-| `o` | Toggle node offline/online (Nodes) |
-| `c` | Create credential (Credentials) · Clear cache (Settings) |
-| `a` | Toggle Mine / All scope (all resource tabs) |
-| `?` | Show keyboard help overlay |
-| `F5` | Force refresh (bypass cache, re-fetch from API) |
-| `F2` | Toggle dark/light mode |
-| `Esc` | Close modal / go back |
+Terminal rendering mode:
 
-> **Session:** Login once → session saved encrypted in SQLite. Reopen TUI/CLI anytime without re-entering credentials. `X` to logout.
-> 
-> **Resource Tracking:** Resources (Jobs, Nodes, Credentials) created via `bee` are persistently tracked. The TUI and CLI default to filtering by **MINE**, showing only your items. Press `a` (or pass `--all`) to toggle to **ALL** items. Live streaming logs use Jenkins progressive API to tail logs without hanging the UI.
-
----
+- Unicode is enabled by default on UTF-8 terminals.
+- Set `BEE_ASCII=1` to force ASCII-safe symbols/borders.
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `CB_PROFILE` | Active profile name | `default` |
-| `CB_DB_PATH` | Custom database path | `./data/cb.db` |
-| `CB_PASSWORD` | Password for non-interactive scripting | — |
+- `CB_DB_PATH`: override SQLite DB path
+  - default: `./data/cb.db` (relative to current working directory)
+- `BEE_ASCII`: force ASCII UI rendering (`1/true/yes`)
 
----
+## Data, Session, and Security Notes
 
-## Security
+- Data is stored in SQLite (`profiles`, `settings`, `cache`, tracked resources, etc.).
+- Session token is stored encrypted with a machine-derived key (`settings` table).
+- `bee auth logout` clears the saved session.
+- API requests use Basic auth token format (`Authorization: Basic ...`).
+- CSRF crumb is auto-fetched and attached for write operations.
 
-- Session token encrypted with XOR cipher using a machine-derived key (SHA-256 of a per-machine random secret stored in SQLite)
-- API tokens (Basic Auth) stored as `username:password` Base64, encrypted with the machine key at rest
-- Secrets always use hidden input — never exposed in shell history
-- `X` (Logout) deletes session; `q` (Quit) preserves it for next launch
+## Cache Policy
 
----
+SQLite TTL cache is used for GET calls.
 
-## Caching
+- Controllers: 60s
+- Credentials: 60s
+- Jobs: 30s
+- Nodes: 30s
+- Default: 30s
 
-All `GET` responses cached in SQLite with short TTLs for fast refresh:
-
-| Resource | TTL |
-|----------|-----|
-| `controllers.list/detail` | 60 s |
-| `controllers.capabilities` | 60 s |
-| `jobs.list/detail` | 30 s |
-| `credentials.list/detail` | 60 s |
-| `nodes.list/detail` | 30 s |
-| Default (other resources) | 30 s |
-
-`F5` bypasses the cache and forces a live API call from the TUI.
-
----
+Writes invalidate related cache prefixes automatically.
 
 ## Project Structure
 
-```
+```text
 cloudbees/
-├── Makefile            # make install / uninstall / run / ui
-├── run.py              # Launcher (adds ./lib to sys.path)
-├── lib/                # Local dependencies (gitignored)
-├── data/               # SQLite DB — tokens, cache, settings (gitignored)
-└── cb/
-    ├── api/            # HTTP client, CSRF crumb, XML builder
-    ├── cache/          # SQLite TTL cache (manager + policy)
-    ├── cli/commands/   # auth, controller, jobs, credentials, nodes
-    ├── crypto/         # Encryption utilities (reserved)
-    ├── db/             # SQLite schema, connection, repositories
-    ├── dtos/           # Dataclass DTOs (Job, Node, Credential, Auth…)
-    ├── services/       # Business logic (auth, session, job, node, credential…)
-    └── tui/            # Textual TUI
-         ├── app.py          # BeeApp — main Textual App class
-         ├── bee.tcss        # Textual CSS (GitHub dark theme)
-         ├── screens/        # One Screen class per tab
-         └── widgets/        # Shared modals (Login, Confirm, Info, CreateCred)
+├── Makefile
+├── README.md
+├── run.py
+├── cb/
+│   ├── api/                # HTTP client, crumb, XML builders, exceptions
+│   ├── cache/              # SQLite TTL cache manager/policy
+│   ├── cli/commands/       # auth, controller, job, cred, node
+│   ├── db/                 # connection, schema, repositories
+│   ├── dtos/               # transport/data DTOs
+│   ├── services/           # domain logic for each resource
+│   └── tui/                # Textual app, screens, widgets
+└── data/                   # runtime SQLite DB (created on demand)
 ```
 
----
+## Development Notes
 
-## Version History
+- Install dev extras: `pip install -e .[dev]`
+- Run tests: `pytest`
+- Main entry point: `cb/main.py` (`bee` console script)
 
-| Version | Changes |
-|---------|---------|
-| `0.4.0` | **Live Log Streaming** (Progressive API polling), Persistent Resource Tracking (MINE vs ALL), Smart CLI Status Formatting (`NEW (Run)`, `OK`, `FAIL`), offline-capable routing |
-| `0.3.0` | **Textual TUI** (async workers, non-blocking UI), dual credential store (system/user), shorter TTLs (30–60s), Python 3.9+, `--store` CLI option |
-| `0.2.0` | Controller, Credential, Node management; Job create; local `./lib` install |
-| `0.1.0` | Initial release — auth, job list/run/stop, TUI, encrypted storage, cache |
+## License
+
+MIT

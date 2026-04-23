@@ -1,21 +1,28 @@
 from __future__ import annotations
-"""Job service -- list, get, create (Freestyle/Pipeline/Folder), run, stop, log."""
+"""Job service -- list, get, create (Freestyle/Folder), run, stop, log."""
 
+import re
 import time
-from pathlib import Path
-from typing import Optional, List
+from typing import Optional
+import xml.etree.ElementTree as ET
 
 from cb.api.client import CloudBeesClient
-from cb.api.xml_builder import build_freestyle_xml, build_pipeline_xml, build_folder_xml, inject_email_publisher
-from cb.dtos.job import JobDTO, BuildDTO
+from cb.api.xml_builder import (
+    build_folder_xml,
+    build_freestyle_xml,
+    inject_email_publisher,
+    parse_email_filter_metadata,
+)
+from cb.dtos.job import BuildDTO, JobDTO
 
 
 _JOB_TREE = "jobs[_class,name,url,color,description,buildable,lastBuild[number,result,url]]"
 _JOB_DETAIL_TREE = "_class,name,url,color,description,buildable,lastBuild[number,result,url]"
 
+
 def list_jobs(
     client: CloudBeesClient,
-) -> List[JobDTO]:
+) -> list[JobDTO]:
     """
     List jobs. Uses the client's base_url directly.
     """
@@ -23,6 +30,7 @@ def list_jobs(
     cache_key = f"jobs.list.{client.base_url}"
     data = client.get(endpoint, cache_key=cache_key)
     return [JobDTO.from_dict(j) for j in (data or {}).get("jobs", [])]
+
 
 def get_job(client: CloudBeesClient, name: str) -> Optional[JobDTO]:
     """Get job details by finding it in the list of all jobs."""
@@ -39,13 +47,13 @@ def get_job(client: CloudBeesClient, name: str) -> Optional[JobDTO]:
             if "404" in str(e):
                 return None
             # For other errors, we'll try the list approach below
-        
+
         # Get all jobs and find the one we're looking for
         all_jobs = list_jobs(client)
         for job in all_jobs:
             if job.name == name:
                 return job
-        
+
         # If we didn't find the job in the list but it exists (from the first check),
         # return a minimal JobDTO
         if data:
@@ -58,9 +66,9 @@ def get_job(client: CloudBeesClient, name: str) -> Optional[JobDTO]:
                 buildable=True,
                 last_build_number=None,
                 last_build_url=None,
-                job_class=""
+                job_class="",
             )
-        
+
         return None
     except Exception as e:
         if "404" in str(e):
@@ -142,9 +150,11 @@ def get_last_build_log(client: CloudBeesClient, job_name: str) -> str:
         return "(No builds found)"
     return get_build_log(client, job_name, build_num)
 
+
 def stream_build_log(client: CloudBeesClient, job_name: str, build_num: int, start: int = 0) -> tuple[str, int, bool]:
     """Progressively stream the build console log."""
     return client.get_progressive_text(f"/job/{job_name}/{build_num}/logText/progressiveText", start=start)
+
 
 def stream_last_build_log(client: CloudBeesClient, job_name: str, start: int = 0) -> tuple[str, int, bool]:
     build_num = get_last_build_number(client, job_name)
@@ -152,7 +162,8 @@ def stream_last_build_log(client: CloudBeesClient, job_name: str, start: int = 0
         return "", start, False
     return stream_build_log(client, job_name, build_num, start)
 
-def get_build_history(client: CloudBeesClient, job_name: str, count: int = 10) -> List[BuildDTO]:
+
+def get_build_history(client: CloudBeesClient, job_name: str, count: int = 10) -> list[BuildDTO]:
     """Return recent build history."""
     data = client.get(
         f"/job/{job_name}/api/json?tree=builds[number,result,building,duration,timestamp,url]{{0,{count}}}"
@@ -182,6 +193,85 @@ def wait_for_build(
 # -- Create jobs -----------------------------------------------
 
 
+def _normalize_keywords(email_keywords: list[str] | tuple[str, ...] | None) -> list[str]:
+    if email_keywords is None:
+        return []
+    out: list[str] = []
+    for item in email_keywords:
+        if item is None:
+            continue
+        val = str(item).strip()
+        if val:
+            out.append(val)
+    return out
+
+
+def _normalize_regex(email_regex: Optional[str]) -> Optional[str]:
+    if email_regex is None:
+        return None
+    val = str(email_regex).strip()
+    return val or None
+
+
+def _validate_regex(email_regex: Optional[str]) -> None:
+    if not email_regex:
+        return
+    try:
+        re.compile(email_regex)
+    except re.error as exc:
+        raise ValueError(f"Invalid --email-regex: {exc}") from exc
+
+
+def _extract_email_publisher(publishers: ET.Element | None) -> ET.Element | None:
+    if publishers is None:
+        return None
+    return publishers.find("hudson.plugins.emailext.ExtendedEmailPublisher")
+
+
+def _remove_email_publishers(publishers: ET.Element | None) -> None:
+    if publishers is None:
+        return
+    for elem in list(publishers.findall("hudson.plugins.emailext.ExtendedEmailPublisher")):
+        publishers.remove(elem)
+
+
+def _infer_email_cond_from_publisher(ext_mail: ET.Element | None) -> str:
+    if ext_mail is None:
+        return "failed"
+    triggers = ext_mail.find("configuredTriggers")
+    if triggers is None:
+        return "failed"
+
+    has_failure = bool(triggers.find("hudson.plugins.emailext.plugins.trigger.FailureTrigger"))
+    has_success = bool(triggers.find("hudson.plugins.emailext.plugins.trigger.SuccessTrigger"))
+
+    if has_failure and has_success:
+        return "always"
+    if has_success:
+        return "success"
+    return "failed"
+
+
+def _existing_email_value(ext_mail: ET.Element | None) -> Optional[str]:
+    if ext_mail is None:
+        return None
+    elem = ext_mail.find("recipientList")
+    if elem is None or elem.text is None:
+        return None
+    val = elem.text.strip()
+    return val or None
+
+
+def _existing_filter_from_publisher(ext_mail: ET.Element | None) -> tuple[list[str], Optional[str]]:
+    if ext_mail is None:
+        return [], None
+    presend = ext_mail.find("presendScript")
+    metadata = parse_email_filter_metadata(presend.text if presend is not None else None)
+    if not metadata:
+        return [], None
+    return _normalize_keywords(metadata.get("keywords")), _normalize_regex(metadata.get("regex"))
+
+
 def create_freestyle_job(
     client: CloudBeesClient,
     name: str,
@@ -192,36 +282,26 @@ def create_freestyle_job(
     schedule: Optional[str] = None,
     email: Optional[str] = None,
     email_cond: str = "failed",
+    email_keywords: list[str] | tuple[str, ...] | None = None,
+    email_regex: Optional[str] = None,
 ) -> None:
-    xml = build_freestyle_xml(desc=desc, shell_cmd=shell_cmd, chdir=chdir, node=node, schedule=schedule, email=email, email_cond=email_cond)
-    client.post_xml(
-        f"/createItem?name={name}",
-        xml_str=xml,
-        invalidate="jobs.",
+    keywords = _normalize_keywords(email_keywords)
+    regex = _normalize_regex(email_regex)
+    _validate_regex(regex)
+    if (keywords or regex) and not (email and email.strip()):
+        raise ValueError("Email filters require recipient email. Provide --email.")
+
+    xml = build_freestyle_xml(
+        desc=desc,
+        shell_cmd=shell_cmd,
+        chdir=chdir,
+        node=node,
+        schedule=schedule,
+        email=email,
+        email_cond=email_cond,
+        email_keywords=keywords,
+        email_regex=regex,
     )
-
-
-def create_pipeline_job(
-    client: CloudBeesClient,
-    name: str,
-    desc: str = "",
-    script: str = "",
-    node: Optional[str] = None,
-    schedule: Optional[str] = None,
-    email: Optional[str] = None,
-    email_cond: str = "failed",
-) -> None:
-    if not script:
-        script = "pipeline {\n  agent any\n  stages {\n    stage('Build') {\n      steps { echo 'Hello' }\n    }\n  }\n"
-        if email:
-            if email_cond == "always":
-                script += f"  post {{\n    always {{\n      mail to: '{email}', subject: 'Build Result', body: 'Build finished'\n    }}\n  }}\n"
-            elif email_cond == "success":
-                script += f"  post {{\n    success {{\n      mail to: '{email}', subject: 'Build Success', body: 'Build succeeded'\n    }}\n  }}\n"
-            else:
-                script += f"  post {{\n    failure {{\n      mail to: '{email}', subject: 'Build Failed', body: 'Build failed'\n    }}\n  }}\n"
-        script += "}"
-    xml = build_pipeline_xml(desc=desc, script=script, node=node, schedule=schedule)
     client.post_xml(
         f"/createItem?name={name}",
         xml_str=xml,
@@ -263,11 +343,10 @@ def delete_job(client: CloudBeesClient, name: str) -> None:
         raise e
 
 
-import xml.etree.ElementTree as ET
-
 def _get_job_config(client: CloudBeesClient, name: str) -> ET.Element:
     xml_str = client.get_text(f"/job/{name}/config.xml")
     return ET.fromstring(xml_str)
+
 
 def _post_job_config(client: CloudBeesClient, name: str, root: ET.Element) -> None:
     # Need to include the XML declaration
@@ -277,6 +356,7 @@ def _post_job_config(client: CloudBeesClient, name: str, root: ET.Element) -> No
         xml_str=xml_str,
         invalidate="jobs.",
     )
+
 
 def get_job_config_summary(client: CloudBeesClient, name: str) -> dict:
     """Read the config.xml and extract schedule and email information."""
@@ -291,7 +371,7 @@ def get_job_config_summary(client: CloudBeesClient, name: str) -> dict:
                 spec = timer.find("spec")
                 if spec is not None and spec.text:
                     summary["schedule"] = spec.text.strip()
-        
+
         # 2. Publishers / Email (Freestyle usually)
         publishers = root.find("publishers")
         if publishers is not None:
@@ -310,6 +390,7 @@ def get_job_config_summary(client: CloudBeesClient, name: str) -> dict:
         pass
     return summary
 
+
 def update_job_freestyle(
     client: CloudBeesClient,
     name: str,
@@ -319,9 +400,13 @@ def update_job_freestyle(
     schedule: Optional[str] = None,
     email: Optional[str] = None,
     email_cond: Optional[str] = None,
+    email_keywords: list[str] | tuple[str, ...] | None = None,
+    email_regex: Optional[str] = None,
+    clear_email_keywords: bool = False,
+    clear_email_regex: bool = False,
 ) -> None:
     root = _get_job_config(client, name)
-    
+
     if desc is not None:
         desc_elem = root.find("description")
         if desc_elem is None:
@@ -333,7 +418,7 @@ def update_job_freestyle(
         if node_elem is None:
             node_elem = ET.SubElement(root, "assignedNode")
         node_elem.text = node
-        
+
         roam_elem = root.find("canRoam")
         if roam_elem is None:
             roam_elem = ET.SubElement(root, "canRoam")
@@ -362,55 +447,76 @@ def update_job_freestyle(
             spec = ET.SubElement(timer, "spec")
             spec.text = schedule
 
-    if email is not None:
+    should_update_email = any(
+        [
+            email is not None,
+            email_cond is not None,
+            email_keywords is not None,
+            email_regex is not None,
+            clear_email_keywords,
+            clear_email_regex,
+        ]
+    )
+
+    if should_update_email:
         publishers = root.find("publishers")
         if publishers is None:
             publishers = ET.SubElement(root, "publishers")
-        for p in publishers.findall("hudson.plugins.emailext.ExtendedEmailPublisher"):
-            publishers.remove(p)
-        if email:
-            inject_email_publisher(publishers, email, email_cond or "failed")
 
-    _post_job_config(client, name, root)
+        current_ext = _extract_email_publisher(publishers)
+        current_email = _existing_email_value(current_ext)
+        current_cond = _infer_email_cond_from_publisher(current_ext)
+        current_keywords, current_regex = _existing_filter_from_publisher(current_ext)
 
+        requested_keywords = _normalize_keywords(email_keywords) if email_keywords is not None else None
+        requested_regex = _normalize_regex(email_regex) if email_regex is not None else None
+        _validate_regex(requested_regex)
 
-def update_job_pipeline(
-    client: CloudBeesClient,
-    name: str,
-    desc: Optional[str] = None,
-    script: Optional[str] = None,
-    schedule: Optional[str] = None,
-) -> None:
-    root = _get_job_config(client, name)
-    
-    if desc is not None:
-        desc_elem = root.find("description")
-        if desc_elem is None:
-            desc_elem = ET.SubElement(root, "description")
-        desc_elem.text = desc
+        has_new_filter_values = bool(requested_keywords) or bool(requested_regex)
 
-    if script is not None:
-        definition = root.find("definition")
-        if definition is None:
-            definition = ET.SubElement(root, "definition", {"class": "org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition", "plugin": "workflow-cps"})
-        script_elem = definition.find("script")
-        if script_elem is None:
-            script_elem = ET.SubElement(definition, "script")
-        script_elem.text = script
-        sandbox = definition.find("sandbox")
-        if sandbox is None:
-            sandbox = ET.SubElement(definition, "sandbox")
-            sandbox.text = "true"
+        if email is not None:
+            target_email = email.strip()
+        else:
+            target_email = current_email or ""
 
-    if schedule is not None:
-        triggers = root.find("triggers")
-        if triggers is None:
-            triggers = ET.SubElement(root, "triggers")
-        for t in triggers.findall("hudson.triggers.TimerTrigger"):
-            triggers.remove(t)
-        if schedule:
-            timer = ET.SubElement(triggers, "hudson.triggers.TimerTrigger")
-            spec = ET.SubElement(timer, "spec")
-            spec.text = schedule
+        if email is not None and target_email == "":
+            if has_new_filter_values:
+                raise ValueError("Cannot set email filters when removing recipient email.")
+            _remove_email_publishers(publishers)
+        else:
+            if not target_email:
+                if has_new_filter_values:
+                    raise ValueError("Email filters require recipient email. Provide --email.")
+                if email_cond is not None:
+                    raise ValueError("Email condition requires recipient email. Provide --email.")
+            else:
+                target_cond = email_cond or current_cond
+
+                target_keywords = list(current_keywords)
+                target_regex = current_regex
+
+                if clear_email_keywords:
+                    target_keywords = []
+                if clear_email_regex:
+                    target_regex = None
+
+                if requested_keywords is not None:
+                    target_keywords = requested_keywords
+                if email_regex is not None:
+                    target_regex = requested_regex
+
+                _validate_regex(target_regex)
+
+                if (target_keywords or target_regex) and not target_email:
+                    raise ValueError("Email filters require recipient email. Provide --email.")
+
+                _remove_email_publishers(publishers)
+                inject_email_publisher(
+                    publishers,
+                    target_email,
+                    target_cond,
+                    email_keywords=target_keywords,
+                    email_regex=target_regex,
+                )
 
     _post_job_config(client, name, root)

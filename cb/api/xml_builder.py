@@ -1,7 +1,12 @@
 from __future__ import annotations
 """Config XML builders for Jobs, Nodes, Credentials -- using stdlib xml.etree."""
 
+import json
 import xml.etree.ElementTree as ET
+
+
+_EMAIL_FILTER_META_PREFIX = "BEE_EMAIL_FILTER_META:"
+_EMAIL_FILTER_VERSION = 1
 
 
 def _xml_str(root: ET.Element) -> str:
@@ -16,13 +21,135 @@ def _xml_str(root: ET.Element) -> str:
 # -- Job XML ---------------------------------------------------
 
 
-def inject_email_publisher(publishers: ET.Element, email: str, email_cond: str):
+def _normalize_keywords(email_keywords: list[str] | None) -> list[str]:
+    if not email_keywords:
+        return []
+    out: list[str] = []
+    for kw in email_keywords:
+        if kw is None:
+            continue
+        v = str(kw).strip()
+        if v:
+            out.append(v)
+    return out
+
+
+def _groovy_double_quoted(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def build_email_filter_presend_script(
+    email_keywords: list[str] | None = None,
+    email_regex: str | None = None,
+    case_sensitive: bool = False,
+) -> str:
+    """Build email-ext presendScript that cancels email when log does not match filter."""
+    keywords = _normalize_keywords(email_keywords)
+    regex = (email_regex or "").strip() or None
+
+    if not keywords and not regex:
+        return "$DEFAULT_PRESEND_SCRIPT"
+
+    meta = {
+        "version": _EMAIL_FILTER_VERSION,
+        "keywords": keywords,
+        "regex": regex,
+        "case_sensitive": bool(case_sensitive),
+    }
+    meta_line = f"// {_EMAIL_FILTER_META_PREFIX}{json.dumps(meta, ensure_ascii=True, separators=(',', ':'))}"
+
+    keyword_list = ", ".join(f'"{_groovy_double_quoted(k)}"' for k in keywords)
+    regex_literal = "null" if regex is None else f'"{_groovy_double_quoted(regex)}"'
+    case_literal = "true" if case_sensitive else "false"
+
+    lines = [
+        meta_line,
+        "def _bee_raw = ''",
+        "try {",
+        "  _bee_raw = build?.getLog(100000)?.join('\\n') ?: ''",
+        "} catch (Throwable _bee_ignore) {",
+        "  _bee_raw = ''",
+        "}",
+        f"def _bee_case_sensitive = {case_literal}",
+        f"def _bee_keywords = [{keyword_list}]",
+        f"def _bee_regex = {regex_literal}",
+        "def _bee_source = _bee_raw",
+        "if (!_bee_case_sensitive) {",
+        "  _bee_source = _bee_raw.toLowerCase(java.util.Locale.ROOT)",
+        "}",
+        "def _bee_kw_match = false",
+        "for (kw in _bee_keywords) {",
+        "  if (!kw) { continue }",
+        "  def _needle = _bee_case_sensitive ? kw : kw.toLowerCase(java.util.Locale.ROOT)",
+        "  if (_bee_source.contains(_needle)) {",
+        "    _bee_kw_match = true",
+        "    break",
+        "  }",
+        "}",
+        "def _bee_regex_match = false",
+        "if (_bee_regex) {",
+        "  try {",
+        "    def _flags = _bee_case_sensitive ? 0 : java.util.regex.Pattern.CASE_INSENSITIVE",
+        "    def _pattern = java.util.regex.Pattern.compile(_bee_regex, _flags)",
+        "    _bee_regex_match = _pattern.matcher(_bee_raw).find()",
+        "  } catch (Throwable _bee_regex_error) {",
+        "    logger.println('[bee] email regex invalid: ' + _bee_regex_error)",
+        "    cancel = true",
+        "  }",
+        "}",
+        "def _bee_has_keywords = !_bee_keywords.isEmpty()",
+        "def _bee_has_regex = (_bee_regex != null && _bee_regex != '')",
+        "def _bee_match = (_bee_has_keywords && _bee_kw_match) || (_bee_has_regex && _bee_regex_match)",
+        "if (!_bee_match) {",
+        "  logger.println('[bee] cancel email: no keyword/regex match found in build log')",
+        "  cancel = true",
+        "}",
+    ]
+    return "\n".join(lines)
+
+
+def parse_email_filter_metadata(presend_script: str | None) -> dict | None:
+    """Parse bee filter metadata marker from presendScript if present."""
+    if not presend_script:
+        return None
+
+    for raw_line in presend_script.splitlines():
+        line = raw_line.strip()
+        marker = f"// {_EMAIL_FILTER_META_PREFIX}"
+        if not line.startswith(marker):
+            continue
+        payload = line[len(marker) :].strip()
+        if not payload:
+            return None
+        try:
+            data = json.loads(payload)
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        keywords_raw = data.get("keywords")
+        regex_raw = data.get("regex")
+        return {
+            "keywords": _normalize_keywords(keywords_raw if isinstance(keywords_raw, list) else []),
+            "regex": str(regex_raw).strip() if isinstance(regex_raw, str) and regex_raw.strip() else None,
+            "case_sensitive": bool(data.get("case_sensitive", False)),
+        }
+    return None
+
+
+def inject_email_publisher(
+    publishers: ET.Element,
+    email: str,
+    email_cond: str,
+    email_keywords: list[str] | None = None,
+    email_regex: str | None = None,
+):
     """Helper to inject ExtendedEmailPublisher into publishers block."""
     ext_mail = ET.SubElement(publishers, "hudson.plugins.emailext.ExtendedEmailPublisher", {"plugin": "email-ext"})
     ET.SubElement(ext_mail, "recipientList").text = email
     ET.SubElement(ext_mail, "configuredTriggers")
     cur_triggers = ext_mail.find("configuredTriggers")
-    
+
     def _add_email_trigger(parent, tag_name):
         evt = ET.SubElement(parent, tag_name)
         eml = ET.SubElement(evt, "email")
@@ -41,12 +168,16 @@ def inject_email_publisher(publishers: ET.Element, email: str, email_cond: str):
         _add_email_trigger(cur_triggers, "hudson.plugins.emailext.plugins.trigger.FailureTrigger")
     if email_cond in ("success", "always"):
         _add_email_trigger(cur_triggers, "hudson.plugins.emailext.plugins.trigger.SuccessTrigger")
-        
+
     ET.SubElement(ext_mail, "contentType").text = "default"
     ET.SubElement(ext_mail, "defaultSubject").text = "$DEFAULT_SUBJECT"
     ET.SubElement(ext_mail, "defaultContent").text = "$DEFAULT_CONTENT"
     ET.SubElement(ext_mail, "attachmentsPattern").text = ""
-    ET.SubElement(ext_mail, "presendScript").text = "$DEFAULT_PRESEND_SCRIPT"
+    ET.SubElement(ext_mail, "presendScript").text = build_email_filter_presend_script(
+        email_keywords=email_keywords,
+        email_regex=email_regex,
+        case_sensitive=False,
+    )
     ET.SubElement(ext_mail, "postsendScript").text = "$DEFAULT_POSTSEND_SCRIPT"
     ET.SubElement(ext_mail, "attachBuildLog").text = "false"
     ET.SubElement(ext_mail, "compressBuildLog").text = "false"
@@ -55,14 +186,18 @@ def inject_email_publisher(publishers: ET.Element, email: str, email_cond: str):
     ET.SubElement(ext_mail, "saveOutput").text = "false"
     ET.SubElement(ext_mail, "disabled").text = "false"
 
+
+
 def build_freestyle_xml(
-        desc: str = "", 
-        shell_cmd: str = "echo hello", 
-        node: str | None = None,
-        chdir: str | None = None,
-        schedule: str | None = None,
-        email: str | None = None,
-        email_cond: str = "failed"
+    desc: str = "",
+    shell_cmd: str = "echo hello",
+    node: str | None = None,
+    chdir: str | None = None,
+    schedule: str | None = None,
+    email: str | None = None,
+    email_cond: str = "failed",
+    email_keywords: list[str] | None = None,
+    email_regex: str | None = None,
 ) -> str:
     """Freestyle project config.xml."""
     root = ET.Element("project")
@@ -74,57 +209,28 @@ def build_freestyle_xml(
     if node:
         ET.SubElement(root, "assignedNode").text = node
     ET.SubElement(root, "disabled").text = "false"
-    
+
     triggers = ET.SubElement(root, "triggers")
     if schedule:
         timer = ET.SubElement(triggers, "hudson.triggers.TimerTrigger")
         ET.SubElement(timer, "spec").text = schedule
-        
+
     builders = ET.SubElement(root, "builders")
     shell = ET.SubElement(builders, "hudson.tasks.Shell")
     final_cmd = f"cd {chdir} && {shell_cmd}" if chdir else shell_cmd
     ET.SubElement(shell, "command").text = final_cmd
-    
+
     publishers = ET.SubElement(root, "publishers")
     if email:
-        inject_email_publisher(publishers, email, email_cond)
+        inject_email_publisher(
+            publishers,
+            email,
+            email_cond,
+            email_keywords=email_keywords,
+            email_regex=email_regex,
+        )
 
     ET.SubElement(root, "buildWrappers")
-    return _xml_str(root)
-
-
-
-def build_pipeline_xml(
-        desc: str = "", 
-        script: str = "pipeline { agent any\n  stages { stage('Build') { steps { echo 'Hello' } } } }", 
-        node: str | None = None,
-        schedule: str | None = None
-) -> str:
-    """Pipeline (WorkflowJob) config.xml."""
-    root = ET.Element(
-        "flow-definition",
-        {"plugin": "workflow-job"}
-    )
-    ET.SubElement(root, "description").text = desc
-
-    if node:
-        ET.SubElement(root, "assignedNode").text = node
-
-    actions = ET.SubElement(root, "actions")
-    defn = ET.SubElement(
-        root, "definition",
-        {"class": "org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition",
-         "plugin": "workflow-cps"}
-    )
-    ET.SubElement(defn, "script").text = script
-    ET.SubElement(defn, "sandbox").text = "true"
-    
-    triggers = ET.SubElement(root, "triggers")
-    if schedule:
-        timer = ET.SubElement(triggers, "hudson.triggers.TimerTrigger")
-        ET.SubElement(timer, "spec").text = schedule
-        
-    ET.SubElement(root, "disabled").text = "false"
     return _xml_str(root)
 
 
@@ -161,7 +267,7 @@ def build_permanent_node_xml(
     ET.SubElement(root, "numExecutors").text = str(num_executors)
     ET.SubElement(root, "mode").text = "NORMAL"
     ET.SubElement(root, "retentionStrategy", {"class": "hudson.slaves.RetentionStrategy$Always"})
-    
+
     if host:
         launcher = ET.SubElement(root, "launcher", {"class": "hudson.plugins.sshslaves.SSHLauncher", "plugin": "ssh-slaves"})
         ET.SubElement(launcher, "host").text = host
@@ -174,7 +280,7 @@ def build_permanent_node_xml(
         ET.SubElement(wds, "disabled").text = "false"
         ET.SubElement(wds, "internalDir").text = "remoting"
         ET.SubElement(wds, "failIfWorkDirIsMissing").text = "false"
-        
+
     ET.SubElement(root, "label").text = labels
     ET.SubElement(root, "nodeProperties")
     return _xml_str(root)
