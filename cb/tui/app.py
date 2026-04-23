@@ -40,6 +40,7 @@ class BeeApp(App):
         Binding("q",          "quit",                     "Quit"),
         Binding("l",          "login",                    "Login"),
         Binding("x",          "logout",                   "Logout",      show=False),
+        Binding("a",          "toggle_scope",             "Mine/All",    show=False, priority=True),
         Binding("f5",         "refresh_active",           "Refresh"),
         Binding("f2",         "toggle_dark",              "Dark/Light",  show=False),
         Binding("1",          "switch_tab('controller')", "1:Ctrl",      show=False),
@@ -209,6 +210,34 @@ class BeeApp(App):
             active = self.query_one(TabbedContent).active_pane
             if active:
                 active.action_refresh()
+        except Exception:
+            pass
+
+    def action_toggle_scope(self) -> None:
+        """Global Mine/All toggle for active tab; avoids key-loss when DataTable has focus."""
+        # Don't intercept typing in modal/input contexts.
+        try:
+            from textual.screen import ModalScreen
+            from textual.widgets import Input, Select, TextArea
+            focused = self.focused
+            if isinstance(self.screen, ModalScreen):
+                return
+            if isinstance(focused, (Input, Select, TextArea)):
+                return
+        except Exception:
+            pass
+
+        try:
+            tab_id = self.query_one(TabbedContent).active
+            if tab_id == "credentials":
+                from cb.tui.screens.credentials_screen import CredentialsPane
+                self.query_one(CredentialsPane).action_toggle_all()
+            elif tab_id == "nodes":
+                from cb.tui.screens.nodes_screen import NodesPane
+                self.query_one(NodesPane).action_toggle_all()
+            elif tab_id == "jobs":
+                from cb.tui.screens.jobs_screen import JobsPane
+                self.query_one(JobsPane).action_toggle_all()
         except Exception:
             pass
 
