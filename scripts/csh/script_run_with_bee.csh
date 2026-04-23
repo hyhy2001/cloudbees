@@ -38,17 +38,10 @@ echo "[demo] start"
 date
 sleep 2
 
-# In non-interactive csh (-f), `prompt` may be undefined.
-# venv activate.csh references `$prompt`, so define a safe default.
-if (! $?prompt) then
-  set prompt = ""
-endif
-
-echo "[demo] sourcing: $venv_activate"
-source "$venv_activate"
-
-echo "[demo] running bee command via bs: $BEE_CMD"
-bs -os "RHEL7 RHEL8" tcsh -c "$BEE_CMD"
+echo "[demo] running in tcsh via bs:"
+echo "       source $venv_activate; $BEE_CMD"
+set RUN_IN_TCSH = "if (! $?prompt) set prompt=''; source $venv_activate; $BEE_CMD"
+bs -os "RHEL7 RHEL8" tcsh -c "$RUN_IN_TCSH"
 set CMD_STATUS = $status
 
 echo "[demo] bee command exit code: $CMD_STATUS"
