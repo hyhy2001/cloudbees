@@ -19,6 +19,7 @@ help:
 	@echo ""
 	@echo "    make init        Setup bee securely in current directory (.venv)"
 	@echo "    make install     Install local dependencies (run once)"
+	@echo "    make update      Reinstall bee (uninstall + install)"
 	@echo "    make uninstall   Remove bee"
 	@echo "    make run         make run ARGS='job list'"
 	@echo "    make ui          Launch TUI"
@@ -64,6 +65,10 @@ uninstall:
 	@rm -rf .venv
 	@echo "  [OK] Removed virtual environment and dependencies"
 
+update:
+	@$(MAKE) uninstall
+	@$(MAKE) install
+
 run:
 	@if [ -z "$(ARGS)" ]; then \
 		echo "  [Hint] You can also run 'source .venv/bin/activate' to use 'bee' directly."; \
@@ -76,4 +81,4 @@ ui:
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
-.PHONY: help init install uninstall run ui clean
+.PHONY: help init install update uninstall run ui clean
