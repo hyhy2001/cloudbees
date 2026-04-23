@@ -47,6 +47,16 @@ install:
 		echo "setenv RIDE_ROOT \"$(RIDE_ROOT)\""; \
 		echo "setenv LD_LIBRARY_PATH \"$(LD_LIBRARY_PATH)\""; \
 	} >> .venv/bin/activate.csh
+	@# Patch activate.csh for non-interactive csh/tcsh (-f): avoid "prompt: Undefined variable"
+	@tmp_file=$$(mktemp); \
+	awk '{ \
+		if ($$0 ~ /^set _OLD_VIRTUAL_PROMPT="\\$$prompt"$$/) { \
+			print "if (! $$?prompt) then"; \
+			print "    set prompt = \"\""; \
+			print "endif"; \
+		} \
+		print $$0; \
+	}' .venv/bin/activate.csh > $$tmp_file && mv $$tmp_file .venv/bin/activate.csh
 	@./.venv/bin/pip install .
 
 init:

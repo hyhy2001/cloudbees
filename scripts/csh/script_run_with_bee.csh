@@ -38,6 +38,12 @@ echo "[demo] start"
 date
 sleep 2
 
+# In non-interactive csh (-f), `prompt` may be undefined.
+# venv activate.csh references `$prompt`, so define a safe default.
+if (! $?prompt) then
+  set prompt = ""
+endif
+
 echo "[demo] sourcing: $venv_activate"
 source "$venv_activate"
 
