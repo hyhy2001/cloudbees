@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import contextlib
 import sqlite3
 from pathlib import Path
@@ -11,12 +12,43 @@ from typing import Optional
 _DB_PATH: Optional[Path] = None
 
 
+def _detect_bee_root() -> Optional[Path]:
+    """Best-effort detection of bee project root directory."""
+    # 1) Explicit root override
+    bee_dir = os.environ.get("BEE_DIR")
+    if bee_dir:
+        p = Path(bee_dir).expanduser().resolve()
+        if p.exists():
+            return p
+
+    # 2) Running inside project-local virtualenv: <root>/.venv/bin/python
+    try:
+        exe = Path(sys.executable).resolve()
+        if exe.parent.name == "bin" and exe.parent.parent.name == ".venv":
+            root = exe.parent.parent.parent
+            if root.exists():
+                return root
+    except Exception:
+        pass
+
+    # 3) Running from source tree: walk up from this module for pyproject/cb markers
+    try:
+        cur = Path(__file__).resolve()
+        for parent in cur.parents:
+            if (parent / "pyproject.toml").exists() and (parent / "cb").is_dir():
+                return parent
+    except Exception:
+        pass
+
+    return None
+
+
 def get_db_path() -> Path:
     """Return the database file path, respecting CB_DB_PATH env override.
 
     Priority:
       1. CB_DB_PATH environment variable
-      2. ./data/cb.db  (relative to current working directory)
+      2. <bee_root>/data/cb.db (auto-detected)
     """
     global _DB_PATH
     if _DB_PATH is not None:
@@ -26,8 +58,13 @@ def get_db_path() -> Path:
     if env:
         _DB_PATH = Path(env)
     else:
-        # Store data next to where the user cloned/runs the tool
-        data_dir = Path.cwd() / "data"
+        bee_root = _detect_bee_root()
+        if not bee_root:
+            raise RuntimeError(
+                "Cannot determine bee database location. "
+                "Set BEE_DIR or CB_DB_PATH explicitly."
+            )
+        data_dir = bee_root / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
         _DB_PATH = data_dir / "cb.db"
 
@@ -81,4 +118,3 @@ def set_db_path(path: Path) -> None:
     """Override DB path (used in tests for in-memory or temp DBs)."""
     global _DB_PATH
     _DB_PATH = path
-
