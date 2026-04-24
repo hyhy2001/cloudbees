@@ -15,8 +15,20 @@ custom_theme = Theme({
 console = Console(theme=custom_theme)
 
 def print_error(msg: str, exc: Optional[Exception] = None) -> None:
-    """Print a styled error panel. If exc is provided, can print traceback."""
-    if exc:
-        console.print_exception()
-    else:
-        console.print(Panel(f"[error]ERROR:[/error] {msg}", border_style="red"))
+    """Print a styled error panel. Traceback is shown only in debug mode."""
+    debug_tb = os.getenv("BEE_DEBUG_TRACEBACK", "").lower() in ("1", "true", "yes", "on")
+
+    # Friendly auth/session errors by default (no traceback noise).
+    if exc is not None:
+        err_text = str(exc) or msg
+        err_name = exc.__class__.__name__
+        if err_name == "AuthError" or "Not logged in" in err_text:
+            console.print(Panel(f"[error]AUTH ERROR:[/error] {err_text}", border_style="red"))
+            return
+        if debug_tb:
+            console.print_exception()
+            return
+        console.print(Panel(f"[error]ERROR:[/error] {err_text}", border_style="red"))
+        return
+
+    console.print(Panel(f"[error]ERROR:[/error] {msg}", border_style="red"))

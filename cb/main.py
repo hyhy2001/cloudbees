@@ -37,6 +37,7 @@ def cli(ctx, ui, debug):
       bee --ui                         # Launch TUI interface
     """
     if debug:
+        os.environ["BEE_DEBUG_TRACEBACK"] = "1"
         logging.basicConfig(level=logging.DEBUG, stream=sys.stderr, format="%(levelname)s %(name)s %(message)s")
 
     init_db()
@@ -66,8 +67,9 @@ def _launch_tui(profile, controller, token, db_path):
         pass
     except Exception as exc:
         click.echo(f"[ERROR] TUI failed: {exc}", err=True)
-        import traceback
-        traceback.print_exc()
+        if os.getenv("BEE_DEBUG_TRACEBACK", "").lower() in ("1", "true", "yes", "on"):
+            import traceback
+            traceback.print_exc()
         sys.exit(1)
 
 
