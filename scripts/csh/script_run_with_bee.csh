@@ -1,15 +1,19 @@
 #!/bin/csh -f
 
-# Simple demo script: log -> bee command in the middle -> log
+# Run one bee job and follow logs after 5 seconds.
 # Usage:
-#   csh scripts/csh/script_run_with_bee.csh [BEE_CMD]
+#   csh scripts/csh/script_run_with_bee.csh <JOB_NAME>
 # Example:
-#   csh scripts/csh/script_run_with_bee.csh "bee job list --all"
+#   csh scripts/csh/script_run_with_bee.csh my-job
 # Optional:
 #   setenv BEE_DIR /path/to/cloudbees
 
-set BEE_CMD = "bee job list"
-if ($#argv >= 1) set BEE_CMD = "$1"
+if ($#argv < 1) then
+  echo "Usage: $0 <JOB_NAME>"
+  exit 1
+endif
+
+set JOB_NAME = "$1"
 
 # Resolve bee project directory (BEE_DIR override, fallback to script directory).
 set bee_dir = ""
@@ -39,8 +43,8 @@ date
 sleep 2
 
 echo "[demo] running in tcsh via bs:"
-echo "       source $venv_activate; $BEE_CMD"
-set RUN_IN_TCSH = "if (! $?prompt) set prompt=''; source $venv_activate; $BEE_CMD"
+echo "       source $venv_activate; bee job run \"$JOB_NAME\"; sleep 5; bee job log \"$JOB_NAME\" --follow"
+set RUN_IN_TCSH = "if (! $?prompt) set prompt=''; source $venv_activate; bee job run \"$JOB_NAME\"; set _bee_code=\$status; sleep 5; bee job log \"$JOB_NAME\" --follow; exit \$_bee_code"
 bs -os "RHEL7 RHEL8" tcsh -c "$RUN_IN_TCSH"
 set CMD_STATUS = $status
 
