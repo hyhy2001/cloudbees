@@ -44,8 +44,7 @@ sleep 2
 
 echo "[demo] running in tcsh via bs:"
 echo "       source $venv_activate; bee job run \"$JOB_NAME\"; sleep 5; bee job log \"$JOB_NAME\" --follow"
-set RUN_IN_TCSH = "if (! $?prompt) set prompt=''; source $venv_activate; bee job run \"$JOB_NAME\"; set _bee_code=\$status; sleep 5; bee job log \"$JOB_NAME\" --follow; exit \$_bee_code"
-bs -os "RHEL7 RHEL8" tcsh -c "$RUN_IN_TCSH"
+bs -os "RHEL7 RHEL8" tcsh -c "if (! \$?prompt) set prompt=''; source \"$venv_activate\"; bee job run \"$JOB_NAME\"; set _bee_code=\$status; sleep 5; bee job log \"$JOB_NAME\" --follow; exit \$_bee_code"
 set CMD_STATUS = $status
 
 echo "[demo] bee command exit code: $CMD_STATUS"
