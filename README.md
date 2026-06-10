@@ -6,7 +6,7 @@
 - Local SQLite for session, cache, and tracked-resource state
 - Single self-contained binary (~92 MB) — no runtime required on the target host
 - Targets RHEL 8 / glibc ≥ 2.17 (built with `bun-linux-x64-baseline`)
-- TUI: coming in a future release
+- Interactive TUI (`bee --ui`) built with [Ink](https://github.com/vadimdemedes/ink)
 
 ## What It Can Do
 
@@ -62,7 +62,7 @@ Global options:
 ```bash
 bee --version        # print version
 bee --debug          # enable debug logging and full stack traces
-bee --ui             # TUI (not yet available in this build)
+bee --ui             # launch the interactive TUI
 ```
 
 ### Auth (`bee auth`)
@@ -255,6 +255,41 @@ By default `job list`, `node list`, and `cred list` show only resources created 
 
 SQLite TTL cache is used for GET calls (controllers, jobs, nodes, credentials — all 10 s TTL). Writes automatically invalidate related cache entries.
 
+## TUI
+
+`bee --ui` launches an interactive terminal UI built with [Ink](https://github.com/vadimdemedes/ink) (React for the terminal). It shares the same service layer as the CLI, so it talks to the same session, cache, and tracked-resource state. Requires an interactive terminal (a TTY).
+
+Each plugin contributes its own tab via an optional `screen()` in its `Plugin` object; tabs are collected and ordered at startup. The Jobs tab is available today; Controllers, Credentials, Nodes, and Settings tabs are planned.
+
+Global keys:
+
+| Key | Action |
+|---|---|
+| `1`–`9` | Jump to tab N |
+| `Tab` / `Shift+Tab` | Next / previous tab |
+| `←` / `→` | Previous / next tab |
+| `?` | Toggle help |
+| `q` | Quit |
+
+Jobs tab:
+
+| Key | Action |
+|---|---|
+| `j` / `k` | Move cursor down / up (also `↓`/`↑`) |
+| `g` / `G` | Jump to first / last row |
+| `Ctrl+f` / `Ctrl+b` | Page down / up |
+| `a` | Toggle Mine / All (tracked vs. all jobs) |
+| `Enter` / `l` | Open build log viewer |
+| `r` | Run the selected job |
+| `s` | Stop the selected job |
+| `n` | Create a new job |
+| `d` | Delete the selected job |
+| `R` | Refresh the list |
+
+In the log viewer, `q` / `b` / `Esc` returns to the list.
+
+Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful on terminals with limited glyph support).
+
 ## Security
 
 Session tokens are encrypted with **AES-256-GCM**. The key is derived via `scrypt(secret || uid)` where `secret` is a random 32-byte value stored in `.bee_secret` (next to the DB, `chmod 600`). A leaked DB file alone is not enough to recover the token — the secret file must also be accessible, and it is readable only by its owner. Mixing the uid into the key means copying the secret file to another account still derives a different key.
@@ -267,9 +302,10 @@ Session tokens are encrypted with **AES-256-GCM**. The key is derived via `scryp
 
 | Variable | Description |
 |---|---|
-| `CB_DB_PATH` | Override the SQLite DB path (default: `./data/cb.db`) |
+| `CB_DB_PATH` | Override the SQLite DB path (default: `data/cb.db` next to the binary, or the project root when run from source) |
 | `BEE_DIR` | Override the root directory used to locate the DB |
 | `BEE_DEBUG_TRACEBACK` | Set to `1` to enable debug logging and full stack traces (same as `--debug`) |
+| `BEE_ASCII` | Set to `1` to force ASCII symbols/borders in the TUI instead of Unicode |
 
 ## Project Structure
 
