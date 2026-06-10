@@ -2,11 +2,20 @@
 
 SHELL := /bin/bash
 
+# --- Local bun toolchain (self-contained, no system bun) -------------------
+# bun is installed into ./.bun inside the repo so builds don't depend on a
+# system-wide bun. Override BUN_VERSION to pin (e.g. BUN_VERSION=bun-v1.1.38);
+# default "latest" tracks the newest release.
+BUN_VERSION  ?= latest
+BUN_INSTALL  := $(CURDIR)/.bun
+BUN          := $(BUN_INSTALL)/bin/bun
+
 help:
 	@echo ""
 	@echo "  bee - CloudBees CLI (TypeScript/Bun)"
 	@echo ""
-	@echo "    make init        Install deps + build binary"
+	@echo "    make init        Install local bun + deps + build binary"
+	@echo "    make bun         Install bun locally into ./.bun (if missing)"
 	@echo "    make install     Install dependencies (bun install)"
 	@echo "    make build       Compile binary → dist/bee"
 	@echo "    make dev         Run from source: make dev ARGS='job list'"
@@ -14,13 +23,22 @@ help:
 	@echo "    make typecheck   Type-check the project (tsc --noEmit)"
 	@echo "    make test        Run test suite"
 	@echo "    make clean       Remove dist/ and node_modules/"
+	@echo "    make distclean   Also remove the local ./.bun toolchain"
 	@echo ""
 
-install:
-	@bun install
+# Download bun into ./.bun only when the binary isn't already there.
+$(BUN):
+	@echo "  Installing bun ($(BUN_VERSION)) locally → $(BUN_INSTALL)"
+	@curl -fsSL https://bun.sh/install | BUN_INSTALL="$(BUN_INSTALL)" bash $(if $(filter-out latest,$(BUN_VERSION)),-s "$(BUN_VERSION)",)
+	@echo "  [OK] $$($(BUN) --version) at $(BUN)"
+
+bun: $(BUN)
+
+install: $(BUN)
+	@$(BUN) install
 
 build: install
-	@bun run build.ts
+	@$(BUN) run build.ts
 
 init: build
 	@echo ""
@@ -28,19 +46,22 @@ init: build
 	@echo "  Run: ./dist/bee --help"
 	@echo ""
 
-dev:
-	@bun run src/main.ts $(ARGS)
+dev: $(BUN)
+	@$(BUN) run src/main.ts $(ARGS)
 
 run:
 	@./dist/bee $(ARGS)
 
-typecheck:
-	@bunx tsc --noEmit -p tsconfig.json && echo "  [OK] No type errors"
+typecheck: $(BUN)
+	@$(BUN) x tsc --noEmit -p tsconfig.json && echo "  [OK] No type errors"
 
-test:
-	@bun test
+test: $(BUN)
+	@$(BUN) test
 
 clean:
 	@rm -rf dist node_modules
 
-.PHONY: help init install build dev test clean run typecheck
+distclean: clean
+	@rm -rf $(BUN_INSTALL)
+
+.PHONY: help init bun install build dev test clean distclean run typecheck

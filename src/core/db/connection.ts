@@ -4,17 +4,35 @@
  */
 
 import { Database } from "bun:sqlite";
-import { mkdirSync, existsSync, readFileSync } from "fs";
+import { mkdirSync, existsSync } from "fs";
 import { join, dirname } from "path";
+// Embed schema.sql into the bundle/binary at build time. Reading it at
+// runtime via import.meta.dir breaks in the compiled binary, where the path
+// resolves into Bun's virtual "/$bunfs" filesystem (file not on disk).
+import schemaSql from "./schema.sql" with { type: "text" };
 
 // Module-level cache — mirrors _DB_PATH global in Python
 let _DB_PATH: string | null = null;
 
 /**
- * Best-effort detection of the bee project root directory.
- * Python used pyproject.toml + cb dir markers, or .venv detection.
- * TS equivalent: walk up from import.meta.dir looking for a directory
- * that contains both package.json and a `src` folder.
+ * True when running inside a `bun build --compile` standalone binary.
+ * In that case the bundled source lives in Bun's virtual filesystem, so
+ * import.meta.dir is rooted at "/$bunfs" rather than a real on-disk path.
+ */
+function isCompiledBinary(): boolean {
+  return import.meta.dir.startsWith("/$bunfs");
+}
+
+/**
+ * Best-effort detection of the bee root directory — the directory whose
+ * `data/` subfolder holds cb.db.
+ *
+ * - Standalone binary: the binary is self-contained, so the root is the
+ *   directory the binary itself lives in (process.execPath). DB sits next
+ *   to the binary: <bin dir>/data/cb.db. import.meta.dir is useless here
+ *   (it points into Bun's virtual "/$bunfs" filesystem).
+ * - From source (`bun run src/main.ts`): walk up from this file's directory
+ *   for a folder containing both package.json and a `src/` folder.
  */
 function detectBeeRoot(): string | null {
   // 1) Explicit BEE_DIR override
@@ -23,7 +41,12 @@ function detectBeeRoot(): string | null {
     if (existsSync(beeDir)) return beeDir;
   }
 
-  // 2) Walk up from this file's directory for package.json + src/
+  // 2) Standalone binary → directory containing the binary
+  if (isCompiledBinary()) {
+    return dirname(process.execPath);
+  }
+
+  // 3) Running from source: walk up for package.json + src/
   try {
     const parts = import.meta.dir.split("/");
     for (let i = parts.length; i > 0; i--) {
@@ -46,7 +69,9 @@ function detectBeeRoot(): string | null {
  * Return the database file path, respecting CB_DB_PATH env override.
  * Priority:
  *   1. CB_DB_PATH environment variable
- *   2. <bee_root>/data/cb.db (auto-detected)
+ *   2. <bee_root>/data/cb.db, where bee_root is:
+ *        - the directory containing the binary (standalone build), or
+ *        - the auto-detected project root (running from source).
  *
  * Result is cached after first call (mirrors Python _DB_PATH global).
  */
@@ -95,12 +120,9 @@ export function getConnection(dbPath?: string): Database {
  * Mirrors Python init_db().
  */
 export function initDb(dbPath?: string): void {
-  const schemaPath = join(import.meta.dir, "schema.sql");
-  const sql = readFileSync(schemaPath, "utf-8");
-
   const db = getConnection(dbPath);
   try {
-    db.exec(sql);
+    db.exec(schemaSql);
 
     // Transparent migration: add controller_name if it doesn't exist yet
     try {
