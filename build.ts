@@ -10,31 +10,31 @@ const VERSION =
 
 console.log(`Building bee v${VERSION} → ./dist/bee`);
 
-const proc = Bun.spawn(
-  [
-    "bun",
-    "build",
-    "--compile",
-    "--target=bun-linux-x64-baseline",
-    "--minify",
-    // NOTE: --bytecode is intentionally NOT used. Ink's flexbox engine
-    // (yoga-layout) fails to compile with bytecode. --minify alone is fine.
-    "--sourcemap",
-    `--define=BEE_VERSION="${VERSION}"`,
-    // Ink/React must run in production mode: otherwise Bun emits the JSX dev
-    // runtime (jsxDEV) which is undefined in the compiled binary and crashes.
-    '--define=process.env.NODE_ENV="production"',
-    "./src/main.ts",
-    "--outfile",
-    "./dist/bee",
-  ],
-  { stdout: "inherit", stderr: "inherit" },
-);
+const result = await Bun.build({
+  entrypoints: ["./src/main.ts"],
+  // Standalone executable for RHEL8 (glibc 2.28+). baseline = no AVX2 requirement.
+  compile: { target: "bun-linux-x64-baseline", outfile: "./dist/bee" },
+  minify: true,
+  // NOTE: bytecode is intentionally NOT enabled. Ink's flexbox engine
+  // (yoga-layout) fails to compile with bytecode. minify alone is fine.
+  sourcemap: "linked",
+  define: { BEE_VERSION: `"${VERSION}"` },
+  jsx: {
+    runtime: "automatic",
+    importSource: "react",
+    // CRITICAL: emit the production JSX runtime (jsx/jsxs), not jsxDEV.
+    // The compiled binary has no jsxDEV symbol, so a dev-runtime build crashes
+    // at first render with "<minified> is not a function". Neither NODE_ENV
+    // (spawn env or --define) nor --compile/--production flip this — only this
+    // explicit flag does. Verified against bun 1.3.x.
+    development: false,
+  },
+});
 
-const exitCode = await proc.exited;
-if (exitCode !== 0) {
-  console.error(`\nBinary compilation failed (exit ${exitCode})`);
-  process.exit(exitCode);
+if (!result.success) {
+  console.error("\nBinary compilation failed:");
+  for (const log of result.logs) console.error(log);
+  process.exit(1);
 }
 
 console.log("\n  ✓ Binary built: ./dist/bee\n");
