@@ -1,0 +1,112 @@
+/**
+ * Credential service — controller-scoped for CloudBees CI / OC.
+ *
+ * Endpoint pattern:
+ *   store="system" -> /credentials/store/system/domain/_
+ *   store="user"   -> /user/<username>/credentials/store/user/domain/_
+ *
+ * Ports legacy/cb/services/credential_service.py.
+ */
+import type { CloudBeesClient } from "../../core/api/types";
+import { CredentialDTO, credentialFromDict } from "../../core/dtos/index";
+import { buildUsernamePasswordCredXml } from "./xml-builder";
+
+/** Valid store choices — exposed for CLI validation. */
+export const CREDENTIAL_STORES = ["system", "user"] as const;
+export type CredentialStore = (typeof CREDENTIAL_STORES)[number];
+
+/** REST path segment for the credential store. */
+export function getUserSeg(username = "", store: string = "system"): string {
+  if (store === "user" && username && username.toLowerCase() !== "system") {
+    return `/user/${username}/credentials/store/user/domain/_`;
+  }
+  return "/credentials/store/system/domain/_";
+}
+
+export async function listCredentials(
+  client: CloudBeesClient,
+  username = "",
+  store = "system",
+): Promise<CredentialDTO[]> {
+  const userSeg = getUserSeg(username, store);
+  const data = await client.get<{ credentials?: unknown[] }>(
+    `${userSeg}/api/json?tree=credentials[id,typeName,description,scope,displayName]`,
+    { cacheKey: `credentials.list.${client.baseUrl}.${store}` },
+  );
+  return (data?.credentials ?? []).map((c) => credentialFromDict(c as Record<string, unknown>));
+}
+
+export async function getCredential(
+  client: CloudBeesClient,
+  credId: string,
+  username = "",
+  store = "system",
+): Promise<CredentialDTO> {
+  const userSeg = getUserSeg(username, store);
+  const data = await client.get<Record<string, unknown>>(
+    `${userSeg}/credential/${credId}/api/json`,
+    { cacheKey: `credentials.detail.${credId}.${store}` },
+  );
+  return credentialFromDict(data ?? {});
+}
+
+export async function createUsernamePassword(
+  client: CloudBeesClient,
+  credId: string,
+  usernameCred: string,
+  password: string,
+  desc = "",
+  scope = "GLOBAL",
+  username = "",
+  store = "system",
+): Promise<void> {
+  const userSeg = getUserSeg(username, store);
+  const xml = buildUsernamePasswordCredXml(credId, usernameCred, password, desc, scope);
+  await client.postXml(`${userSeg}/createCredentials`, xml, { invalidate: "credentials." });
+}
+
+export async function deleteCredential(
+  client: CloudBeesClient,
+  credId: string,
+  username = "",
+  store = "system",
+): Promise<void> {
+  const userSeg = getUserSeg(username, store);
+  await client.post(`${userSeg}/credential/${credId}/doDelete`, { invalidate: "credentials." });
+}
+
+/**
+ * Partial update of a credential's config.xml — only overwrites provided fields.
+ * Mirrors the Python ET-based partial update via string-level replacement.
+ */
+export async function updateCredential(
+  client: CloudBeesClient,
+  credId: string,
+  usernameCred?: string,
+  password?: string,
+  desc?: string,
+  username = "",
+  store = "system",
+): Promise<void> {
+  const userSeg = getUserSeg(username, store);
+  let xml = await client.getText(`${userSeg}/credential/${credId}/config.xml`);
+
+  const setElement = (src: string, tag: string, value: string): string => {
+    const re = new RegExp(`(<${tag}>)[\\s\\S]*?(</${tag}>)`);
+    const escaped = value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    if (re.test(src)) return src.replace(re, `$1${escaped}$2`);
+    // Insert before the root closing tag if missing.
+    return src.replace(/(\n?)(<\/[A-Za-z0-9_.$]+>\s*)$/, `\n  <${tag}>${escaped}</${tag}>$1$2`);
+  };
+
+  if (usernameCred !== undefined) xml = setElement(xml, "username", usernameCred);
+  if (password !== undefined) xml = setElement(xml, "password", password);
+  if (desc !== undefined) xml = setElement(xml, "description", desc);
+
+  await client.postXml(`${userSeg}/credential/${credId}/config.xml`, xml, {
+    invalidate: "credentials.",
+  });
+}

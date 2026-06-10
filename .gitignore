@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/*.db
+*.tsbuildinfo
+
+# session secret (never commit)
+data/.bee_secret
+.bee_secret
+
+# local tooling state (not part of the project)
+.claude/
+.atlas/
