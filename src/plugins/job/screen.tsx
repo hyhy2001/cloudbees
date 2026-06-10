@@ -8,17 +8,20 @@
  * — no logic is duplicated here, only presentation + interaction.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps, TuiContext } from "../../registry/types";
-import type { CloudBeesClient } from "../../core/api/types";
 import { SYM, borderStyle } from "../../core/tui/symbols";
 import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
 import { DataTable } from "../../core/tui/components/DataTable";
 import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
+import { useResource } from "../../core/tui/data/use-resource";
+import { computeView } from "../../core/tui/data/use-view";
+import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
+import { getTtl } from "../../core/cache/policy";
 import type { JobDTO } from "../../core/dtos/job";
 import {
   listJobs,
@@ -165,71 +168,94 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
 // ─── Jobs screen ─────────────────────────────────────────────────────────────
 
 const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
-  const [jobs, setJobs] = useState<JobDTO[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  // Mine/All is now a pure client-side filter — no refetch on toggle (P6).
   const [showAll, setShowAll] = useState(true);
-  const [cursor, setCursor] = useState(0);
-
-  // Detail panel (config summary for the highlighted job).
-  const [summary, setSummary] = useState<Record<string, string> | null>(null);
+  // The screen's HTTP base url, captured once a client is available. Used both
+  // as the resource cache key and for tracked-resource lookups.
+  const [baseUrl, setBaseUrl] = useState<string | null>(null);
 
   // Overlays local to this tab.
   const [logJob, setLogJob] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      if (!ctx.loggedIn) {
-        setError("Not logged in — press l");
-        setJobs([]);
-        setLoading(false);
-        return;
-      }
-      const client = await ctx.getClient({ useController: true });
-      const all = await listJobs(client);
-
-      let display = all;
-      if (!showAll) {
-        const tracked = new Set(
-          getTrackedResources("job", PROFILE, client.baseUrl, ctx.dbPath),
-        );
-        const serverNames = new Set(all.map((j) => j.name));
-        display = all.filter((j) => tracked.has(j.name));
-        for (const missing of tracked) {
-          if (!serverNames.has(missing)) {
-            display.push({
-              id: missing,
-              name: missing,
-              url: "",
-              color: "[DELETED_ON_SERVER]",
-              buildable: false,
-              lastBuildNumber: null,
-              lastBuildUrl: null,
-              description: "",
-              jobClass: "",
-              jobType: "",
-            });
-          }
-        }
-      }
-      setJobs(display);
-      setCursor((c) => Math.min(c, Math.max(0, display.length - 1)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [ctx, showAll]);
-
-  // Initial + reload on Mine/All toggle.
+  // Resolve the controller base url once (cheap; client-factory caches session).
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    if (!ctx.loggedIn) return;
+    void (async () => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        if (!cancelled) setBaseUrl(client.baseUrl);
+      } catch {
+        /* surfaced via the resource error below */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ctx]);
+
+  // ── Read pipeline: list jobs via the ResourceStore (TTL, dedup, stale) ──
+  const cacheKey = `jobs.list.${baseUrl ?? "?"}`;
+  const {
+    data: allJobs,
+    status,
+    error,
+    refetch,
+    isInitialLoading,
+  } = useResource<JobDTO[]>(
+    cacheKey,
+    async () => {
+      const client = await ctx.getClient({ useController: true });
+      return listJobs(client);
+    },
+    { ttlMs: getTtl("jobs.list") * 1000, enabled: ctx.loggedIn && baseUrl !== null },
+  );
+
+  // Tracked names for the Mine filter + [DELETED_ON_SERVER] synthesis.
+  const trackedNames = useMemo(() => {
+    if (!baseUrl) return new Set<string>();
+    return new Set(getTrackedResources("job", PROFILE, baseUrl, ctx.dbPath));
+  }, [baseUrl, ctx.dbPath, allJobs]);
+
+  // ── View pipeline: Mine/All filter + synthetic deleted rows (client-side) ──
+  const jobs = useMemo(() => {
+    const all = allJobs ?? [];
+    if (showAll) return all;
+    const serverNames = new Set(all.map((j) => j.name));
+    const mine = computeView(all, {
+      filters: { tracked: (j: JobDTO) => trackedNames.has(j.name) },
+      activeFilters: ["tracked"],
+    });
+    // Tracked-but-missing-on-server → synthetic placeholder rows.
+    const deleted: JobDTO[] = [];
+    for (const name of trackedNames) {
+      if (!serverNames.has(name)) {
+        deleted.push({
+          id: name,
+          name,
+          url: "",
+          color: "[DELETED_ON_SERVER]",
+          buildable: false,
+          lastBuildNumber: null,
+          lastBuildUrl: null,
+          description: "",
+          jobClass: "",
+          jobType: "",
+        });
+      }
+    }
+    return [...mine, ...deleted];
+  }, [allJobs, showAll, trackedNames]);
+
+  // ── Stable cursor: keep selection on the same job across refresh/filter ──
+  const rowKeys = useMemo(() => jobs.map((j) => j.name), [jobs]);
+  const { cursor, setCursor } = useStableCursor(rowKeys);
+  const current = jobs[cursor];
+
+  // Detail panel (config summary for the highlighted job).
+  const [summary, setSummary] = useState<Record<string, string> | null>(null);
 
   // Fetch config summary for the highlighted job (detail panel).
-  const current = jobs[cursor];
   useEffect(() => {
     let cancelled = false;
     if (!current || !ctx.loggedIn || current.color === "[DELETED_ON_SERVER]") {
@@ -261,12 +287,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         const client = await ctx.getClient({ useController: true });
         await triggerJob(client, name);
         ctx.notify(`${SYM.ok} Triggered: ${name}`, "success");
-        void load();
+        void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
       }
     },
-    [ctx, load],
+    [ctx, refetch],
   );
 
   const stopJob = useCallback(
@@ -286,12 +312,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         const client = await ctx.getClient({ useController: true });
         await stopBuild(client, job.name, job.lastBuildNumber);
         ctx.notify(`${SYM.ok} Stopped build #${job.lastBuildNumber}`, "success");
-        void load();
+        void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
       }
     },
-    [ctx, load],
+    [ctx, refetch],
   );
 
   const removeJob = useCallback(
@@ -308,12 +334,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         await deleteJob(client, name);
         untrackResource("job", name, PROFILE, client.baseUrl, ctx.dbPath);
         ctx.notify(`${SYM.ok} Deleted: ${name}`, "success");
-        void load();
+        void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
       }
     },
-    [ctx, load],
+    [ctx, refetch],
   );
 
   const newJob = useCallback(async () => {
@@ -348,11 +374,11 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       }
       trackResource("job", result.name, PROFILE, client.baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Created ${jobType}: ${result.name}`, "success");
-      void load();
+      void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
     }
-  }, [ctx, load]);
+  }, [ctx, refetch]);
 
   // Tab-local key handling — gated on `active` and no overlay open.
   useInput(
@@ -365,7 +391,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       }
       switch (input) {
         case "a":
-          setShowAll((v) => !v);
+          setShowAll((v) => !v); // pure client-side filter — no refetch
           break;
         case "r":
           if (current) void runJob(current.name);
@@ -383,7 +409,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           if (current) void removeJob(current.name);
           break;
         case "R":
-          void load();
+          void refetch();
           break;
         default:
           break;
@@ -402,6 +428,10 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     <Text color={THEME.success}>MINE</Text>
   );
 
+  // Not-logged-in is a distinct, friendly state rather than an error.
+  const notLoggedIn = !ctx.loggedIn;
+  const errMsg = error ? error.message : "";
+
   return (
     <Box flexDirection="column" flexGrow={1}>
       {/* Header */}
@@ -413,21 +443,34 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       <Text>
         {" "}
         {SYM.arrow} Scope: {scope}
+        {status === "stale" ? <Text color={THEME.dim}> · refreshing…</Text> : null}
       </Text>
 
       {/* Body */}
-      {loading ? (
+      {notLoggedIn ? (
+        <Box marginTop={1}>
+          <Text color={THEME.warning}>
+            {SYM.warn} Not logged in — press l
+          </Text>
+        </Box>
+      ) : isInitialLoading ? (
         <Box marginTop={1}>
           <Spinner label="Loading jobs…" />
         </Box>
-      ) : error ? (
+      ) : errMsg && jobs.length === 0 ? (
         <Box marginTop={1}>
           <Text color={THEME.error}>
-            {SYM.fail} {error}
+            {SYM.fail} {errMsg}
           </Text>
         </Box>
       ) : (
         <Box flexDirection="column" marginTop={1}>
+          {/* A non-fatal error while stale data is still shown. */}
+          {errMsg && (
+            <Text color={THEME.error}>
+              {SYM.fail} {errMsg}
+            </Text>
+          )}
           <DataTable
             columns={[
               { header: "Status", width: 12 },
@@ -447,6 +490,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 { text: (j.description ?? "").slice(0, 30) },
               ];
             })}
+            rowKeys={rowKeys}
             cursor={cursor}
             onCursorChange={setCursor}
             active={active}
