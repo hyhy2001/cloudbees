@@ -22,6 +22,7 @@ import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
 import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
 import { appendChunk, colorForLine } from "../../core/tui/data/log-buffer";
+import { useAutoRefresh } from "../../core/tui/data/use-auto-refresh";
 import { getTtl } from "../../core/cache/policy";
 import type { JobDTO } from "../../core/dtos/job";
 import {
@@ -158,6 +159,8 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
 const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Mine/All is now a pure client-side filter — no refetch on toggle (P6).
   const [showAll, setShowAll] = useState(true);
+  // Opt-in auto-refresh (legacy P13): OFF by default, toggled with `f`.
+  const [autoRefresh, setAutoRefresh] = useState(false);
   // The screen's HTTP base url, captured once a client is available. Used both
   // as the resource cache key and for tracked-resource lookups.
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
@@ -198,6 +201,14 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     },
     { ttlMs: getTtl("jobs.list") * 1000, enabled: ctx.loggedIn && baseUrl !== null },
   );
+
+  // Opt-in background polling — only while this tab is active and no log overlay.
+  useAutoRefresh({
+    enabled: autoRefresh,
+    active: active && logJob === null,
+    refetch,
+    policy: { baseMs: 5000, backoffFactor: 2, maxMs: 60000 },
+  });
 
   // Tracked names for the Mine filter + [DELETED_ON_SERVER] synthesis.
   const trackedNames = useMemo(() => {
@@ -381,6 +392,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         case "a":
           setShowAll((v) => !v); // pure client-side filter — no refetch
           break;
+        case "f":
+          setAutoRefresh((v) => !v); // toggle opt-in background polling
+          break;
         case "r":
           if (current) void runJob(current.name);
           break;
@@ -426,11 +440,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       <Text>
         {" "}
         {SYM.gear} Jobs{"  "}
-        <Text color={THEME.dim}>r=run · s=stop · l=log · n=new · d=del · a=mine/all · R=refresh</Text>
+        <Text color={THEME.dim}>r=run · s=stop · l=log · n=new · d=del · a=mine/all · f=auto · R=refresh</Text>
       </Text>
       <Text>
         {" "}
         {SYM.arrow} Scope: {scope}
+        {autoRefresh ? <Text color={THEME.success}> · auto ⟳</Text> : null}
         {status === "stale" ? <Text color={THEME.dim}> · refreshing…</Text> : null}
       </Text>
 
