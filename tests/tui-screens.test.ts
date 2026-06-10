@@ -104,6 +104,26 @@ describe("collectScreens (real BUILTIN_PLUGINS)", () => {
     expect(jobs!.title).toBe("Jobs");
   });
 
+  test("all five resource tabs are registered in the expected order", () => {
+    const screens = collectScreens();
+    // auth is a login modal, not a tab; the five data tabs are 2..6.
+    const expected = [
+      { id: "controllers", order: 2 },
+      { id: "nodes", order: 3 },
+      { id: "jobs", order: 4 },
+      { id: "credentials", order: 5 },
+      { id: "settings", order: 6 },
+    ];
+    for (const { id, order } of expected) {
+      const s = screens.find((x) => x.id === id);
+      expect(s, `screen '${id}' should be registered`).toBeDefined();
+      expect(s!.order).toBe(order);
+    }
+    // The registered tab ids, in collected (sorted) order, match the expectation.
+    const ids = screens.map((s) => s.id);
+    expect(ids).toEqual(expected.map((e) => e.id));
+  });
+
   test("returned screens are sorted by order", () => {
     const screens = collectScreens();
     for (let i = 1; i < screens.length; i++) {

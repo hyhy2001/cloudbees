@@ -2,8 +2,9 @@
  * Controller plugin — select and manage CloudBees controllers.
  */
 
-import type { Plugin, PluginContext } from "../../registry/types";
+import type { Plugin, PluginContext, TuiScreen } from "../../registry/types";
 import { registerControllerCommands } from "./commands";
+import { controllerScreen } from "./screen";
 
 export const controllerPlugin: Plugin = {
   meta: {
@@ -14,5 +15,8 @@ export const controllerPlugin: Plugin = {
   },
   register(ctx: PluginContext): void {
     registerControllerCommands(ctx);
+  },
+  screen(): TuiScreen {
+    return controllerScreen();
   },
 };
