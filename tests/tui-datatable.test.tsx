@@ -142,6 +142,23 @@ describe("DataTable", () => {
     // ROWS has 3 entries, all fit; no "/" scroll hint
     expect(frame).not.toContain("/3");
   });
+
+  test("renders normally when rowKeys are supplied (keyed by identity)", () => {
+    const { lastFrame } = render(
+      <DataTable
+        columns={COLS}
+        rows={ROWS}
+        rowKeys={["my-job", "other-job", "third-job"]}
+        cursor={1}
+        onCursorChange={() => {}}
+        active={false}
+      />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("my-job");
+    expect(frame).toContain("other-job");
+    expect(frame).toContain("third-job");
+  });
 });
 
 // ─── BeeApp not-logged-in ─────────────────────────────────────────────────────

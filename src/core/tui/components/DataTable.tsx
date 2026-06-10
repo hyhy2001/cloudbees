@@ -46,6 +46,13 @@ export interface DataTableProps {
   height?: number;
   /** Shown when there are no rows. */
   emptyText?: string;
+  /**
+   * Stable identity per row (e.g. job name). When provided, React keys rows by
+   * identity instead of position, so a refresh that reorders/inserts rows
+   * updates in place instead of churning every row widget (legacy P12).
+   * Length should match `rows`; falls back to index when absent.
+   */
+  rowKeys?: string[];
 }
 
 function pad(s: string, width: number): string {
@@ -62,6 +69,7 @@ export const DataTable: React.FC<DataTableProps> = ({
   active,
   height = 12,
   emptyText = "(no rows)",
+  rowKeys,
 }) => {
   const clamp = (i: number) => Math.max(0, Math.min(rows.length - 1, i));
 
@@ -102,8 +110,9 @@ export const DataTable: React.FC<DataTableProps> = ({
       {visible.map((row, vi) => {
         const rowIndex = start + vi;
         const isCursor = rowIndex === cursor;
+        const rowKey = rowKeys?.[rowIndex] ?? rowIndex;
         return (
-          <Box key={rowIndex}>
+          <Box key={rowKey}>
             <Text color={isCursor ? THEME.active : THEME.dim}>{isCursor ? SYM.selected : " "}</Text>
             {row.map((cell, ci) => {
               const width = columns[ci]?.width ?? 10;
