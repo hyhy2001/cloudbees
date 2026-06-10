@@ -1,8 +1,9 @@
 /**
  * Credential plugin — manage CloudBees credentials.
  */
-import type { Plugin } from "../../registry/types";
+import type { Plugin, PluginContext, TuiScreen } from "../../registry/types";
 import { registerCredentialCommands } from "./commands";
+import { credentialScreen } from "./screen";
 
 export const credentialPlugin: Plugin = {
   meta: {
@@ -11,7 +12,10 @@ export const credentialPlugin: Plugin = {
     version: "1.0.0",
     category: "resource",
   },
-  register(ctx) {
+  register(ctx: PluginContext): void {
     registerCredentialCommands(ctx);
+  },
+  screen(): TuiScreen {
+    return credentialScreen();
   },
 };

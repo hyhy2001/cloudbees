@@ -1,8 +1,9 @@
 /**
  * Node plugin — manage CloudBees agent nodes.
  */
-import type { Plugin } from "../../registry/types";
+import type { Plugin, PluginContext, TuiScreen } from "../../registry/types";
 import { registerNodeCommands } from "./commands";
+import { nodeScreen } from "./screen";
 
 export const nodePlugin: Plugin = {
   meta: {
@@ -11,7 +12,10 @@ export const nodePlugin: Plugin = {
     version: "1.0.0",
     category: "resource",
   },
-  register(ctx) {
+  register(ctx: PluginContext): void {
     registerNodeCommands(ctx);
+  },
+  screen(): TuiScreen {
+    return nodeScreen();
   },
 };

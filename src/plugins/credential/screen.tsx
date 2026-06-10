@@ -1,0 +1,353 @@
+/**
+ * Credentials TUI tab — list, create, delete, system/user store toggle,
+ * Mine/All filter, inline detail panel.
+ *
+ * Follows the exact pipeline pattern established in src/plugins/job/screen.tsx:
+ *   useResource → computeView → useStableCursor → DataTable
+ *
+ * Store toggle (S key) is a server-side scope switch — it changes the cache key
+ * and triggers a real refetch, unlike Mine/All which is client-side only.
+ */
+
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Box, Text, useInput } from "ink";
+import type { FC } from "react";
+import type { TuiScreen, TuiScreenProps } from "../../registry/types";
+import { SYM, borderStyle } from "../../core/tui/symbols";
+import { THEME } from "../../core/tui/theme";
+import { Spinner } from "../../core/tui/components/Spinner";
+import { DataTable } from "../../core/tui/components/DataTable";
+import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
+import { FormModal } from "../../core/tui/components/FormModal";
+import { useResource } from "../../core/tui/data/use-resource";
+import { computeView } from "../../core/tui/data/use-view";
+import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
+import { useAutoRefresh } from "../../core/tui/data/use-auto-refresh";
+import { getTtl } from "../../core/cache/policy";
+import type { CredentialDTO } from "../../core/dtos/credential";
+import {
+  listCredentials,
+  createUsernamePassword,
+  deleteCredential,
+} from "./service";
+import {
+  getTrackedResources,
+  trackResource,
+  untrackResource,
+} from "../../core/db/repositories/resource-repo";
+
+const PROFILE = "default";
+
+// ─── Credentials screen ───────────────────────────────────────────────────────
+
+const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
+  const [showAll, setShowAll] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [baseUrl, setBaseUrl] = useState<string | null>(null);
+  // Store is a server-side scope — changing it refetches from a different endpoint.
+  const [store, setStore] = useState<"system" | "user">("system");
+
+  // Resolve the controller base url once (cheap; client-factory caches session).
+  useEffect(() => {
+    let cancelled = false;
+    if (!ctx.loggedIn) return;
+    void (async () => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        if (!cancelled) setBaseUrl(client.baseUrl);
+      } catch {
+        /* surfaced via the resource error below */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ctx]);
+
+  // ── Read pipeline ──────────────────────────────────────────────────────────
+  // Cache key includes store so switching store triggers a new fetch automatically.
+  const cacheKey = `credentials.list.${baseUrl ?? "?"}.${store}`;
+  const {
+    data: allCredentials,
+    status,
+    error,
+    refetch,
+    isInitialLoading,
+  } = useResource<CredentialDTO[]>(
+    cacheKey,
+    async () => {
+      const client = await ctx.getClient({ useController: true });
+      return listCredentials(client, ctx.username, store);
+    },
+    { ttlMs: getTtl("credentials.list") * 1000, enabled: ctx.loggedIn && baseUrl !== null },
+  );
+
+  useAutoRefresh({
+    enabled: autoRefresh,
+    active,
+    refetch,
+    policy: { baseMs: 5000, backoffFactor: 2, maxMs: 60000 },
+  });
+
+  // Tracked ids for Mine filter + [DELETED_ON_SERVER] synthesis.
+  // Resource key includes store so Mine is scoped to the current store.
+  const trackedIds = useMemo(() => {
+    if (!baseUrl) return new Set<string>();
+    return new Set(
+      getTrackedResources("credential", PROFILE, `${baseUrl}.${store}`, ctx.dbPath),
+    );
+  }, [baseUrl, store, ctx.dbPath, allCredentials]);
+
+  // ── View pipeline: Mine/All filter + synthetic deleted rows (client-side) ──
+  const credentials = useMemo(() => {
+    const all = allCredentials ?? [];
+    if (showAll) return all;
+    const serverIds = new Set(all.map((c) => c.id));
+    const mine = computeView(all, {
+      filters: { tracked: (c: CredentialDTO) => trackedIds.has(c.id) },
+      activeFilters: ["tracked"],
+    });
+    const deleted: CredentialDTO[] = [];
+    for (const id of trackedIds) {
+      if (!serverIds.has(id)) {
+        deleted.push({
+          id,
+          displayName: id,
+          typeName: "[DELETED_ON_SERVER]",
+          scope: "",
+          description: "",
+        });
+      }
+    }
+    return [...mine, ...deleted];
+  }, [allCredentials, showAll, trackedIds]);
+
+  // ── Stable cursor ──────────────────────────────────────────────────────────
+  const rowKeys = useMemo(() => credentials.map((c) => c.id), [credentials]);
+  const { cursor, setCursor } = useStableCursor(rowKeys);
+  const current = credentials[cursor];
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+
+  const createCred = useCallback(async () => {
+    const result = await ctx.openModal<Record<string, string>>({
+      id: "create-credential",
+      render: (resolve) => (
+        <FormModal
+          title={`${SYM.gear} Create Credential`}
+          fields={[
+            { name: "id", label: "ID", required: true },
+            { name: "username", label: "Username", required: true },
+            { name: "password", label: "Password", required: true, password: true },
+            { name: "desc", label: "Description" },
+          ]}
+          onResult={resolve}
+        />
+      ),
+    });
+    if (!result || !result.id || !result.username || !result.password) return;
+    try {
+      const client = await ctx.getClient({ useController: true });
+      await createUsernamePassword(
+        client,
+        result.id,
+        result.username,
+        result.password,
+        result.desc ?? "",
+        "GLOBAL",
+        ctx.username,
+        store,
+      );
+      trackResource(
+        "credential",
+        result.id,
+        PROFILE,
+        `${client.baseUrl}.${store}`,
+        ctx.dbPath,
+      );
+      ctx.notify(`${SYM.ok} Created credential: ${result.id}`, "success");
+      void refetch();
+    } catch (err) {
+      ctx.notify(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [ctx, store, refetch]);
+
+  const removeCred = useCallback(
+    async (id: string) => {
+      const ok = await ctx.openModal<boolean>({
+        id: "confirm-delete-credential",
+        render: (resolve) => (
+          <ConfirmModal
+            message={`Delete credential '${id}'? This cannot be undone.`}
+            onResult={resolve}
+          />
+        ),
+      });
+      if (!ok) return;
+      try {
+        const client = await ctx.getClient({ useController: true });
+        await deleteCredential(client, id, ctx.username, store);
+        untrackResource(
+          "credential",
+          id,
+          PROFILE,
+          `${client.baseUrl}.${store}`,
+          ctx.dbPath,
+        );
+        ctx.notify(`${SYM.ok} Deleted: ${id}`, "success");
+        void refetch();
+      } catch (err) {
+        ctx.notify(err instanceof Error ? err.message : String(err), "error");
+      }
+    },
+    [ctx, store, refetch],
+  );
+
+  // ── Key bindings ───────────────────────────────────────────────────────────
+  useInput(
+    (input, _key) => {
+      switch (input) {
+        case "c":
+          void createCred();
+          break;
+        case "d":
+          if (current && current.typeName !== "[DELETED_ON_SERVER]")
+            void removeCred(current.id);
+          break;
+        case "S":
+          // Store toggle is a server-side scope change — cache key changes,
+          // useResource will auto-fetch the new key on next render.
+          setStore((s) => (s === "system" ? "user" : "system"));
+          break;
+        case "a":
+          setShowAll((v) => !v);
+          break;
+        case "f":
+          setAutoRefresh((v) => !v);
+          break;
+        case "R":
+          void refetch();
+          break;
+        default:
+          break;
+      }
+    },
+    { isActive: active },
+  );
+
+  const scope = showAll ? (
+    <Text color={THEME.yellow}>ALL</Text>
+  ) : (
+    <Text color={THEME.success}>MINE</Text>
+  );
+
+  const notLoggedIn = !ctx.loggedIn;
+  const errMsg = error ? error.message : "";
+
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      {/* Header */}
+      <Text>
+        {" "}
+        {SYM.gear} Credentials{"  "}
+        <Text color={THEME.dim}>c=new · d=del · S=store · a=mine/all · f=auto · R=refresh</Text>
+      </Text>
+      <Text>
+        {" "}
+        {SYM.arrow} Scope: {scope}
+        {"  "}
+        <Text color={THEME.dim}>store:</Text>{" "}
+        <Text color={store === "system" ? THEME.blue : THEME.yellow}>{store}</Text>
+        {autoRefresh ? <Text color={THEME.success}> · auto ⟳</Text> : null}
+        {status === "stale" ? <Text color={THEME.dim}> · refreshing…</Text> : null}
+      </Text>
+
+      {/* Body */}
+      {notLoggedIn ? (
+        <Box marginTop={1}>
+          <Text color={THEME.warning}>
+            {SYM.warn} Not logged in — press l
+          </Text>
+        </Box>
+      ) : isInitialLoading ? (
+        <Box marginTop={1}>
+          <Spinner label="Loading credentials…" />
+        </Box>
+      ) : errMsg && credentials.length === 0 ? (
+        <Box marginTop={1}>
+          <Text color={THEME.error}>
+            {SYM.fail} {errMsg}
+          </Text>
+        </Box>
+      ) : (
+        <Box flexDirection="column" marginTop={1}>
+          {errMsg && (
+            <Text color={THEME.error}>
+              {SYM.fail} {errMsg}
+            </Text>
+          )}
+          <DataTable
+            columns={[
+              { header: "ID", width: 28 },
+              { header: "Type", width: 22 },
+              { header: "Scope", width: 10 },
+              { header: "Description", width: 34 },
+            ]}
+            rows={credentials.map((c) => {
+              const isDeleted = c.typeName === "[DELETED_ON_SERVER]";
+              return [
+                { text: c.id.slice(0, 28) },
+                {
+                  text: isDeleted ? "[DELETED_ON_SERVER]" : c.typeName.slice(0, 22),
+                  color: isDeleted ? THEME.error : undefined,
+                  dim: isDeleted,
+                },
+                { text: (c.scope ?? "").slice(0, 10), dim: true },
+                { text: (c.description ?? "").slice(0, 34) },
+              ];
+            })}
+            rowKeys={rowKeys}
+            cursor={cursor}
+            onCursorChange={setCursor}
+            active={active}
+            emptyText="No credentials. Press c to create one."
+          />
+
+          {/* Detail panel */}
+          {current && (
+            <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} marginTop={1}>
+              <Text>
+                <Text bold>{current.id}</Text>
+                {"   "}
+                <Text color={THEME.dim}>type:</Text> {current.typeName || "-"}
+                {"   "}
+                <Text color={THEME.dim}>scope:</Text> {current.scope || "-"}
+              </Text>
+              {current.displayName && current.displayName !== current.id && (
+                <Text color={THEME.dim} wrap="truncate-end">
+                  display: {current.displayName}
+                </Text>
+              )}
+              {current.description ? (
+                <Text color={THEME.dim} wrap="truncate-end">
+                  {current.description}
+                </Text>
+              ) : null}
+            </Box>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+/** The plugin's TUI screen descriptor. */
+export function credentialScreen(): TuiScreen {
+  return {
+    id: "credentials",
+    title: "Credentials",
+    order: 5,
+    icon: SYM.gear,
+    Component: CredentialsScreen,
+  };
+}
