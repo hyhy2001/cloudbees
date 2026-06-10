@@ -10,6 +10,17 @@ BUN_VERSION  ?= latest
 BUN_INSTALL  := $(CURDIR)/.bun
 BUN          := $(BUN_INSTALL)/bin/bun
 
+# Keep bun's temp + package cache on the SAME filesystem as the project
+# (inside ./.bun), and disable hardlink/clonefile installs. On hosts where
+# the global cache (~/.bun) and the project live on different devices/layers
+# (overlayfs, panel jails, per-user quotas), the default hardlink backend
+# fails with a misleading "EDQUOT: disk quota exceeded" while creating a
+# temporary directory. copyfile + a co-located cache/tmp avoids that.
+BUN_TMP      := $(BUN_INSTALL)/tmp
+BUN_CACHE    := $(BUN_INSTALL)/cache
+# Prefix applied to every bun invocation that writes to disk.
+BUN_ENV      := TMPDIR="$(BUN_TMP)" BUN_INSTALL_CACHE_DIR="$(BUN_CACHE)"
+
 help:
 	@echo ""
 	@echo "  bee - CloudBees CLI (TypeScript/Bun)"
@@ -35,10 +46,11 @@ $(BUN):
 bun: $(BUN)
 
 install: $(BUN)
-	@$(BUN) install
+	@mkdir -p "$(BUN_TMP)" "$(BUN_CACHE)"
+	@$(BUN_ENV) $(BUN) install --backend=copyfile
 
 build: install
-	@$(BUN) run build.ts
+	@$(BUN_ENV) $(BUN) run build.ts
 
 init: build
 	@echo ""
@@ -47,16 +59,16 @@ init: build
 	@echo ""
 
 dev: $(BUN)
-	@$(BUN) run src/main.ts $(ARGS)
+	@$(BUN_ENV) $(BUN) run src/main.ts $(ARGS)
 
 run:
 	@./dist/bee $(ARGS)
 
 typecheck: $(BUN)
-	@$(BUN) x tsc --noEmit -p tsconfig.json && echo "  [OK] No type errors"
+	@$(BUN_ENV) $(BUN) x tsc --noEmit -p tsconfig.json && echo "  [OK] No type errors"
 
 test: $(BUN)
-	@$(BUN) test
+	@$(BUN_ENV) $(BUN) test
 
 clean:
 	@rm -rf dist node_modules
