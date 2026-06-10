@@ -21,6 +21,7 @@ import { FormModal } from "../../core/tui/components/FormModal";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
 import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
+import { appendChunk, colorForLine } from "../../core/tui/data/log-buffer";
 import { getTtl } from "../../core/cache/policy";
 import type { JobDTO } from "../../core/dtos/job";
 import {
@@ -79,17 +80,6 @@ interface LogViewerProps {
 }
 
 const POLL_MS = 2000;
-const MAX_LINES = 2000;
-
-function colorForLine(line: string): string | undefined {
-  const u = line.toUpperCase();
-  if (u.includes("ERROR") || u.includes("FAILED") || u.includes("FAILURE") || u.includes("EXCEPTION"))
-    return THEME.error;
-  if (u.includes("WARN")) return THEME.warning;
-  if (u.includes("SUCCESS") || u.includes("FINISHED") || u.includes("COMPLETED")) return THEME.success;
-  if (line.includes("[Pipeline]") || line.startsWith("+")) return THEME.blue;
-  return undefined;
-}
 
 const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
   const [lines, setLines] = useState<string[]>([]);
@@ -112,11 +102,9 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
         const [text, newOffset, hasMore] = await streamLastBuildLog(client, jobName, offsetRef.current);
         if (cancelledRef.current) return;
         if (text) {
-          const newLines = text.split("\n");
-          setLines((prev) => {
-            const merged = [...prev, ...newLines];
-            return merged.length > MAX_LINES ? merged.slice(merged.length - MAX_LINES) : merged;
-          });
+          // One state update for the whole chunk (ring-buffer capped) — not one
+          // write per line as the legacy did (P5).
+          setLines((prev) => appendChunk(prev, text));
           offsetRef.current = newOffset;
         }
         if (hasMore) {
