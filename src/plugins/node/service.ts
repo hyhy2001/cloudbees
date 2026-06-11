@@ -61,6 +61,10 @@ export interface CreateNodeOptions {
   port?: number;
   credentialsId?: string;
   javaPath?: string;
+  /** Retention strategy. Defaults to "always" (Keep this agent online as much as possible). */
+  availability?: Availability;
+  inDemandDelay?: number;
+  idleDelay?: number;
 }
 
 /**
@@ -81,7 +85,23 @@ export async function createPermanentNode(
     port = 22,
     credentialsId = "",
     javaPath = DEFAULT_JAVA_PATH,
+    availability = "always",
+    inDemandDelay = 0,
+    idleDelay = 1,
   } = opts;
+
+  const retentionStrategy =
+    availability === "demand"
+      ? {
+          "stapler-class": "hudson.slaves.RetentionStrategy$Demand",
+          $class: "hudson.slaves.RetentionStrategy$Demand",
+          inDemandDelay,
+          idleDelay,
+        }
+      : {
+          "stapler-class": "hudson.slaves.RetentionStrategy$Always",
+          $class: "hudson.slaves.RetentionStrategy$Always",
+        };
 
   const launcher = host
     ? {
@@ -110,10 +130,7 @@ export async function createPermanentNode(
     labelString: labels,
     mode: "NORMAL",
     type: "hudson.slaves.DumbSlave",
-    retentionStrategy: {
-      "stapler-class": "hudson.slaves.RetentionStrategy$Always",
-      $class: "hudson.slaves.RetentionStrategy$Always",
-    },
+    retentionStrategy,
     nodeProperties: { "stapler-class-bag": "true" },
     launcher,
   };

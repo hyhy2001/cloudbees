@@ -25,6 +25,7 @@ import {
   getJobConfigSummary,
   updateJobFreestyle,
 } from "./service";
+import type { StringParamDef } from "./types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -55,6 +56,18 @@ async function confirm(question: string): Promise<boolean> {
       resolve(answer.trim().toLowerCase() === "y");
     });
   });
+}
+
+/**
+ * Parse repeatable `--param-def NAME=default` flags into StringParamDef[].
+ * Splits on the first `=`; no `=` means an empty default. Empty input → [].
+ */
+function parseParamDefs(raw: string[]): StringParamDef[] {
+  return raw.map((p) => {
+    const idx = p.indexOf("=");
+    if (idx < 0) return { name: p.trim(), defaultValue: "" };
+    return { name: p.slice(0, idx).trim(), defaultValue: p.slice(idx + 1) };
+  }).filter((d) => d.name.length > 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,6 +204,12 @@ export function registerJobCommands(ctx: PluginContext): void {
       [] as string[],
     )
     .option("--email-regex <regex>", "Send mail only if build log matches regex")
+    .option(
+      "--param-def <name=default>",
+      "Define a String build parameter, NAME=default (repeatable)",
+      (val: string, prev: string[]) => prev.concat([val]),
+      [] as string[],
+    )
     .action(
       async (
         name: string,
@@ -204,6 +223,7 @@ export function registerJobCommands(ctx: PluginContext): void {
           emailCond: string;
           emailKeyword: string[];
           emailRegex?: string;
+          paramDef: string[];
         },
       ) => {
         try {
@@ -222,6 +242,7 @@ export function registerJobCommands(ctx: PluginContext): void {
             opts.emailCond,
             opts.emailKeyword.length > 0 ? opts.emailKeyword : null,
             opts.emailRegex ?? null,
+            parseParamDefs(opts.paramDef),
           );
 
           trackResource("job", name, profile, client.baseUrl, dbPath);
@@ -573,6 +594,13 @@ export function registerJobCommands(ctx: PluginContext): void {
     .option("--email-regex <regex>", "Replace regex filter (case-insensitive)")
     .option("--clear-email-keywords", "Clear all configured email keywords", false)
     .option("--clear-email-regex", "Clear configured email regex", false)
+    .option(
+      "--param-def <name=default>",
+      "Replace String parameters (repeatable, NAME or NAME=default)",
+      (val: string, prev: string[]) => prev.concat([val]),
+      [] as string[],
+    )
+    .option("--clear-params", "Remove all String parameters", false)
     .action(
       async (
         name: string,
@@ -587,6 +615,8 @@ export function registerJobCommands(ctx: PluginContext): void {
           emailRegex?: string;
           clearEmailKeywords: boolean;
           clearEmailRegex: boolean;
+          paramDef: string[];
+          clearParams: boolean;
         },
       ) => {
         try {
@@ -595,6 +625,9 @@ export function registerJobCommands(ctx: PluginContext): void {
           // Only pass emailKeywords if the option was explicitly provided (non-empty array)
           const emailKeywordsInput =
             opts.emailKeyword.length > 0 ? opts.emailKeyword : null;
+
+          const paramsInput =
+            opts.paramDef.length > 0 ? parseParamDefs(opts.paramDef) : null;
 
           await updateJobFreestyle(
             client,
@@ -609,6 +642,8 @@ export function registerJobCommands(ctx: PluginContext): void {
             opts.emailRegex ?? null,
             opts.clearEmailKeywords,
             opts.clearEmailRegex,
+            paramsInput,
+            opts.clearParams,
           );
 
           printSuccess(`OK Freestyle job '${name}' updated.`);

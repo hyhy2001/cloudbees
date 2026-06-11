@@ -31,6 +31,7 @@ import type { CredentialDTO } from "../../core/dtos/credential";
 import {
   listCredentials,
   createUsernamePassword,
+  updateCredential,
   deleteCredential,
 } from "./service";
 import {
@@ -188,6 +189,46 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [ctx, store, refetch]);
 
+  // Edit = partial update of an existing credential. Password can't be read back
+  // and username isn't in the list DTO, so those are blank = unchanged. Only the
+  // description is prefilled. Blank username/password → undefined (keeps existing).
+  const editCred = useCallback(
+    async (cred: CredentialDTO) => {
+      const result = await ctx.openModal<Record<string, string>>({
+        id: "edit-credential",
+        render: (resolve) => (
+          <FormModal
+            title={`${SYM.dot} Edit Credential: ${cred.id}`}
+            fields={[
+              { name: "username", label: "Username", placeholder: "leave blank = unchanged" },
+              { name: "password", label: "Password", password: true, placeholder: "leave blank = unchanged" },
+              { name: "desc", label: "Description", initial: cred.description ?? "" },
+            ]}
+            onResult={resolve}
+          />
+        ),
+      });
+      if (!result) return;
+      try {
+        const client = await ctx.getClient({ useController: true });
+        await updateCredential(
+          client,
+          cred.id,
+          result.username || undefined,
+          result.password || undefined,
+          result.desc,
+          ctx.username,
+          store,
+        );
+        ctx.notify(`${SYM.ok} Updated credential: ${cred.id}`, "success");
+        void refetch();
+      } catch (err) {
+        ctx.notify(err instanceof Error ? err.message : String(err), "error");
+      }
+    },
+    [ctx, store, refetch],
+  );
+
   const removeCred = useCallback(
     async (id: string) => {
       const ok = await ctx.openModal<boolean>({
@@ -237,6 +278,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "c", label: "new", run: () => void createCred() },
+      { key: "e", label: "edit", when: () => hasRow, run: () => { if (current) void editCred(current); } },
       { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.id); } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeCred(current.id); } },
       { key: "S", label: "store", run: () => setStore((s) => (s === "system" ? "user" : "system")) },
@@ -246,7 +288,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, canImport, createCred, doImport, removeCred, refetch, search],
+    [current, hasRow, canImport, createCred, editCred, doImport, removeCred, refetch, search],
   );
   useKeymap(bindings, { isActive: active && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);

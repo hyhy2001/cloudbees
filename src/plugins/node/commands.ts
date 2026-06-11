@@ -123,6 +123,9 @@ export function registerNodeCommands(ctx: PluginContext): void {
     .option("--port <port>", "SSH Port", "22")
     .option("--cred-id <id>", "Credential ID for SSH connection", "")
     .option("--java-path <path>", "Path to Java executable", DEFAULT_JAVA_PATH)
+    .option("--availability <mode>", "Retention strategy: always | demand", "always")
+    .option("--in-demand-delay <min>", "Minutes of demand before going online (demand only)", "0")
+    .option("--idle-delay <min>", "Minutes idle before going offline (demand only)", "1")
     .action(
       async (opts: {
         name: string;
@@ -134,6 +137,9 @@ export function registerNodeCommands(ctx: PluginContext): void {
         port: string;
         credId: string;
         javaPath: string;
+        availability: string;
+        inDemandDelay: string;
+        idleDelay: string;
       }) => {
         try {
           const client = await ctx.getClient({ useController: true });
@@ -158,6 +164,9 @@ export function registerNodeCommands(ctx: PluginContext): void {
             port: Number(opts.port),
             credentialsId: opts.credId,
             javaPath: opts.javaPath,
+            availability: opts.availability === "demand" ? "demand" : "always",
+            inDemandDelay: Number(opts.inDemandDelay),
+            idleDelay: Number(opts.idleDelay),
           });
           trackResource("node", opts.name, profile, client.baseUrl, dbPath);
 
@@ -291,19 +300,54 @@ export function registerNodeCommands(ctx: PluginContext): void {
     .option("--remote-dir <dir>", "Remote root directory (e.g. /home/jenkins)")
     .option("--executors <n>", "Number of executors")
     .option("--labels <labels>", "Labels (space separated)")
+    .option("--launcher <type>", "Launch method: ssh or jnlp")
+    .option("--host <host>", "SSH host (ssh launcher)")
+    .option("--port <n>", "SSH port (ssh launcher, default 22)")
+    .option("--cred-id <id>", "SSH credentials ID (ssh launcher)")
+    .option("--java-path <path>", "Java path (ssh launcher)")
+    .option("--availability <mode>", "Availability: always or demand")
+    .option("--in-demand-delay <n>", "Minutes of demand before going online (demand)")
+    .option("--idle-delay <n>", "Minutes idle before going offline (demand)")
     .description("Update a node's configuration")
     .action(
       async (
         name: string,
-        opts: { description?: string; remoteDir?: string; executors?: string; labels?: string },
+        opts: {
+          description?: string;
+          remoteDir?: string;
+          executors?: string;
+          labels?: string;
+          launcher?: string;
+          host?: string;
+          port?: string;
+          credId?: string;
+          javaPath?: string;
+          availability?: string;
+          inDemandDelay?: string;
+          idleDelay?: string;
+        },
       ) => {
         try {
           const client = await ctx.getClient({ useController: true });
+          const launcherType =
+            opts.launcher === "ssh" || opts.launcher === "jnlp" ? opts.launcher : undefined;
+          const availability =
+            opts.availability === "always" || opts.availability === "demand"
+              ? opts.availability
+              : undefined;
           await updateNode(client, name, {
             desc: opts.description,
             remoteDir: opts.remoteDir,
             numExecutors: opts.executors !== undefined ? Number(opts.executors) : undefined,
             labels: opts.labels,
+            launcherType,
+            host: opts.host,
+            port: opts.port !== undefined ? Number(opts.port) : undefined,
+            credentialsId: opts.credId,
+            javaPath: opts.javaPath,
+            availability,
+            inDemandDelay: opts.inDemandDelay !== undefined ? Number(opts.inDemandDelay) : undefined,
+            idleDelay: opts.idleDelay !== undefined ? Number(opts.idleDelay) : undefined,
           });
           printSuccess(`OK Node '${name}' updated.`);
         } catch (err) {
