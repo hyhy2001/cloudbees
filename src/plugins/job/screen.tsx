@@ -27,6 +27,7 @@ import { useSearch } from "../../core/tui/data/use-search";
 import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
 import { appendChunk, colorForLine } from "../../core/tui/data/log-buffer";
 import { useAutoRefresh } from "../../core/tui/data/use-auto-refresh";
+import { useDimensions } from "../../core/tui/data/use-dimensions";
 import { getTtl } from "../../core/cache/policy";
 import type { JobDTO } from "../../core/dtos/job";
 import {
@@ -95,6 +96,7 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
   const offsetRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRef = useRef(false);
+  const { rows: termRows } = useDimensions();
 
   // This overlay owns input while open: tell the shell to suspend its global
   // keys so `q`/`b`/`Esc` close the log instead of quitting the whole app.
@@ -147,11 +149,13 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
     };
   }, [ctx, jobName]);
 
-  // Show only the tail that fits a typical viewport.
-  const visible = lines.slice(-30);
+  // Show only the tail that fits the real terminal height. Reserve rows for the
+  // app header/footer/toast chrome + this viewer's own title line and borders.
+  const logRows = Math.max(5, termRows - 12);
+  const visible = lines.slice(-logRows);
 
   return (
-    <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} flexGrow={1}>
+    <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} height={termRows - 8}>
       <Text>
         {SYM.arrow} Log: <Text bold>{jobName}</Text>{" "}
         <Text color={THEME.dim}>

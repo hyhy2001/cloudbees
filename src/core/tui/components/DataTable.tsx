@@ -21,10 +21,18 @@ import { SYM } from "../symbols";
 
 const PAGE = 10;
 
-/** A single column definition: header label and fixed character width. */
+/**
+ * A single column definition.
+ *  - `width` is the fixed character width, OR the *minimum* width when `flex`.
+ *  - `flex` columns split the terminal's leftover width evenly (after fixed
+ *    columns + separators), so the table fills the screen instead of using
+ *    hardcoded character counts. Falls back to `width` when no `tableWidth`
+ *    is supplied (tests, piped output).
+ */
 export interface Column {
   header: string;
   width: number;
+  flex?: boolean;
 }
 
 /** A single table cell with optional ANSI color and dim styling. */
@@ -69,6 +77,35 @@ export interface DataTableProps {
    * Length should match `rows`; falls back to index when absent.
    */
   rowKeys?: string[];
+  /**
+   * Total character width available to the table (from the real terminal, via
+   * useDimensions). When set, `flex` columns expand to fill the leftover space
+   * after fixed columns. When absent, every column uses its declared `width`.
+   */
+  tableWidth?: number;
+}
+
+/**
+ * Resolve each column's effective render width. Fixed columns keep their
+ * `width`; flex columns split the leftover terminal width evenly (never below
+ * their declared `width`, which acts as a minimum). Pure + exported for tests.
+ */
+export function resolveColumnWidths(columns: Column[], tableWidth?: number): number[] {
+  // No terminal width, or no flex columns → use declared widths verbatim.
+  const flexIdx = columns.map((c, i) => (c.flex ? i : -1)).filter((i) => i >= 0);
+  if (!tableWidth || flexIdx.length === 0) return columns.map((c) => c.width);
+
+  // Budget: 2 leading indicator chars + 1 trailing space per column.
+  const chrome = 2 + columns.length;
+  const fixedTotal = columns.reduce((sum, c) => sum + (c.flex ? 0 : c.width), 0);
+  const leftover = tableWidth - chrome - fixedTotal;
+  const perFlexMin = columns.filter((c) => c.flex).reduce((s, c) => s + c.width, 0);
+
+  // Not enough room to grow → fall back to declared minimums.
+  if (leftover <= perFlexMin) return columns.map((c) => c.width);
+
+  const each = Math.floor(leftover / flexIdx.length);
+  return columns.map((c) => (c.flex ? Math.max(c.width, each) : c.width));
 }
 
 function pad(s: string, width: number): string {
@@ -86,8 +123,10 @@ export const DataTable: React.FC<DataTableProps> = ({
   height = 12,
   emptyText = "(no rows)",
   rowKeys,
+  tableWidth,
 }) => {
   const clamp = (i: number) => Math.max(0, Math.min(rows.length - 1, i));
+  const colWidths = resolveColumnWidths(columns, tableWidth);
 
   // Navigation only. Enter (and every action key) is owned by the screen's
   // keymap — the table never handles selection, so there's no double-fire.
@@ -118,7 +157,7 @@ export const DataTable: React.FC<DataTableProps> = ({
         <Text> </Text>
         {columns.map((c, i) => (
           <Text key={i} color={THEME.keyhint} bold>
-            {pad(c.header, c.width)}{" "}
+            {pad(c.header, colWidths[i] ?? c.width)}{" "}
           </Text>
         ))}
       </Box>
@@ -132,7 +171,7 @@ export const DataTable: React.FC<DataTableProps> = ({
           <Box key={rowKey}>
             <Text color={isCursor ? THEME.active : THEME.dim}>{isCursor ? SYM.selected : " "}</Text>
             {row.map((cell, ci) => {
-              const width = columns[ci]?.width ?? 10;
+              const width = colWidths[ci] ?? columns[ci]?.width ?? 10;
               const color = isCursor ? THEME.selectedFg : cell.dim ? THEME.dim : cell.color;
               return (
                 <Text
