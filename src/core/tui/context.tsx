@@ -130,6 +130,15 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
     [dbPath],
   );
 
+  // Re-read the active controller from the DB into the in-memory session, so the
+  // header (and anything reading ctx.activeController) updates after a selection.
+  // The DB write happens in the controller screen via selectController(); this
+  // just syncs the React state that mirrors it.
+  const refreshController = useCallback(() => {
+    const active = getActiveController(dbPath);
+    setSession((prev) => ({ ...prev, activeController: active ? active[0] : null }));
+  }, [dbPath]);
+
   const value = useMemo<TuiState>(
     () => ({
       getClient,
@@ -138,6 +147,7 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
       loggedIn: session.loggedIn,
       profile: session.profile,
       switchProfile,
+      refreshController,
       openModal,
       notify,
       dbPath,
@@ -150,7 +160,7 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
       activeKeyHints,
       inputCaptured,
     }),
-    [getClient, session, switchProfile, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, login, activeKeyHints, inputCaptured],
+    [getClient, session, switchProfile, refreshController, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, login, activeKeyHints, inputCaptured],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

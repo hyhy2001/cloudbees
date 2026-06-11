@@ -85,6 +85,7 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         const client = await ctx.getClient({ useController: false });
         const resolvedUrl = await resolveControllerUrl(client, ctrl.url);
         selectController(ctrl.name, resolvedUrl, ctx.dbPath);
+        ctx.refreshController();
         ctx.notify(`${SYM.ok} Active controller: ${ctrl.name}`, "success");
         void refetch();
       } catch (err) {
