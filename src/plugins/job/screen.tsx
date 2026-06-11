@@ -16,11 +16,13 @@ import { SYM, borderStyle } from "../../core/tui/symbols";
 import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
 import { DataTable } from "../../core/tui/components/DataTable";
+import { SearchBar } from "../../core/tui/components/SearchBar";
 import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
 import { useKeymap, bindingsToHints, type KeyBinding } from "../../core/tui/keymap";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
+import { useSearch } from "../../core/tui/data/use-search";
 import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
 import { appendChunk, colorForLine } from "../../core/tui/data/log-buffer";
 import { useAutoRefresh } from "../../core/tui/data/use-auto-refresh";
@@ -181,6 +183,10 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Overlays local to this tab.
   const [logJob, setLogJob] = useState<string | null>(null);
 
+  // Inline "/" search box (client-side filter; no refetch). Disabled while the
+  // log overlay is open.
+  const search = useSearch({ isActive: active && logJob === null });
+
   // Resolve the controller base url once (cheap; client-factory caches session).
   useEffect(() => {
     let cancelled = false;
@@ -230,7 +236,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   }, [baseUrl, ctx.dbPath, allJobs]);
 
   // ── View pipeline: Mine/All filter + synthetic deleted rows (client-side) ──
-  const jobs = useMemo(() => {
+  const scoped = useMemo(() => {
     const all = allJobs ?? [];
     if (showAll) return all;
     const serverNames = new Set(all.map((j) => j.name));
@@ -258,6 +264,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
     return [...mine, ...deleted];
   }, [allJobs, showAll, trackedNames]);
+
+  // Then the "/" search filter (matches name + description), client-side.
+  const jobs = useMemo(
+    () =>
+      computeView(scoped, {
+        query: search.query,
+        searchText: (j) => `${j.name} ${j.description ?? ""}`,
+      }),
+    [scoped, search.query],
+  );
 
   // ── Stable cursor: keep selection on the same job across refresh/filter ──
   const rowKeys = useMemo(() => jobs.map((j) => j.name), [jobs]);
@@ -406,12 +422,17 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeJob(current.name); } },
       { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
+      search.openBinding,
+      // Esc clears an active query (only shown/handled when one is set).
+      { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, runJob, stopJob, newJob, removeJob, refetch],
+    [current, hasRow, runJob, stopJob, newJob, removeJob, refetch, search],
   );
 
-  useKeymap(bindings, { isActive: active && !logJob });
+  // While typing in the search box, the search hook owns input — suspend the
+  // action keymap (and the table's nav) so letters don't trigger actions.
+  useKeymap(bindings, { isActive: active && !logJob && !search.editing });
 
   // Publish hints to the shell footer while this tab is the active one.
   useEffect(() => {
@@ -471,6 +492,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               {SYM.fail} {errMsg}
             </Text>
           )}
+          <SearchBar state={search} />
           <DataTable
             columns={[
               { header: "Status", width: 12 },
@@ -493,7 +515,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             rowKeys={rowKeys}
             cursor={cursor}
             onCursorChange={setCursor}
-            active={active}
+            active={active && !search.editing}
             emptyText="No jobs. Press n to create one."
           />
 

@@ -18,10 +18,12 @@ import { SYM, borderStyle } from "../../core/tui/symbols";
 import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
 import { DataTable } from "../../core/tui/components/DataTable";
+import { SearchBar } from "../../core/tui/components/SearchBar";
 import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
+import { useSearch } from "../../core/tui/data/use-search";
 import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
 import { useAutoRefresh } from "../../core/tui/data/use-auto-refresh";
 import { getTtl } from "../../core/cache/policy";
@@ -47,6 +49,9 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
   // Store is a server-side scope — changing it refetches from a different endpoint.
   const [store, setStore] = useState<"system" | "user">("system");
+
+  // Inline "/" search box (client-side filter; no refetch).
+  const search = useSearch({ isActive: active });
 
   // Resolve the controller base url once (cheap; client-factory caches session).
   useEffect(() => {
@@ -100,7 +105,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   }, [baseUrl, store, ctx.dbPath, allCredentials]);
 
   // ── View pipeline: Mine/All filter + synthetic deleted rows (client-side) ──
-  const credentials = useMemo(() => {
+  const scoped = useMemo(() => {
     const all = allCredentials ?? [];
     if (showAll) return all;
     const serverIds = new Set(all.map((c) => c.id));
@@ -122,6 +127,16 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
     return [...mine, ...deleted];
   }, [allCredentials, showAll, trackedIds]);
+
+  // Then the "/" search filter (matches id + description + typeName), client-side.
+  const credentials = useMemo(
+    () =>
+      computeView(scoped, {
+        query: search.query,
+        searchText: (c) => `${c.id} ${c.description ?? ""} ${c.typeName ?? ""}`,
+      }),
+    [scoped, search.query],
+  );
 
   // ── Stable cursor ──────────────────────────────────────────────────────────
   const rowKeys = useMemo(() => credentials.map((c) => c.id), [credentials]);
@@ -213,11 +228,13 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "S", label: "store", run: () => setStore((s) => (s === "system" ? "user" : "system")) },
       { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
+      search.openBinding,
+      { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, createCred, removeCred, refetch],
+    [current, hasRow, createCred, removeCred, refetch, search],
   );
-  useKeymap(bindings, { isActive: active });
+  useKeymap(bindings, { isActive: active && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
 
   const scope = showAll ? (
@@ -270,6 +287,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               {SYM.fail} {errMsg}
             </Text>
           )}
+          <SearchBar state={search} />
           <DataTable
             columns={[
               { header: "ID", width: 28 },
@@ -293,7 +311,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             rowKeys={rowKeys}
             cursor={cursor}
             onCursorChange={setCursor}
-            active={active}
+            active={active && !search.editing}
             emptyText="No credentials. Press c to create one."
           />
 

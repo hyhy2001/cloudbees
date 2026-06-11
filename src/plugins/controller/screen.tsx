@@ -15,7 +15,10 @@ import { SYM, borderStyle } from "../../core/tui/symbols";
 import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
 import { DataTable } from "../../core/tui/components/DataTable";
+import { SearchBar } from "../../core/tui/components/SearchBar";
 import { useResource } from "../../core/tui/data/use-resource";
+import { computeView } from "../../core/tui/data/use-view";
+import { useSearch } from "../../core/tui/data/use-search";
 import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
 import { useAutoRefresh } from "../../core/tui/data/use-auto-refresh";
 import { getTtl } from "../../core/cache/policy";
@@ -30,6 +33,9 @@ import {
 
 const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [autoRefresh, setAutoRefresh] = useState(false);
+
+  // Inline "/" search box (client-side filter; no refetch).
+  const search = useSearch({ isActive: active });
 
   // ── Read pipeline — OC-level client (useController: false) ────────────────
   const cacheKey = "controllers.list";
@@ -55,8 +61,18 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     policy: { baseMs: 5000, backoffFactor: 2, maxMs: 60000 },
   });
 
+  // ── View pipeline: base list then "/" search filter (client-side) ──────────
+  const scoped = controllers ?? [];
+  const rows = useMemo(
+    () =>
+      computeView(scoped, {
+        query: search.query,
+        searchText: (c) => `${c.name} ${c.url ?? ""} ${c.description ?? ""}`,
+      }),
+    [scoped, search.query],
+  );
+
   // ── Stable cursor ──────────────────────────────────────────────────────────
-  const rows = controllers ?? [];
   const rowKeys = useMemo(() => rows.map((c) => c.name), [rows]);
   const { cursor, setCursor } = useStableCursor(rowKeys);
   const current = rows[cursor];
@@ -84,11 +100,13 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Enter", label: "select", when: () => current !== undefined, run: () => { if (current) void doSelectController(current); } },
       { key: "s", label: "select", hidden: true, when: () => current !== undefined, run: () => { if (current) void doSelectController(current); } },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
+      search.openBinding,
+      { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, doSelectController, refetch],
+    [current, doSelectController, refetch, search],
   );
-  useKeymap(bindings, { isActive: active });
+  useKeymap(bindings, { isActive: active && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
 
   const notLoggedIn = !ctx.loggedIn;
@@ -144,6 +162,7 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               {SYM.fail} {errMsg}
             </Text>
           )}
+          <SearchBar state={search} />
           <DataTable
             columns={[
               { header: " ", width: 3 },
@@ -168,7 +187,7 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             rowKeys={rowKeys}
             cursor={cursor}
             onCursorChange={setCursor}
-            active={active}
+            active={active && !search.editing}
             emptyText="No controllers found."
           />
 

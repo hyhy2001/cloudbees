@@ -15,10 +15,12 @@ import { SYM, borderStyle } from "../../core/tui/symbols";
 import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
 import { DataTable } from "../../core/tui/components/DataTable";
+import { SearchBar } from "../../core/tui/components/SearchBar";
 import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
+import { useSearch } from "../../core/tui/data/use-search";
 import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
 import { useAutoRefresh } from "../../core/tui/data/use-auto-refresh";
 import { getTtl } from "../../core/cache/policy";
@@ -43,6 +45,9 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [showAll, setShowAll] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
+
+  // Inline "/" search box (client-side filter; no refetch).
+  const search = useSearch({ isActive: active });
 
   // Resolve the controller base url once (cheap; client-factory caches session).
   useEffect(() => {
@@ -92,7 +97,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   }, [baseUrl, ctx.dbPath, allNodes]);
 
   // ── View pipeline: Mine/All filter + synthetic deleted rows (client-side) ──
-  const nodes = useMemo(() => {
+  const scoped = useMemo(() => {
     const all = allNodes ?? [];
     if (showAll) return all;
     const serverNames = new Set(all.map((n) => n.name));
@@ -115,6 +120,16 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
     return [...mine, ...deleted];
   }, [allNodes, showAll, trackedNames]);
+
+  // Then the "/" search filter (matches name + labels + description), client-side.
+  const nodes = useMemo(
+    () =>
+      computeView(scoped, {
+        query: search.query,
+        searchText: (n) => `${n.name} ${n.labels ?? ""} ${n.description ?? ""}`,
+      }),
+    [scoped, search.query],
+  );
 
   // ── Stable cursor ──────────────────────────────────────────────────────────
   const rowKeys = useMemo(() => nodes.map((n) => n.name), [nodes]);
@@ -219,11 +234,13 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "o", label: "toggle offline", when: () => hasRow, run: () => { if (current) void doToggleOffline(current); } },
       { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
+      search.openBinding,
+      { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, createNode, removeNode, doToggleOffline, refetch],
+    [current, hasRow, createNode, removeNode, doToggleOffline, refetch, search],
   );
-  useKeymap(bindings, { isActive: active });
+  useKeymap(bindings, { isActive: active && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
 
   const scope = showAll ? (
@@ -273,6 +290,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               {SYM.fail} {errMsg}
             </Text>
           )}
+          <SearchBar state={search} />
           <DataTable
             columns={[
               { header: "Status", width: 10 },
@@ -304,7 +322,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             rowKeys={rowKeys}
             cursor={cursor}
             onCursorChange={setCursor}
-            active={active}
+            active={active && !search.editing}
             emptyText="No nodes. Press n to create one."
           />
 
