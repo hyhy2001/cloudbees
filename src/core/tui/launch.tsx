@@ -27,11 +27,17 @@ export async function launchTui(dbPath?: string): Promise<void> {
 
   const screens = collectScreens();
 
-  const { waitUntilExit } = render(
+  const { waitUntilExit, clear } = render(
     <TuiProvider initialSession={initialSession} dbPath={dbPath}>
       <BeeApp screens={screens} />
     </TuiProvider>,
   );
 
   await waitUntilExit();
+
+  // Leave a clean terminal on quit: Ink keeps its last frame by default. clear()
+  // drops Ink's own output; the escape also wipes scrollback (\x1b[3J) and homes
+  // the cursor so no stale TUI frame lingers in the user's shell.
+  clear();
+  if (process.stdout.isTTY) process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
 }
