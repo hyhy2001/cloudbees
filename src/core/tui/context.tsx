@@ -32,6 +32,10 @@ interface TuiState extends ITuiContext {
   toast: ToastMessage | null;
   /** Update session info (called after login/logout/controller switch). */
   setSession(info: SessionInfo): void;
+  /** Footer hints published by the active screen (read by the shell). */
+  activeKeyHints: { key: string; label: string }[];
+  /** True while a non-modal overlay owns input (shell suspends global keys). */
+  inputCaptured: boolean;
 }
 
 const Ctx = createContext<TuiState | null>(null);
@@ -52,6 +56,8 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
   const [session, setSession] = useState<SessionInfo>(initialSession);
   const [activeModal, setActiveModal] = useState<ActiveModal | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [activeKeyHints, setActiveKeyHintsState] = useState<{ key: string; label: string }[]>([]);
+  const [inputCaptured, setInputCapturedState] = useState(false);
   const toastSeq = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -77,6 +83,21 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
     });
   }, []);
 
+  // Stable setters — screens call these from effects, so referential stability
+  // matters to avoid re-render loops. Guard against no-op updates.
+  const setActiveKeyHints = useCallback((hints: { key: string; label: string }[]) => {
+    setActiveKeyHintsState((prev) =>
+      prev.length === hints.length &&
+      prev.every((h, i) => h.key === hints[i]!.key && h.label === hints[i]!.label)
+        ? prev
+        : hints,
+    );
+  }, []);
+
+  const setInputCaptured = useCallback((captured: boolean) => {
+    setInputCapturedState(captured);
+  }, []);
+
   const value = useMemo<TuiState>(
     () => ({
       getClient,
@@ -89,8 +110,12 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
       activeModal,
       toast,
       setSession,
+      setActiveKeyHints,
+      setInputCaptured,
+      activeKeyHints,
+      inputCaptured,
     }),
-    [getClient, session, openModal, notify, dbPath, activeModal, toast],
+    [getClient, session, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, activeKeyHints, inputCaptured],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

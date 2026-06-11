@@ -38,8 +38,6 @@ export interface DataTableProps {
   rows: Cell[][];
   cursor: number;
   onCursorChange: (index: number) => void;
-  /** Enter key on the current row. */
-  onSelect?: (index: number) => void;
   /** Only handle keys when true (the owning tab is active & no overlay). */
   active: boolean;
   /** Max visible rows (viewport). Default 12. */
@@ -65,7 +63,6 @@ export const DataTable: React.FC<DataTableProps> = ({
   rows,
   cursor,
   onCursorChange,
-  onSelect,
   active,
   height = 12,
   emptyText = "(no rows)",
@@ -73,6 +70,8 @@ export const DataTable: React.FC<DataTableProps> = ({
 }) => {
   const clamp = (i: number) => Math.max(0, Math.min(rows.length - 1, i));
 
+  // Navigation only. Enter (and every action key) is owned by the screen's
+  // keymap — the table never handles selection, so there's no double-fire.
   useInput(
     (input, key) => {
       if (rows.length === 0) return;
@@ -82,7 +81,6 @@ export const DataTable: React.FC<DataTableProps> = ({
       else if (input === "G") onCursorChange(rows.length - 1);
       else if (key.ctrl && input === "f") onCursorChange(clamp(cursor + PAGE));
       else if (key.ctrl && input === "b") onCursorChange(clamp(cursor - PAGE));
-      else if (key.return && onSelect) onSelect(cursor);
     },
     { isActive: active },
   );

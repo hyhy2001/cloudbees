@@ -9,13 +9,14 @@
  */
 
 import React, { useState } from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Text, useApp } from "ink";
 import type { TuiScreen } from "../../registry/types";
 import { useTui } from "./context";
 import { SYM, borderStyle } from "./symbols";
 import { THEME } from "./theme";
 import { Toast } from "./components/Toast";
 import { StatusBar } from "./components/StatusBar";
+import { useKeymap, type KeyBinding } from "./keymap";
 
 export interface BeeAppProps {
   screens: TuiScreen[];
@@ -37,45 +38,36 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   const modalOpen = tui.activeModal !== null;
   const count = screens.length;
 
-  useInput((input, key) => {
-    // While a modal is open, the modal owns all input.
-    if (modalOpen) return;
+  // Global keys. Suspended while a modal, the help screen, or a non-modal
+  // overlay (e.g. the log viewer, via ctx.inputCaptured) owns input.
+  const globalActive = !modalOpen && !showHelp && !tui.inputCaptured;
 
-    if (showHelp) {
-      if (input === "?" || key.escape || input === "q") setShowHelp(false);
-      return;
-    }
+  const globalBindings: KeyBinding[] = [
+    { key: "q", label: "quit", group: "global", run: () => exit() },
+    { key: "?", label: "help", group: "global", run: () => setShowHelp(true) },
+    { key: "tab", label: "next", group: "global", hidden: true, run: () => setTabIndex((t) => (t + 1) % count) },
+    { key: "shift+tab", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => (t - 1 + count) % count) },
+    { key: "left", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => (t - 1 + count) % count) },
+    { key: "right", label: "next", group: "global", hidden: true, run: () => setTabIndex((t) => (t + 1) % count) },
+    // Number keys 1..9 jump to a tab.
+    ...Array.from({ length: Math.min(count, 9) }, (_, i): KeyBinding => ({
+      key: String(i + 1),
+      label: `tab${i + 1}`,
+      group: "global",
+      hidden: true,
+      run: () => setTabIndex(i),
+    })),
+  ];
 
-    if (input === "q") {
-      exit();
-      return;
-    }
-    if (input === "?") {
-      setShowHelp(true);
-      return;
-    }
-    // Number keys jump to a tab.
-    if (/^[1-9]$/.test(input)) {
-      const i = Number(input) - 1;
-      if (i < count) setTabIndex(i);
-      return;
-    }
-    if (key.tab && key.shift) {
-      setTabIndex((t) => (t - 1 + count) % count);
-      return;
-    }
-    if (key.tab) {
-      setTabIndex((t) => (t + 1) % count);
-      return;
-    }
-    if (key.leftArrow) {
-      setTabIndex((t) => (t - 1 + count) % count);
-      return;
-    }
-    if (key.rightArrow) {
-      setTabIndex((t) => (t + 1) % count);
-    }
-  });
+  // While help is open, only its dismiss keys are live.
+  const helpBindings: KeyBinding[] = [
+    { key: "?", label: "close", run: () => setShowHelp(false) },
+    { key: "Esc", label: "close", run: () => setShowHelp(false) },
+    { key: "q", label: "close", run: () => setShowHelp(false) },
+  ];
+
+  useKeymap(globalBindings, { isActive: globalActive });
+  useKeymap(helpBindings, { isActive: showHelp && !modalOpen });
 
   const active = screens[tabIndex];
 
@@ -133,7 +125,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
         borderLeft={false}
         borderRight={false}
       >
-        <StatusBar hints={GLOBAL_HINTS} />
+        <StatusBar hints={[...tui.activeKeyHints, ...GLOBAL_HINTS]} />
       </Box>
     </Box>
   );

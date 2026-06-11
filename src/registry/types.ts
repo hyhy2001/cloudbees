@@ -124,6 +124,18 @@ export interface TuiContext {
   notify(message: string, level?: NotifyLevel): void;
   /** Resolved DB path (for tracked-resource lookups). */
   dbPath?: string;
+  /**
+   * Publish the active screen's footer key hints to the shell. Screens call this
+   * (in an effect) with the hints derived from their keymap; the shell renders
+   * them in the StatusBar alongside the global hints. Pass [] to clear.
+   */
+  setActiveKeyHints(hints: { key: string; label: string }[]): void;
+  /**
+   * Mark a non-modal overlay (e.g. the log viewer) as owning all input. While
+   * true, the shell suspends its own global keys so the overlay can handle keys
+   * like `q` without the shell quitting. Always pair set(true) with set(false).
+   */
+  setInputCaptured(captured: boolean): void;
 }
 
 /**
