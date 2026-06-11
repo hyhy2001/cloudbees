@@ -27,7 +27,9 @@ import { getTtl } from "../../core/cache/policy";
 import type { NodeDTO } from "../../core/dtos/node";
 import {
   listNodes,
+  getNode,
   createPermanentNode,
+  updateNode,
   deleteNode,
   toggleOffline,
 } from "./service";
@@ -150,7 +152,10 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             { name: "numExecutors", label: "Executors", initial: "1" },
             { name: "labels", label: "Labels" },
             { name: "desc", label: "Description" },
-            { name: "host", label: "SSH Host (optional)" },
+            { name: "host", label: "SSH Host", placeholder: "blank = JNLP launcher" },
+            { name: "port", label: "SSH Port", placeholder: "SSH only (default 22)" },
+            { name: "credentialsId", label: "SSH Cred ID", placeholder: "SSH only — required to connect" },
+            { name: "javaPath", label: "Java Path", placeholder: "SSH only (blank = default)" },
           ]}
           onResult={resolve}
         />
@@ -166,6 +171,9 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         labels: result.labels ?? "",
         desc: result.desc ?? "",
         host: result.host ?? "",
+        port: result.port ? parseInt(result.port, 10) : undefined,
+        credentialsId: result.credentialsId || undefined,
+        javaPath: result.javaPath || undefined,
       });
       trackResource("node", result.name, PROFILE, client.baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Created node: ${result.name}`, "success");
@@ -225,6 +233,51 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, refetch],
   );
 
+  // Edit = partial update of an existing node's config. The list DTO lacks
+  // remoteDir, so fetch full detail first to prefill it. Fields are prefilled
+  // from detail; updateNode does a partial update.
+  const editNode = useCallback(
+    async (node: NodeDTO) => {
+      const client = await ctx.getClient({ useController: true });
+      let detail;
+      try {
+        detail = await getNode(client, node.name);
+      } catch (err) {
+        ctx.notify(err instanceof Error ? err.message : String(err), "error");
+        return;
+      }
+      const result = await ctx.openModal<Record<string, string>>({
+        id: "edit-node",
+        render: (resolve) => (
+          <FormModal
+            title={`${SYM.gear} Edit Node: ${node.name}`}
+            fields={[
+              { name: "remoteDir", label: "Remote Dir", initial: detail.remoteDir ?? "" },
+              { name: "numExecutors", label: "Executors", initial: String(detail.numExecutors ?? 1) },
+              { name: "labels", label: "Labels", initial: detail.labels ?? "" },
+              { name: "desc", label: "Description", initial: detail.description ?? "" },
+            ]}
+            onResult={resolve}
+          />
+        ),
+      });
+      if (!result) return;
+      try {
+        await updateNode(client, node.name, {
+          remoteDir: result.remoteDir,
+          numExecutors: result.numExecutors ? parseInt(result.numExecutors, 10) : undefined,
+          labels: result.labels,
+          desc: result.desc,
+        });
+        ctx.notify(`${SYM.ok} Updated node: ${node.name}`, "success");
+        void refetch();
+      } catch (err) {
+        ctx.notify(err instanceof Error ? err.message : String(err), "error");
+      }
+    },
+    [ctx, refetch],
+  );
+
   // Import = track an existing server node into Mine (for nodes created outside bee).
   const doImport = useCallback(
     (name: string) => {
@@ -243,6 +296,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "n", label: "new", run: () => void createNode() },
+      { key: "e", label: "edit", when: () => hasRow, run: () => { if (current) void editNode(current); } },
       { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.name); } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeNode(current.name); } },
       { key: "o", label: "toggle offline", when: () => hasRow, run: () => { if (current) void doToggleOffline(current); } },
@@ -252,7 +306,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, canImport, createNode, doImport, removeNode, doToggleOffline, refetch, search],
+    [current, hasRow, canImport, createNode, editNode, doImport, removeNode, doToggleOffline, refetch, search],
   );
   useKeymap(bindings, { isActive: active && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
