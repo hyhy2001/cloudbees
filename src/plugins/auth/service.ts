@@ -54,9 +54,8 @@ export async function login(
  * Mirrors Python auth_service.logout().
  */
 export function logout(profileName?: string, dbPath?: string): void {
-  // profileName param kept for API parity; session is machine-key-wide
-  void profileName;
-  clearSession(dbPath);
+  // Clear a specific profile's session, or the active one when omitted.
+  clearSession(profileName, dbPath);
 }
 
 /**

@@ -11,6 +11,7 @@ import type { ControllerDTO } from "../../core/dtos/index";
 import { setSetting } from "../../core/db/repositories/settings-repo";
 import { getCached, setCache } from "../../core/cache/index";
 import { getActiveController as coreGetActiveController } from "../../core/client-factory";
+import { getActiveProfileName } from "../../core/session/index";
 import type { CapabilityInfo } from "./types";
 
 /** Controller _class fragments that identify controllers (mirrors Python _CONTROLLER_CLASSES). */
@@ -60,8 +61,9 @@ export async function getController(client: CloudBeesClient, name: string): Prom
  * Mirrors Python select_controller().
  */
 export function selectController(name: string, url: string, dbPath?: string): void {
-  setSetting("active_controller", name, dbPath);
-  setSetting("active_controller_url", url, dbPath);
+  const profile = getActiveProfileName(dbPath);
+  setSetting(`active_controller.${profile}`, name, dbPath);
+  setSetting(`active_controller_url.${profile}`, url, dbPath);
 }
 
 /**

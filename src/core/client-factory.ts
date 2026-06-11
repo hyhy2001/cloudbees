@@ -13,16 +13,28 @@
 import { CloudBeesClientImpl } from "./api/client";
 import type { CloudBeesClient } from "./api/types";
 import { AuthError } from "./api/errors";
-import { loadSession, saveSession } from "./session/session";
+import { loadSession, saveSession, getActiveProfileName } from "./session/session";
 import { getSetting } from "./db/repositories/settings-repo";
-import { saveProfile } from "./db/repositories/profile-repo";
+import { saveProfile, listProfiles } from "./db/repositories/profile-repo";
 import type { GetClientOptions } from "../registry/types";
 
-/** Active controller as [name, url], or null if none selected. */
+/**
+ * Active controller as [name, url], or null if none selected.
+ *
+ * The selection is scoped to the active profile (key `active_controller.<profile>`)
+ * so each profile remembers its own controller. Falls back to the legacy unscoped
+ * keys (`active_controller` / `active_controller_url`) for pre-migration DBs.
+ */
 export function getActiveController(dbPath?: string): [string, string] | null {
-  const name = getSetting("active_controller", dbPath);
+  const profile = getActiveProfileName(dbPath);
+  const name =
+    getSetting(`active_controller.${profile}`, dbPath) ??
+    getSetting("active_controller", dbPath);
   if (!name) return null;
-  const url = getSetting("active_controller_url", dbPath) ?? `/cjoc/job/${name}/`;
+  const url =
+    getSetting(`active_controller_url.${profile}`, dbPath) ??
+    getSetting("active_controller_url", dbPath) ??
+    `/cjoc/job/${name}/`;
   return [name, url];
 }
 
@@ -58,6 +70,7 @@ export function getClient(opts: GetClientOptions & { dbPath?: string } = {}): Cl
  * @param serverUrl  CloudBees/Jenkins root URL.
  * @param username   Login username.
  * @param token      API token (NOT a password) — base64'd into Basic auth.
+ * @param profileName Profile to store under (defaults to "default").
  * @throws AuthError on invalid credentials.
  */
 export async function loginSession(
@@ -65,6 +78,7 @@ export async function loginSession(
   username: string,
   token: string,
   dbPath?: string,
+  profileName = "default",
 ): Promise<void> {
   const basicToken = Buffer.from(`${username}:${token}`).toString("base64");
   const client = new CloudBeesClientImpl(serverUrl, basicToken, { dbPath });
@@ -76,8 +90,8 @@ export async function loginSession(
     }
     throw err;
   }
-  // profile name is the hardcoded "default" (single-profile model); mirror the
-  // CLI's saveProfile + saveSession pair.
-  saveProfile("default", serverUrl, username, true, dbPath);
-  saveSession(basicToken, "default", serverUrl, username, dbPath);
+  // First profile becomes the default; later ones don't steal the flag.
+  const isDefault = listProfiles(dbPath).length === 0;
+  saveProfile(profileName, serverUrl, username, isDefault, dbPath);
+  saveSession(basicToken, profileName, serverUrl, username, dbPath);
 }
