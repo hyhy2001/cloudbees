@@ -15,6 +15,7 @@ import { Box, Text, useInput } from "ink";
 import { Modal } from "./Modal";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
+import { completePath } from "../data/path-complete";
 
 export interface FormField {
   /** Stable key used in the result object. */
@@ -31,6 +32,14 @@ export interface FormField {
   initial?: string;
   /** Field must be non-empty to submit. */
   required?: boolean;
+  /** Short guidance shown dimmed to the right of the field (how to fill it). */
+  hint?: string;
+  /**
+   * Free-text field that completes against the LOCAL filesystem on Tab. The
+   * machine running bee browses its own FS — only literally correct for an agent
+   * on this same host. Completion is convenience; the typed string is sent as-is.
+   */
+  path?: boolean;
 }
 
 /** Props for FormModal. `onResult` receives the filled values, or null on cancel. */
@@ -51,6 +60,8 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
   });
   const [cursor, setCursor] = useState(0);
   const [error, setError] = useState("");
+  // Candidate basenames from the last path-completion (shown as a hint).
+  const [candidates, setCandidates] = useState<string[]>([]);
 
   const field = fields[cursor]!;
 
@@ -90,8 +101,17 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
       }
     }
 
+    // Tab on a path field completes against the local FS instead of moving on.
+    if (key.tab && field.path && !field.options) {
+      const { completed, candidates: cands } = completePath(values[field.name] ?? "");
+      setFieldValue(field.name, completed);
+      setCandidates(cands.slice(0, 12));
+      return;
+    }
+
     // Navigation between fields.
     if (key.tab || key.downArrow) {
+      setCandidates([]);
       setCursor((c) => Math.min(c + 1, fields.length - 1));
       return;
     }
@@ -143,9 +163,22 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
                 {isActive ? "_" : ""}
               </Text>
             )}
+            {f.hint ? (
+              <Text color={THEME.dim}>
+                {"   "}
+                {f.hint}
+              </Text>
+            ) : null}
           </Box>
         );
       })}
+      {candidates.length > 0 && field.path ? (
+        <Box marginTop={1}>
+          <Text color={THEME.dim} wrap="truncate-end">
+            {candidates.join("  ")}
+          </Text>
+        </Box>
+      ) : null}
       {error ? (
         <Box marginTop={1}>
           <Text color={THEME.error}>
@@ -155,7 +188,7 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
       ) : null}
       <Box marginTop={1}>
         <Text color={THEME.dim}>
-          Tab/↑↓ move · Enter next/submit · Esc cancel
+          {field.path ? "Tab complete · ↑↓ move" : "Tab/↑↓ move"} · Enter next/submit · Esc cancel
         </Text>
       </Box>
     </Modal>
