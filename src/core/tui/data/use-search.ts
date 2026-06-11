@@ -16,7 +16,7 @@
  *   // add `search.openBinding` to the keymap; render <SearchBar state={search} />
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useInput } from "ink";
 import type { KeyBinding } from "../keymap";
 
@@ -38,10 +38,16 @@ export interface UseSearchOptions {
   isActive: boolean;
   /** Label shown in the open-search hint. Default "search". */
   label?: string;
+  /**
+   * Called when edit mode toggles. Wire to `ctx.setInputCaptured` so the shell
+   * suspends its global keys while the user is typing a query (otherwise digits
+   * jump tabs, `q` quits, etc.).
+   */
+  onEditingChange?: (editing: boolean) => void;
 }
 
 export function useSearch(opts: UseSearchOptions): SearchState {
-  const { isActive, label = "search" } = opts;
+  const { isActive, label = "search", onEditingChange } = opts;
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(false);
 
@@ -49,6 +55,11 @@ export function useSearch(opts: UseSearchOptions): SearchState {
     setQuery("");
     setEditing(false);
   }, []);
+
+  // Notify the shell when edit mode toggles so it can suspend its global keys.
+  useEffect(() => {
+    onEditingChange?.(editing);
+  }, [editing, onEditingChange]);
 
   // While editing, this handler owns input: printable chars append, backspace
   // deletes, Enter confirms (keep filter), Esc clears. Gated so it only runs in

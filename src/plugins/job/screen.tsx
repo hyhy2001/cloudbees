@@ -185,7 +185,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   // Inline "/" search box (client-side filter; no refetch). Disabled while the
   // log overlay is open.
-  const search = useSearch({ isActive: active && logJob === null });
+  const search = useSearch({ isActive: active && logJob === null, onEditingChange: ctx.setInputCaptured });
 
   // Resolve the controller base url once (cheap; client-factory caches session).
   useEffect(() => {
@@ -471,7 +471,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
-            {SYM.warn} Not logged in — run: bee auth login
+            {SYM.warn} Not logged in — press l to login
           </Text>
         </Box>
       ) : isInitialLoading ? (

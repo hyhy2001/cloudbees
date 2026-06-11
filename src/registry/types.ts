@@ -136,6 +136,11 @@ export interface TuiContext {
    * like `q` without the shell quitting. Always pair set(true) with set(false).
    */
   setInputCaptured(captured: boolean): void;
+  /**
+   * Verify credentials, persist an encrypted session, and refresh the TUI's
+   * logged-in state. Used by the login modal. Throws on invalid credentials.
+   */
+  login(serverUrl: string, username: string, token: string): Promise<void>;
 }
 
 /**

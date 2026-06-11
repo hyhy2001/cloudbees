@@ -47,7 +47,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
 
   // Inline "/" search box (client-side filter; no refetch).
-  const search = useSearch({ isActive: active });
+  const search = useSearch({ isActive: active, onEditingChange: ctx.setInputCaptured });
 
   // Resolve the controller base url once (cheap; client-factory caches session).
   useEffect(() => {
@@ -270,7 +270,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
-            {SYM.warn} Not logged in — run: bee auth login
+            {SYM.warn} Not logged in — press l to login
           </Text>
         </Box>
       ) : isInitialLoading ? (

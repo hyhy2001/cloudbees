@@ -35,7 +35,7 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [autoRefresh, setAutoRefresh] = useState(false);
 
   // Inline "/" search box (client-side filter; no refetch).
-  const search = useSearch({ isActive: active });
+  const search = useSearch({ isActive: active, onEditingChange: ctx.setInputCaptured });
 
   // ── Read pipeline — OC-level client (useController: false) ────────────────
   const cacheKey = "controllers.list";
@@ -142,7 +142,7 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
-            {SYM.warn} Not logged in — run: bee auth login
+            {SYM.warn} Not logged in — press l to login
           </Text>
         </Box>
       ) : isInitialLoading ? (

@@ -11,7 +11,7 @@ import React, { createContext, useContext, useCallback, useMemo, useRef, useStat
 import type { ReactNode } from "react";
 import type { TuiContext as ITuiContext, ModalSpec, NotifyLevel, GetClientOptions } from "../../registry/types";
 import type { CloudBeesClient } from "../api/types";
-import { getClient as coreGetClient } from "../client-factory";
+import { getClient as coreGetClient, loginSession, getActiveController } from "../client-factory";
 import type { ToastMessage } from "./components/Toast";
 
 interface ActiveModal {
@@ -98,6 +98,17 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
     setInputCapturedState(captured);
   }, []);
 
+  // Login from the TUI modal: verify + persist via core, then refresh the
+  // in-memory session so every screen re-renders as logged-in immediately.
+  const login = useCallback(
+    async (serverUrl: string, username: string, token: string) => {
+      await loginSession(serverUrl, username, token, dbPath);
+      const active = getActiveController(dbPath);
+      setSession({ username, activeController: active ? active[0] : null, loggedIn: true });
+    },
+    [dbPath],
+  );
+
   const value = useMemo<TuiState>(
     () => ({
       getClient,
@@ -112,10 +123,11 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
       setSession,
       setActiveKeyHints,
       setInputCaptured,
+      login,
       activeKeyHints,
       inputCaptured,
     }),
-    [getClient, session, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, activeKeyHints, inputCaptured],
+    [getClient, session, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, login, activeKeyHints, inputCaptured],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

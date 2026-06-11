@@ -16,6 +16,7 @@ import { SYM, borderStyle } from "./symbols";
 import { THEME } from "./theme";
 import { Toast } from "./components/Toast";
 import { StatusBar } from "./components/StatusBar";
+import { FormModal } from "./components/FormModal";
 import { useKeymap, type KeyBinding } from "./keymap";
 
 export interface BeeAppProps {
@@ -45,6 +46,37 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   const globalBindings: KeyBinding[] = [
     { key: "q", label: "quit", group: "global", run: () => exit() },
     { key: "?", label: "help", group: "global", run: () => setShowHelp(true) },
+    // Login modal — only offered while logged out (token entry → core login()).
+    {
+      key: "l",
+      label: "login",
+      group: "global",
+      when: () => !tui.loggedIn,
+      run: () => {
+        void tui.openModal<Record<string, string>>({
+          id: "login",
+          render: (resolve) => (
+            <FormModal
+              title={`${SYM.bee} Login to CloudBees`}
+              fields={[
+                { name: "url", label: "Server URL", required: true },
+                { name: "username", label: "Username", required: true },
+                { name: "token", label: "API Token", required: true, password: true },
+              ]}
+              onResult={resolve}
+            />
+          ),
+        }).then(async (vals) => {
+          if (!vals) return;
+          try {
+            await tui.login(vals.url!, vals.username!, vals.token!);
+            tui.notify(`${SYM.ok} Logged in as ${vals.username}`, "success");
+          } catch (err) {
+            tui.notify(err instanceof Error ? err.message : String(err), "error");
+          }
+        });
+      },
+    },
     { key: "tab", label: "next", group: "global", hidden: true, run: () => setTabIndex((t) => (t + 1) % count) },
     { key: "shift+tab", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => (t - 1 + count) % count) },
     { key: "left", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => (t - 1 + count) % count) },
