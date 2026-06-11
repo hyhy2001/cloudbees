@@ -33,12 +33,14 @@ export interface FormField {
   required?: boolean;
 }
 
+/** Props for FormModal. `onResult` receives the filled values, or null on cancel. */
 export interface FormModalProps {
   title: string;
   fields: FormField[];
   onResult: (values: Record<string, string> | null) => void;
 }
 
+/** Sequential multi-field form rendered as a modal overlay. */
 export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult }) => {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};

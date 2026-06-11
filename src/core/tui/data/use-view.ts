@@ -17,14 +17,20 @@ import { useMemo } from "react";
 /** A predicate kept in a named map so the UI can toggle filters by key. */
 export type Predicate<T> = (item: T) => boolean;
 
+/** Sort direction applied on top of a comparator. */
 export type SortDirection = "asc" | "desc";
 
+/** Sort specification: a comparator plus an optional direction. */
 export interface SortSpec<T> {
   /** Comparator returning <0, 0, >0 (asc order). Direction is applied on top. */
   compare: (a: T, b: T) => number;
   direction?: SortDirection;
 }
 
+/**
+ * Full specification for a derived view: named filters, free-text search, and sort.
+ * Pass to computeView (pure) or useView (memoized React wrapper).
+ */
 export interface ViewSpec<T> {
   /**
    * Named filters. Only the ones whose key is in `activeFilters` are applied,

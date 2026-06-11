@@ -26,6 +26,7 @@
  * single TUI session and owns the loading/stale/error state machine.
  */
 
+/** Lifecycle state of a resource entry in the store. */
 export type ResourceStatus = "idle" | "loading" | "stale" | "data" | "error";
 
 /** Immutable public view of a single resource entry. */
@@ -40,6 +41,7 @@ export interface ResourceEntry<T> {
 /** Fetcher receives an AbortSignal so it can bail when superseded. */
 export type Fetcher<T> = (signal: AbortSignal) => Promise<T>;
 
+/** Options controlling freshness and force-refetch behaviour for ResourceStore.fetch. */
 export interface FetchOptions {
   /**
    * Freshness window in ms. If the entry last succeeded within this window the

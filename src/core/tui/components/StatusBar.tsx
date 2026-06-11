@@ -7,11 +7,13 @@ import React from "react";
 import { Box, Text } from "ink";
 import { THEME } from "../theme";
 
+/** A key/label pair displayed as a single hint in the status bar footer. */
 export interface KeyHint {
   key: string;
   label: string;
 }
 
+/** Footer bar that renders a row of key hints for the active tab. */
 export const StatusBar: React.FC<{ hints: KeyHint[] }> = ({ hints }) => {
   return (
     <Box>

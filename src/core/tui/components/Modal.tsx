@@ -10,11 +10,13 @@ import { Box, Text } from "ink";
 import { THEME } from "../theme";
 import { borderStyle } from "../symbols";
 
+/** Props for the Modal overlay frame. */
 export interface ModalProps {
   title: string;
   children: React.ReactNode;
 }
 
+/** Bordered, centered panel used as the base frame for all modal dialogs. */
 export const Modal: React.FC<ModalProps> = ({ title, children }) => {
   return (
     <Box

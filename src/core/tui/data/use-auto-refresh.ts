@@ -19,6 +19,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
+/** Scheduling parameters for the auto-refresh backoff policy. */
 export interface AutoRefreshPolicy {
   /** Base poll interval in ms when healthy. */
   baseMs: number;
@@ -46,6 +47,7 @@ export function nextInterval(
   return Math.min(scaled, maxMs);
 }
 
+/** Options for useAutoRefresh. */
 export interface UseAutoRefreshOptions {
   /** Whether polling is on (the screen toggles this with a key). Default false. */
   enabled: boolean;
@@ -57,11 +59,17 @@ export interface UseAutoRefreshOptions {
   policy: AutoRefreshPolicy;
 }
 
+/** Runtime state exposed by useAutoRefresh. */
 export interface AutoRefreshState {
   /** Consecutive failed refetches (drives backoff; resets to 0 on success). */
   consecutiveErrors: number;
 }
 
+/**
+ * Opt-in background polling hook. Calls `refetch` on a timer; applies
+ * exponential backoff on consecutive errors. No-op when `enabled` is false or
+ * the owning tab is not `active`.
+ */
 export function useAutoRefresh({
   enabled,
   active = true,

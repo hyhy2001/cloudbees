@@ -21,21 +21,39 @@ import { SYM } from "../symbols";
 
 const PAGE = 10;
 
+/** A single column definition: header label and fixed character width. */
 export interface Column {
   header: string;
   width: number;
 }
 
+/** A single table cell with optional ANSI color and dim styling. */
 export interface Cell {
   text: string;
   color?: string;
   dim?: boolean;
 }
 
+/**
+ * Props for DataTable.
+ *
+ * Controlled cursor contract: the parent owns `cursor` and must wire
+ * `onCursorChange` to update it. The table fires navigation callbacks but
+ * never mutates cursor state itself.
+ *
+ * Nav keys (j/k/g/G/Ctrl+f/Ctrl+b) are only handled when `active` is true
+ * (owning tab is focused and no modal overlay is open). Enter is intentionally
+ * NOT handled here — it is owned by the screen keymap to avoid double-fire.
+ *
+ * `rowKeys` provides stable row identity (e.g. job name) so React can key rows
+ * by logical identity rather than position; a refresh that reorders or inserts
+ * rows updates in place instead of churning every row widget.
+ */
 export interface DataTableProps {
   columns: Column[];
   /** Each row has one Cell per column. */
   rows: Cell[][];
+  /** Controlled cursor index; parent must update via onCursorChange. */
   cursor: number;
   onCursorChange: (index: number) => void;
   /** Only handle keys when true (the owning tab is active & no overlay). */
@@ -58,6 +76,7 @@ function pad(s: string, width: number): string {
   return s.padEnd(width, " ");
 }
 
+/** Scrollable table with a highlighted cursor row and vim-style keyboard nav. */
 export const DataTable: React.FC<DataTableProps> = ({
   columns,
   rows,

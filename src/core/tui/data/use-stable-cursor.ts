@@ -37,6 +37,10 @@ export function resolveCursor(
   return Math.max(0, Math.min(prevCursor, keys.length - 1));
 }
 
+/**
+ * Return value of useStableCursor. Provides the current index, a setter, and
+ * the key of the selected row so callers can identify the selection by identity.
+ */
 export interface StableCursor {
   /** Current cursor index into the key list. */
   cursor: number;

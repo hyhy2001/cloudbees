@@ -15,6 +15,7 @@ export interface SpinnerProps {
   label?: string;
 }
 
+/** Animated loading indicator that cycles through spinner frames every 100ms. */
 export const Spinner: React.FC<SpinnerProps> = ({ label = "Loading..." }) => {
   const [frame, setFrame] = useState(0);
 

@@ -26,6 +26,7 @@ import {
   type ResourceStore,
 } from "./resource-store";
 
+/** Options for useResource. */
 export interface UseResourceOptions {
   /** Freshness window (ms). Defaults to no TTL (always considered stale). */
   ttlMs?: number;
@@ -35,6 +36,7 @@ export interface UseResourceOptions {
   store?: ResourceStore;
 }
 
+/** Return value of useResource: the ResourceEntry fields plus helpers. */
 export interface UseResourceResult<T> extends ResourceEntry<T> {
   /** Force a superseding refetch (bypasses TTL, aborts any in-flight request). */
   refetch: () => Promise<void>;
@@ -42,6 +44,11 @@ export interface UseResourceResult<T> extends ResourceEntry<T> {
   isInitialLoading: boolean;
 }
 
+/**
+ * Entry point to the TUI read pipeline. Subscribes to a ResourceStore key via
+ * useSyncExternalStore and kicks off a fetch on mount / key change. The fetcher
+ * is NOT in the effect deps — change `key` to refetch with different inputs.
+ */
 export function useResource<T>(
   key: string,
   fetcher: Fetcher<T>,

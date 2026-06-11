@@ -8,12 +8,14 @@ import { Box, Text, useInput } from "ink";
 import { Modal } from "./Modal";
 import { THEME } from "../theme";
 
+/** Props for ConfirmModal. `onResult` receives true on y/Y/Enter, false on n/N/Esc. */
 export interface ConfirmModalProps {
   title?: string;
   message: string;
   onResult: (confirmed: boolean) => void;
 }
 
+/** Yes/no confirmation modal. Resolves true on confirm, false on cancel. */
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   title = "Confirm Action",
   message,

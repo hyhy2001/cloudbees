@@ -8,8 +8,10 @@ import { Box, Text } from "ink";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
 
+/** Severity level of a toast notification, mapped to an icon and color. */
 export type ToastLevel = "info" | "success" | "error" | "warning";
 
+/** A single toast notification with a stable numeric id for keying. */
 export interface ToastMessage {
   id: number;
   text: string;
@@ -30,6 +32,7 @@ const LEVEL_ICON: Record<ToastLevel, string> = {
   warning: SYM.warn,
 };
 
+/** Renders a single transient notification line; renders nothing when message is null. */
 export const Toast: React.FC<{ message: ToastMessage | null }> = ({ message }) => {
   if (!message) return null;
   return (
