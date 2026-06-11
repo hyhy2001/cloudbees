@@ -509,6 +509,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           <SearchBar state={search} />
           <DataTable
             columns={[
+              { header: "", width: 2 },
               { header: "Status", width: 12 },
               { header: "T", width: 3 },
               { header: "Name", width: 42 },
@@ -518,7 +519,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             rows={jobs.map((j) => {
               const st = statusCell(j.color);
               const tp = typeLabel(j.jobType);
+              const mine = trackedNames.has(j.name);
               return [
+                { text: mine ? SYM.tracked : "", color: THEME.success },
                 { text: st.text, color: st.color, dim: st.dim },
                 { text: tp.text, color: tp.color, dim: (tp as { dim?: boolean }).dim },
                 { text: j.name.slice(0, 42) },

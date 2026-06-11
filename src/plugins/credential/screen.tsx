@@ -304,6 +304,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           <SearchBar state={search} />
           <DataTable
             columns={[
+              { header: "", width: 2 },
               { header: "ID", width: 28 },
               { header: "Type", width: 22 },
               { header: "Scope", width: 10 },
@@ -311,7 +312,9 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             ]}
             rows={credentials.map((c) => {
               const isDeleted = c.typeName === "[DELETED_ON_SERVER]";
+              const mine = trackedIds.has(c.id);
               return [
+                { text: mine ? SYM.tracked : "", color: THEME.success },
                 { text: c.id.slice(0, 28) },
                 {
                   text: isDeleted ? "[DELETED_ON_SERVER]" : c.typeName.slice(0, 22),

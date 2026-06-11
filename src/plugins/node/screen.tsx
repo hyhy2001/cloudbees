@@ -307,6 +307,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           <SearchBar state={search} />
           <DataTable
             columns={[
+              { header: "", width: 2 },
               { header: "Status", width: 10 },
               { header: "Name", width: 36 },
               { header: "Exec", width: 6 },
@@ -315,6 +316,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             ]}
             rows={nodes.map((n) => {
               const isDeleted = n.labels === "[DELETED_ON_SERVER]";
+              const mine = trackedNames.has(n.name);
               const statusText = isDeleted
                 ? "[DEL]"
                 : n.offline
@@ -326,6 +328,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 ? THEME.warning
                 : THEME.success;
               return [
+                { text: mine ? SYM.tracked : "", color: THEME.success },
                 { text: statusText, color: statusColor },
                 { text: n.name.slice(0, 36) },
                 { text: isDeleted ? "-" : String(n.numExecutors) },

@@ -37,6 +37,7 @@ export interface Symbols {
   online: string;
   offline: string;
   selected: string;
+  tracked: string;
   spinnerFrames: string[];
 }
 
@@ -58,6 +59,7 @@ const UNICODE_SYMBOLS: Symbols = {
   online: "◉",
   offline: "◌",
   selected: "▶",
+  tracked: "★",
   spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
 };
 
@@ -79,6 +81,7 @@ const ASCII_SYMBOLS: Symbols = {
   online: "[O]",
   offline: "[ ]",
   selected: ">",
+  tracked: "*",
   spinnerFrames: ["[ |  ]", "[ /  ]", "[ -- ]", "[ \\  ]"],
 };
 
