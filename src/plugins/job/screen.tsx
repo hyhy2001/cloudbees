@@ -40,6 +40,8 @@ import {
   updateJobFreestyle,
 } from "./service";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
+import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
+import { listNodes } from "../node/service";
 
 const PROFILE = "default";
 
@@ -236,6 +238,21 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     return new Set(getTrackedResources("job", PROFILE, baseUrl, ctx.dbPath));
   }, [baseUrl, ctx.dbPath, allJobs]);
 
+  // Mine nodes → dropdown options for the job's Node/Label field. "(none)" maps
+  // to "run anywhere" (no assignedNode). Fetched in the background once ready.
+  const trackedNodeNames = useMemo(() => {
+    if (!baseUrl) return new Set<string>();
+    return new Set(getTrackedResources("node", PROFILE, baseUrl, ctx.dbPath));
+  }, [baseUrl, ctx.dbPath]);
+  const nodeOptions = useMineOptions({
+    enabled: ctx.loggedIn && baseUrl !== null,
+    fetch: async () => {
+      const client = await ctx.getClient({ useController: true });
+      return (await listNodes(client)).map((n) => n.name);
+    },
+    tracked: trackedNodeNames,
+  });
+
   // ── View pipeline: Mine/All filter + synthetic deleted rows (client-side) ──
   const scoped = useMemo(() => {
     const all = allJobs ?? [];
@@ -383,7 +400,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             { name: "desc", label: "Description" },
             { name: "shell_cmd", label: "Shell Command", placeholder: "freestyle only" },
             { name: "chdir", label: "Working Dir", placeholder: "cd <dir> && before command" },
-            { name: "node", label: "Node/Label", placeholder: "blank = run anywhere" },
+            { name: "node", label: "Node/Label", options: nodeOptions, initial: NONE_OPTION },
             { name: "schedule", label: "Schedule (cron)" },
             { name: "email", label: "Email" },
             { name: "email_cond", label: "Email Condition", options: ["failed", "success", "always"], initial: "failed" },
@@ -410,7 +427,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           result.desc ?? "",
           result.shell_cmd || "echo hello",
           result.chdir || null,
-          result.node || null,
+          result.node && result.node !== NONE_OPTION ? result.node : null,
           result.schedule || null,
           result.email || null,
           result.email_cond || "failed",
@@ -442,7 +459,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             fields={[
               { name: "desc", label: "Description", initial: job.description ?? "" },
               { name: "shell_cmd", label: "Shell Command", placeholder: "leave blank = unchanged" },
-              { name: "node", label: "Node/Label", placeholder: "leave blank = unchanged" },
+              { name: "node", label: "Node/Label", options: nodeOptions, initial: NONE_OPTION },
               { name: "schedule", label: "Schedule (cron)", initial: val("schedule") },
               { name: "email", label: "Email", initial: val("email") },
               {
@@ -471,7 +488,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           job.name,
           result.desc ?? null,
           result.shell_cmd || null,
-          result.node || null,
+          result.node && result.node !== NONE_OPTION ? result.node : null,
           result.schedule || null,
           result.email || null,
           result.email_cond || null,

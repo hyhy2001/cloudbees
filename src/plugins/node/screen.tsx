@@ -32,7 +32,10 @@ import {
   updateNode,
   deleteNode,
   toggleOffline,
+  parseNodeConfig,
 } from "./service";
+import { listCredentials } from "../credential/service";
+import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
 import {
   getTrackedResources,
   trackResource,
@@ -98,6 +101,23 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     return new Set(getTrackedResources("node", PROFILE, baseUrl, ctx.dbPath));
   }, [baseUrl, ctx.dbPath, allNodes]);
 
+  // Tracked credential IDs (system store) — for the SSH credential dropdown.
+  const trackedCreds = useMemo(() => {
+    if (!baseUrl) return new Set<string>();
+    return new Set(getTrackedResources("credential", PROFILE, `${baseUrl}.system`, ctx.dbPath));
+  }, [baseUrl, ctx.dbPath]);
+
+  // Credential picker options (Mine credentials in the system store), prefetched.
+  const credentialOptions = useMineOptions({
+    enabled: ctx.loggedIn && baseUrl !== null,
+    fetch: async () => {
+      const client = await ctx.getClient({ useController: true });
+      const creds = await listCredentials(client, ctx.username, "system");
+      return creds.map((c) => c.id);
+    },
+    tracked: trackedCreds,
+  });
+
   // ── View pipeline: Mine/All filter + synthetic deleted rows (client-side) ──
   const scoped = useMemo(() => {
     const all = allNodes ?? [];
@@ -154,8 +174,11 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             { name: "desc", label: "Description" },
             { name: "host", label: "SSH Host", placeholder: "blank = JNLP launcher" },
             { name: "port", label: "SSH Port", placeholder: "SSH only (default 22)" },
-            { name: "credentialsId", label: "SSH Cred ID", placeholder: "SSH only — required to connect" },
+            { name: "credentialsId", label: "SSH Credential", options: credentialOptions },
             { name: "javaPath", label: "Java Path", placeholder: "SSH only (blank = default)" },
+            { name: "availability", label: "Availability", options: ["always", "demand"], initial: "always" },
+            { name: "inDemandDelay", label: "In-demand Delay", initial: "0" },
+            { name: "idleDelay", label: "Idle Delay", initial: "1" },
           ]}
           onResult={resolve}
         />
@@ -164,6 +187,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     if (!result || !result.name || !result.remoteDir) return;
     try {
       const client = await ctx.getClient({ useController: true });
+      const credId = result.credentialsId === NONE_OPTION ? "" : result.credentialsId;
       await createPermanentNode(client, {
         name: result.name,
         remoteDir: result.remoteDir,
@@ -172,8 +196,11 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         desc: result.desc ?? "",
         host: result.host ?? "",
         port: result.port ? parseInt(result.port, 10) : undefined,
-        credentialsId: result.credentialsId || undefined,
+        credentialsId: credId || undefined,
         javaPath: result.javaPath || undefined,
+        availability: result.availability === "demand" ? "demand" : "always",
+        inDemandDelay: result.inDemandDelay ? parseInt(result.inDemandDelay, 10) : undefined,
+        idleDelay: result.idleDelay ? parseInt(result.idleDelay, 10) : undefined,
       });
       trackResource("node", result.name, PROFILE, client.baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Created node: ${result.name}`, "success");
@@ -181,7 +208,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
     }
-  }, [ctx, refetch]);
+  }, [ctx, refetch, credentialOptions]);
 
   const removeNode = useCallback(
     async (name: string) => {
@@ -236,6 +263,10 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Edit = partial update of an existing node's config. The list DTO lacks
   // remoteDir, so fetch full detail first to prefill it. Fields are prefilled
   // from detail; updateNode does a partial update.
+  // Edit = full partial update. Fetch detail + parse the launcher/availability
+  // subtrees out of config.xml so every field is prefilled with the real value.
+  // Credential is a dropdown of Mine credentials; launcher + availability are
+  // cyclers; SSH/Demand sub-fields are always shown (ignored when not applicable).
   const editNode = useCallback(
     async (node: NodeDTO) => {
       const client = await ctx.getClient({ useController: true });
@@ -246,6 +277,13 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
         return;
       }
+      const cfg = parseNodeConfig(detail.configXml ?? "");
+      // Prefill the credential cycler: put the current cred id first so it shows
+      // as the initial value even if it isn't in the Mine list.
+      const credInitial = cfg.credentialsId || NONE_OPTION;
+      const credChoices = credentialOptions.includes(credInitial)
+        ? credentialOptions
+        : [credInitial, ...credentialOptions];
       const result = await ctx.openModal<Record<string, string>>({
         id: "edit-node",
         render: (resolve) => (
@@ -256,6 +294,14 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               { name: "numExecutors", label: "Executors", initial: String(detail.numExecutors ?? 1) },
               { name: "labels", label: "Labels", initial: detail.labels ?? "" },
               { name: "desc", label: "Description", initial: detail.description ?? "" },
+              { name: "launcher", label: "Launch method", options: ["ssh", "jnlp"], initial: cfg.launcherType },
+              { name: "host", label: "SSH Host", initial: cfg.host },
+              { name: "port", label: "SSH Port", initial: String(cfg.port) },
+              { name: "credentialsId", label: "SSH Credential", options: credChoices, initial: credInitial },
+              { name: "javaPath", label: "Java Path", initial: cfg.javaPath },
+              { name: "availability", label: "Availability", options: ["always", "demand"], initial: cfg.availability },
+              { name: "inDemandDelay", label: "In-demand Delay", initial: String(cfg.inDemandDelay) },
+              { name: "idleDelay", label: "Idle Delay", initial: String(cfg.idleDelay) },
             ]}
             onResult={resolve}
           />
@@ -263,11 +309,21 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       });
       if (!result) return;
       try {
+        const launcherType = result.launcher === "jnlp" ? "jnlp" : "ssh";
+        const credId = result.credentialsId === NONE_OPTION ? "" : result.credentialsId;
         await updateNode(client, node.name, {
           remoteDir: result.remoteDir,
           numExecutors: result.numExecutors ? parseInt(result.numExecutors, 10) : undefined,
           labels: result.labels,
           desc: result.desc,
+          launcherType,
+          host: result.host,
+          port: result.port ? parseInt(result.port, 10) : undefined,
+          credentialsId: credId,
+          javaPath: result.javaPath,
+          availability: result.availability === "demand" ? "demand" : "always",
+          inDemandDelay: result.inDemandDelay ? parseInt(result.inDemandDelay, 10) : undefined,
+          idleDelay: result.idleDelay ? parseInt(result.idleDelay, 10) : undefined,
         });
         ctx.notify(`${SYM.ok} Updated node: ${node.name}`, "success");
         void refetch();
@@ -275,7 +331,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
       }
     },
-    [ctx, refetch],
+    [ctx, refetch, credentialOptions],
   );
 
   // Import = track an existing server node into Mine (for nodes created outside bee).
