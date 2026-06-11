@@ -379,9 +379,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           title={`${SYM.gear} Create New Job`}
           fields={[
             { name: "name", label: "Job Name", required: true },
-            { name: "job_type", label: "Type (freestyle/folder)", initial: "freestyle" },
+            { name: "job_type", label: "Type", options: ["freestyle", "folder"], initial: "freestyle" },
             { name: "desc", label: "Description" },
-            { name: "shell_cmd", label: "Shell Command (freestyle)" },
+            { name: "shell_cmd", label: "Shell Command", placeholder: "freestyle only" },
+            { name: "chdir", label: "Working Dir", placeholder: "cd <dir> && before command" },
+            { name: "node", label: "Node/Label", placeholder: "blank = run anywhere" },
+            { name: "schedule", label: "Schedule (cron)" },
+            { name: "email", label: "Email" },
+            { name: "email_cond", label: "Email Condition", options: ["failed", "success", "always"], initial: "failed" },
+            { name: "email_keywords", label: "Email Keywords", placeholder: "comma-separated" },
+            { name: "email_regex", label: "Email Regex" },
           ]}
           onResult={resolve}
         />
@@ -394,11 +401,21 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       if (jobType === "folder") {
         await createFolder(client, result.name, result.desc ?? "");
       } else {
+        const keywords = result.email_keywords
+          ? result.email_keywords.split(",").map((k) => k.trim()).filter(Boolean)
+          : null;
         await createFreestyleJob(
           client,
           result.name,
           result.desc ?? "",
           result.shell_cmd || "echo hello",
+          result.chdir || null,
+          result.node || null,
+          result.schedule || null,
+          result.email || null,
+          result.email_cond || "failed",
+          keywords,
+          result.email_regex || null,
         );
       }
       trackResource("job", result.name, PROFILE, client.baseUrl, ctx.dbPath);
@@ -416,6 +433,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const editJob = useCallback(
     async (job: JobDTO) => {
       const s = summary ?? {};
+      const val = (k: string) => (s[k] && s[k] !== "-" ? s[k]! : "");
       const result = await ctx.openModal<Record<string, string>>({
         id: "edit-job",
         render: (resolve) => (
@@ -424,14 +442,19 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             fields={[
               { name: "desc", label: "Description", initial: job.description ?? "" },
               { name: "shell_cmd", label: "Shell Command", placeholder: "leave blank = unchanged" },
-              { name: "schedule", label: "Schedule (cron)", initial: s.schedule && s.schedule !== "-" ? s.schedule : "" },
-              { name: "email", label: "Email", initial: s.email && s.email !== "-" ? s.email : "" },
+              { name: "node", label: "Node/Label", placeholder: "leave blank = unchanged" },
+              { name: "schedule", label: "Schedule (cron)", initial: val("schedule") },
+              { name: "email", label: "Email", initial: val("email") },
               {
                 name: "email_cond",
                 label: "Email Condition",
                 options: ["failed", "success", "always"],
-                initial: s.email_cond && s.email_cond !== "-" ? s.email_cond : "failed",
+                initial: val("email_cond") || "failed",
               },
+              { name: "email_keywords", label: "Email Keywords", placeholder: "comma-separated", initial: val("email_keywords") },
+              { name: "email_regex", label: "Email Regex", initial: val("email_regex") },
+              { name: "clear_keywords", label: "Clear Keywords", options: ["no", "yes"], initial: "no" },
+              { name: "clear_regex", label: "Clear Regex", options: ["no", "yes"], initial: "no" },
             ]}
             onResult={resolve}
           />
@@ -440,15 +463,22 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       if (!result) return;
       try {
         const client = await ctx.getClient({ useController: true });
+        const keywords = result.email_keywords
+          ? result.email_keywords.split(",").map((k) => k.trim()).filter(Boolean)
+          : null;
         await updateJobFreestyle(
           client,
           job.name,
           result.desc ?? null,
           result.shell_cmd || null,
-          null,
+          result.node || null,
           result.schedule || null,
           result.email || null,
           result.email_cond || null,
+          keywords,
+          result.email_regex || null,
+          result.clear_keywords === "yes",
+          result.clear_regex === "yes",
         );
         ctx.notify(`${SYM.ok} Updated: ${job.name}`, "success");
         void refetch();
