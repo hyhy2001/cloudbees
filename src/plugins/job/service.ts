@@ -9,35 +9,22 @@ import type { JobDTO, BuildDTO } from "../../core/dtos/index";
 import {
   buildFreestyleXml,
   buildFolderXml,
-  buildEmailPublisherBlock,
   buildParametersProperty,
   extractPresendScriptFromXml,
+} from "./xml-builder";
+import {
+  buildEmailPublisherBlock,
   parseEmailFilterMetadata,
   normalizeKeywords,
-} from "./xml-builder";
+  normalizeRegex,
+  validateRegex,
+} from "../../domain/email";
+import { escapeXml } from "../../domain/xml";
+import { buildTimerTriggerBlock } from "../../domain/schedule";
 import type { JobConfigSummary, StringParamDef } from "./types";
 import { XMLParser } from "fast-xml-parser";
 
 const _JOB_TREE = "jobs[_class,name,url,color,description,buildable,lastBuild[number,result,url]]";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function normalizeRegex(emailRegex: string | null | undefined): string | null {
-  if (emailRegex == null) return null;
-  const val = String(emailRegex).trim();
-  return val || null;
-}
-
-function validateRegex(emailRegex: string | null | undefined): void {
-  if (!emailRegex) return;
-  try {
-    new RegExp(emailRegex);
-  } catch (e) {
-    throw new Error(`Invalid --email-regex: ${e instanceof Error ? e.message : String(e)}`);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // List / Get
@@ -528,15 +515,6 @@ export async function updateJobFreestyle(
     return xml.replace("</project>", `  <${tag}>${escapeXml(newValue)}</${tag}>\n</project>`);
   }
 
-  function escapeXml(s: string): string {
-    return s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&apos;");
-  }
-
   // 1. description
   if (desc != null) {
     updated = replaceTextElement(updated, "description", desc);
@@ -593,7 +571,7 @@ export async function updateJobFreestyle(
       "",
     );
     if (schedule) {
-      const timerBlock = `    <hudson.triggers.TimerTrigger>\n      <spec>${escapeXml(schedule)}</spec>\n    </hudson.triggers.TimerTrigger>`;
+      const timerBlock = buildTimerTriggerBlock(schedule, "    ");
       if (/<triggers>/.test(updated)) {
         updated = updated.replace(/(<triggers>)/, `$1\n${timerBlock}`);
       } else {

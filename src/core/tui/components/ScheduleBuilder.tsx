@@ -7,7 +7,7 @@
  *   on the Custom row, type the raw cron · Enter save · Esc cancel
  *
  * Returns the composed cron string ("" for "off"). The cron build/parse logic
- * is the pure helpers in data/cron-schedule.ts; this is the interactive shell.
+ * is the pure helpers in domain/schedule; this is the interactive shell.
  */
 
 import React, { useEffect, useState } from "react";
@@ -24,7 +24,7 @@ import {
   type ScheduleSpec,
   type Frequency,
   type DayPreset,
-} from "../data/cron-schedule";
+} from "../../../domain/schedule";
 
 export interface ScheduleBuilderProps {
   /** Starting spec (parse an existing job's cron with parseCron, or DEFAULT_SCHEDULE). */

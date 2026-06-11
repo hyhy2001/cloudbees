@@ -46,7 +46,7 @@ import { getScopeShowAll, setScopeShowAll } from "../../core/db/repositories/sco
 import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
 import { listNodes } from "../node/service";
 import { ScheduleBuilder } from "../../core/tui/components/ScheduleBuilder";
-import { parseCron } from "../../core/tui/data/cron-schedule";
+import { parseCron } from "../../domain/schedule";
 
 // ─── Status + type rendering (port of _status_markup / _type_label) ─────────
 

@@ -1,19 +1,20 @@
 /**
- * Pure cron-schedule helpers for the ScheduleBuilder overlay.
+ * Schedule domain logic — the cron model behind the TUI ScheduleBuilder plus the
+ * Jenkins `<hudson.triggers.TimerTrigger>` XML build/parse for a job's config.
  *
- *   ScheduleBuilder (overlay) ── pick frequency/time/day ──► cron string
- *                                        ▲
- *                                these pure functions
+ * A leaf module (domain/ never imports core/ or plugins/), so both the TUI
+ * (ScheduleBuilder) and the job plugin (config.xml build/patch) share one copy.
  *
- * Kept React-free so cron build/parse unit-test without a TTY (same pattern as
- * param-list / log-buffer). The builder edits a ScheduleSpec and calls buildCron
- * to produce the `<spec>` written to the job's TimerTrigger; parseCron prefills
- * the builder from an existing job's cron.
+ * Two layers live here:
+ *   1. ScheduleSpec ⇄ cron string — the friendly frequency/time/day model the
+ *      builder edits, with parseCron falling back to `custom` for anything the
+ *      simple model can't represent (Jenkins H, step values, non-* month).
+ *   2. cron string ⇄ TimerTrigger XML — the `<spec>` block written into a job.
  *
  * Cron layout: "minute hour day-of-month month day-of-week".
- * We model the common cases (off / hourly / daily / weekly / monthly) with
- * explicit minute+hour for predictability; anything else round-trips as `custom`.
  */
+
+import { escapeXml } from "./xml";
 
 export type Frequency = "off" | "hourly" | "daily" | "weekly" | "monthly" | "custom";
 
@@ -197,4 +198,24 @@ export function describeSchedule(spec: ScheduleSpec): string {
     case "monthly":
       return `Day ${spec.dom} of every month at ${at}.`;
   }
+}
+
+// ---------------------------------------------------------------------------
+// TimerTrigger XML — the <hudson.triggers.TimerTrigger> block in a job config
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the TimerTrigger XML block for a cron spec, or "" when there is no
+ * schedule. `indent` is the leading whitespace for the outer tag (default 4
+ * spaces, matching a freestyle job's `<triggers>` body).
+ */
+export function buildTimerTriggerBlock(schedule: string | null | undefined, indent = "    "): string {
+  const spec = (schedule ?? "").trim();
+  if (!spec) return "";
+  const i2 = indent + "  ";
+  return [
+    `${indent}<hudson.triggers.TimerTrigger>`,
+    `${i2}<spec>${escapeXml(spec)}</spec>`,
+    `${indent}</hudson.triggers.TimerTrigger>`,
+  ].join("\n");
 }

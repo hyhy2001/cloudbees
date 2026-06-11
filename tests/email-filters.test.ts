@@ -12,7 +12,8 @@
 
 import { test, expect, describe } from "bun:test";
 import { XMLParser } from "fast-xml-parser";
-import { buildFreestyleXml, parseEmailFilterMetadata } from "../src/plugins/job/xml-builder";
+import { buildFreestyleXml } from "../src/plugins/job/xml-builder";
+import { parseEmailFilterMetadata } from "../src/domain/email";
 import { createFreestyleJob, updateJobFreestyle } from "../src/plugins/job/service";
 import type { CloudBeesClient } from "../src/core/api/types";
 

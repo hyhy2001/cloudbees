@@ -10,7 +10,7 @@ import {
   describeSchedule,
   DEFAULT_SCHEDULE,
   type ScheduleSpec,
-} from "../src/core/tui/data/cron-schedule";
+} from "../src/domain/schedule";
 
 describe("buildCron", () => {
   test("off → empty string", () => {

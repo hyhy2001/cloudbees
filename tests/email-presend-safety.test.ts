@@ -14,7 +14,7 @@ import { describe, test, expect } from "bun:test";
 import {
   groovyDoubleQuoted,
   buildEmailFilterPresendScript,
-} from "../src/plugins/job/xml-builder";
+} from "../src/domain/email";
 
 describe("groovyDoubleQuoted", () => {
   test("escapes backslash, double-quote, and dollar", () => {
@@ -30,7 +30,7 @@ describe("groovyDoubleQuoted", () => {
     // JSON comment (which legitimately carries the raw keyword and is inert).
     const kwLine = script
       .split("\n")
-      .find((l) => l.startsWith("def _bee_keywords ="))!;
+      .find((l: string) => l.startsWith("def _bee_keywords ="))!;
     expect(kwLine).not.toContain('"${cancel = true}"');
     expect(kwLine).toContain('"\\${cancel = true}"');
   });

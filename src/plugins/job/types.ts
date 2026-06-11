@@ -23,14 +23,6 @@ export interface JobConfigSummary {
   node: string;
 }
 
-/** Parsed email-filter metadata stored in the presendScript marker line. */
-export interface EmailFilterMeta {
-  version: number;
-  keywords: string[];
-  regex: string | null;
-  case_sensitive: boolean;
-}
-
 /** A single String build-parameter definition on a job. */
 export interface StringParamDef {
   name: string;
