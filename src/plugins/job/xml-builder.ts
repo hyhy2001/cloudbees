@@ -7,7 +7,7 @@
  */
 
 import { XMLParser } from "fast-xml-parser";
-import type { EmailFilterMeta } from "./types";
+import type { EmailFilterMeta, StringParamDef } from "./types";
 
 const EMAIL_FILTER_META_PREFIX = "BEE_EMAIL_FILTER_META:";
 const EMAIL_FILTER_VERSION = 1;
@@ -273,6 +273,43 @@ export function buildEmailPublisherBlock(
 }
 
 /**
+ * Build the `<properties>` block for a job. When `params` is empty, returns the
+ * self-closing `<properties/>` (matches the legacy default). Otherwise emits a
+ * `ParametersDefinitionProperty` holding one `StringParameterDefinition` per
+ * param. `indent` is the leading whitespace for the `<properties>` tag.
+ */
+export function buildParametersProperty(
+  params: StringParamDef[] | null | undefined,
+  indent = "  ",
+): string {
+  if (!params || params.length === 0) return `${indent}<properties/>`;
+
+  const i2 = `${indent}  `;
+  const i3 = `${indent}    `;
+  const i4 = `${indent}      `;
+
+  const lines: string[] = [
+    `${indent}<properties>`,
+    `${i2}<hudson.model.ParametersDefinitionProperty>`,
+    `${i3}<parameterDefinitions>`,
+  ];
+
+  for (const p of params) {
+    lines.push(`${i4}<hudson.model.StringParameterDefinition>`);
+    lines.push(`${i4}  <name>${escape(p.name)}</name>`);
+    lines.push(`${i4}  <description>${escape(p.description ?? "")}</description>`);
+    lines.push(`${i4}  <defaultValue>${escape(p.defaultValue ?? "")}</defaultValue>`);
+    lines.push(`${i4}  <trim>false</trim>`);
+    lines.push(`${i4}</hudson.model.StringParameterDefinition>`);
+  }
+
+  lines.push(`${i3}</parameterDefinitions>`);
+  lines.push(`${i2}</hudson.model.ParametersDefinitionProperty>`);
+  lines.push(`${indent}</properties>`);
+  return lines.join("\n");
+}
+
+/**
  * Build a Freestyle project config.xml.
  * Mirrors Python build_freestyle_xml() exactly.
  */
@@ -286,6 +323,7 @@ export function buildFreestyleXml(opts: {
   emailCond?: string;
   emailKeywords?: string[] | null;
   emailRegex?: string | null;
+  params?: StringParamDef[] | null;
 }): string {
   const {
     desc = "",
@@ -297,6 +335,7 @@ export function buildFreestyleXml(opts: {
     emailCond = "failed",
     emailKeywords = null,
     emailRegex = null,
+    params = null,
   } = opts;
 
   const finalCmd = chdir ? `cd ${chdir} && ${shellCmd}` : shellCmd;
@@ -307,7 +346,7 @@ export function buildFreestyleXml(opts: {
     "<project>",
     `  <description>${escape(desc)}</description>`,
     "  <keepDependencies>false</keepDependencies>",
-    "  <properties/>",
+    buildParametersProperty(params, "  "),
     '  <scm class="hudson.scm.NullSCM"/>',
     `  <canRoam>${canRoam}</canRoam>`,
   ];

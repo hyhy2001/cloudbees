@@ -19,6 +19,13 @@ export interface EmailFilterMeta {
   case_sensitive: boolean;
 }
 
+/** A single String build-parameter definition on a job. */
+export interface StringParamDef {
+  name: string;
+  defaultValue?: string;
+  description?: string;
+}
+
 /** Options for buildFreestyleXml. */
 export interface FreestyleXmlOpts {
   desc?: string;
@@ -30,4 +37,5 @@ export interface FreestyleXmlOpts {
   emailCond?: string;
   emailKeywords?: string[] | null;
   emailRegex?: string | null;
+  params?: StringParamDef[] | null;
 }

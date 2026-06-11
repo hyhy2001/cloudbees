@@ -10,11 +10,12 @@ import {
   buildFreestyleXml,
   buildFolderXml,
   buildEmailPublisherBlock,
+  buildParametersProperty,
   extractPresendScriptFromXml,
   parseEmailFilterMetadata,
   normalizeKeywords,
 } from "./xml-builder";
-import type { JobConfigSummary } from "./types";
+import type { JobConfigSummary, StringParamDef } from "./types";
 import { XMLParser } from "fast-xml-parser";
 
 const _JOB_TREE = "jobs[_class,name,url,color,description,buildable,lastBuild[number,result,url]]";
@@ -294,6 +295,7 @@ export async function createFreestyleJob(
   emailCond = "failed",
   emailKeywords: string[] | null = null,
   emailRegex: string | null = null,
+  params: StringParamDef[] | null = null,
 ): Promise<void> {
   const keywords = normalizeKeywords(emailKeywords);
   const regex = normalizeRegex(emailRegex);
@@ -311,6 +313,7 @@ export async function createFreestyleJob(
     emailCond,
     emailKeywords: keywords,
     emailRegex: regex,
+    params: params ?? undefined,
   });
   await client.postXml(`/createItem?name=${encodeURIComponent(name)}`, xml, {
     invalidate: "jobs.",
@@ -475,6 +478,8 @@ export async function updateJobFreestyle(
   emailRegex?: string | null,
   clearEmailKeywords = false,
   clearEmailRegex = false,
+  params?: StringParamDef[] | null,
+  clearParams = false,
 ): Promise<void> {
   const xmlStr = await client.getText(`/job/${name}/config.xml`);
 
@@ -662,6 +667,27 @@ export async function updateJobFreestyle(
       if (emailCond != null) {
         throw new Error("Email condition requires recipient email. Provide --email.");
       }
+    }
+  }
+
+  // 6. String parameters — swap the <properties> block. `clearParams` removes
+  // them (back to <properties/>); a non-empty `params` replaces them.
+  if (clearParams || (params != null && params.length > 0)) {
+    const block = clearParams
+      ? "  <properties/>"
+      : buildParametersProperty(params ?? [], "  ");
+    if (/<properties\s*\/>/.test(updated)) {
+      updated = updated.replace(/<properties\s*\/>/, block.trimStart());
+    } else if (/<properties>/.test(updated)) {
+      updated = updated.replace(
+        /<properties>[\s\S]*?<\/properties>/,
+        block.trimStart(),
+      );
+    } else {
+      updated = updated.replace(
+        "</project>",
+        `${block}\n</project>`,
+      );
     }
   }
 
