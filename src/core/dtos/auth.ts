@@ -5,6 +5,7 @@
 
 import { pick } from "./base.js";
 
+/** A saved login profile (server URL + username), persisted in the local `profiles` table — not an API shape. */
 export interface ProfileDTO {
   id: number;
   name: string;

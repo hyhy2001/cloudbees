@@ -5,6 +5,7 @@
 
 import { str, arr } from "./base.js";
 
+/** Shape returned by `/me/api/json` and `/user/<id>/api/json`. */
 export interface UserDTO {
   id: string;
   fullName: string;
@@ -12,12 +13,14 @@ export interface UserDTO {
   url: string;
 }
 
+/** A CloudBees role/team with its member usernames. */
 export interface TeamDTO {
   name: string;
   description: string;
   members: string[];
 }
 
+/** Maps a raw user API entry to UserDTO. Note `absoluteUrl` → `url`. */
 export function userFromDict(data: Record<string, unknown>): UserDTO {
   return {
     id: str(data["id"]),
@@ -27,6 +30,7 @@ export function userFromDict(data: Record<string, unknown>): UserDTO {
   };
 }
 
+/** Maps a raw team API entry to TeamDTO; `members` defaults to an empty array. */
 export function teamFromDict(data: Record<string, unknown>): TeamDTO {
   return {
     name: str(data["name"]),

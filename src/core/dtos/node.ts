@@ -5,6 +5,7 @@
 
 import { str, num, bool, nested } from "./base.js";
 
+/** Shape returned by the agents list endpoint (`/computer/api/json` `computer[]` entries). */
 export interface NodeDTO {
   name: string;
   displayName: string;
@@ -14,12 +15,20 @@ export interface NodeDTO {
   description: string;
 }
 
+/**
+ * Extended node shape from `/computer/<name>/api/json` (single-agent detail).
+ * Adds `launcherType`, `remoteDir`, and `configXml` on top of NodeDTO.
+ */
 export interface NodeDetailDTO extends NodeDTO {
   launcherType: string;
   remoteDir: string;
   configXml: string;
 }
 
+/**
+ * Maps a raw agent list entry to NodeDTO.
+ * `assignedLabels[0].name` → `labels`; `displayName` falls back to `name` when blank.
+ */
 export function nodeFromDict(data: Record<string, unknown>): NodeDTO {
   const assignedLabels = data["assignedLabels"];
   let labels = "";
@@ -47,6 +56,10 @@ function classToLauncherType(launcherClass: string): string {
   return launcherClass.split(".").at(-1)!.toLowerCase();
 }
 
+/**
+ * Maps a raw single-agent detail response to NodeDetailDTO.
+ * `launcher._class` → normalized `launcherType` (jnlp/ssh/…); `remoteFS` → `remoteDir`.
+ */
 export function nodeDetailFromDict(data: Record<string, unknown>): NodeDetailDTO {
   const base = nodeFromDict(data);
   const launcher = data["launcher"];

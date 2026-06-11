@@ -5,6 +5,7 @@
 
 import { str, num, bool, nested, pick } from "./base.js";
 
+/** Shape returned by `/api/json` job list entries (e.g. `jobs[]` on a folder or root). */
 export interface JobDTO {
   id: string;
   name: string;
@@ -18,6 +19,7 @@ export interface JobDTO {
   jobType: string;
 }
 
+/** Shape returned by a build entry under `/job/<name>/<n>/api/json`. */
 export interface BuildDTO {
   number: number;
   result: string;
@@ -27,6 +29,7 @@ export interface BuildDTO {
   url: string;
 }
 
+/** Subset of job config fields returned by the job config API, used for update flows. */
 export interface JobConfigDTO {
   name: string;
   jobType: string;
@@ -48,6 +51,12 @@ function classToJobType(className: string): string {
   return className.split(".").at(-1)!.slice(0, 4);
 }
 
+/**
+ * Maps a raw API job entry to JobDTO.
+ * `_class` → `jobClass` and is also converted to a short `jobType` code (FS/PL/FD/MB).
+ * `lastBuild.number` / `lastBuild.url` are extracted from the nested `lastBuild` object;
+ * null when no build has run yet.
+ */
 export function jobFromDict(data: Record<string, unknown>): JobDTO {
   const className = str(data["_class"]);
   const lastBuild = data["lastBuild"];
@@ -74,6 +83,7 @@ export function jobFromDict(data: Record<string, unknown>): JobDTO {
   };
 }
 
+/** Maps a raw build API entry to BuildDTO. `result` is coerced to `""` when null (in-progress build). */
 export function buildFromDict(data: Record<string, unknown>): BuildDTO {
   return {
     number: num(data["number"], 0),
@@ -85,6 +95,7 @@ export function buildFromDict(data: Record<string, unknown>): BuildDTO {
   };
 }
 
+/** Maps a raw job config response to JobConfigDTO via pick() — fields must already be camelCase. */
 export function jobConfigFromDict(data: Record<string, unknown>): JobConfigDTO {
   return pick<JobConfigDTO>(data, {
     name: "",

@@ -5,6 +5,7 @@
 
 import { str } from "./base.js";
 
+/** Shape returned by a credential store's `credentials[]` entries. */
 export interface CredentialDTO {
   id: string;
   displayName: string;
@@ -13,6 +14,7 @@ export interface CredentialDTO {
   description: string;
 }
 
+/** Maps a raw credential API entry to CredentialDTO; `scope` defaults to `"GLOBAL"` when blank. */
 export function credentialFromDict(data: Record<string, unknown>): CredentialDTO {
   return {
     id: str(data["id"]),
