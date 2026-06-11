@@ -24,10 +24,19 @@ function escape(s: string): string {
 
 /**
  * Escape a string for use inside a Groovy double-quoted string literal.
- * Mirrors Python _groovy_double_quoted().
+ *
+ * Groovy double-quoted strings are GStrings: `$var` / `${expr}` interpolate at
+ * runtime. A user keyword/regex containing `$` (e.g. the regex end-anchor `$`,
+ * or a literal `"${cancel}"`) would otherwise be interpolated — at best throwing
+ * MissingPropertyException (which breaks the presend script and disrupts email),
+ * at worst executing an assignment. We escape `$` → `\$` so it stays a literal
+ * dollar character in the resulting string value (Groovy `"\$"` evaluates to `$`).
  */
 export function groovyDoubleQuoted(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\$/g, "\\$");
 }
 
 /**
@@ -126,8 +135,8 @@ export function buildEmailFilterPresendScript(
     "    def _bee_regex_expr = _bee_case_sensitive ? '(?s).*(' + _bee_regex + ').*' : '(?is).*(' + _bee_regex + ').*'",
     "    _bee_regex_match = (_bee_raw ==~ _bee_regex_expr)",
     "  } catch (Throwable _bee_regex_error) {",
-    "    logger.println('[bee] email regex invalid: ' + _bee_regex_error)",
-    "    cancel = true",
+    "    logger.println('[bee] email regex invalid, ignoring regex filter: ' + _bee_regex_error)",
+    "    _bee_regex_match = false",
     "  }",
     "}",
     "def _bee_has_keywords = !_bee_keywords.isEmpty()",

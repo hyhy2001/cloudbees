@@ -589,9 +589,16 @@ export async function updateJobFreestyle(
     const currentKeywords = normalizeKeywords(currentMeta?.keywords);
     const currentRegex = normalizeRegex(currentMeta?.regex);
 
-    // Extract current email recipient from XML
-    const emailMatch = updated.match(/<recipientList>([^<]*)<\/recipientList>/);
-    const currentEmail = emailMatch ? emailMatch[1].trim() : "";
+    // Extract current email recipient from XML. Scope the search to the
+    // ExtendedEmailPublisher block so we read its top-level <recipientList>
+    // (the actual recipient) and never an empty <recipientList></recipientList>
+    // nested inside a trigger's <email>, regardless of element ordering.
+    const publisherForEmail = updated.match(
+      /<hudson\.plugins\.emailext\.ExtendedEmailPublisher[\s\S]*?<\/hudson\.plugins\.emailext\.ExtendedEmailPublisher>/,
+    );
+    const emailSearchScope = publisherForEmail ? publisherForEmail[0] : updated;
+    const emailMatch = emailSearchScope.match(/<recipientList>([^<]*)<\/recipientList>/);
+    const currentEmail = emailMatch ? emailMatch[1]!.trim() : "";
 
     // Infer current condition from existing triggers
     const hasFailureTrigger =
