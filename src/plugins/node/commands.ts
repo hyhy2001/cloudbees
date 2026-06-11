@@ -197,6 +197,37 @@ export function registerNodeCommands(ctx: PluginContext): void {
       }
     });
 
+  // ── import ────────────────────────────────────────────────────────────────
+  grp
+    .command("import")
+    .argument("<name>")
+    .description("Track an existing server node as yours (adds it to your Mine list)")
+    .action(async (name: string) => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        try {
+          await getNode(client, name);
+        } catch (e) {
+          const msg = String(e instanceof Error ? e.message : e);
+          if (msg.includes("404")) {
+            printError(`Node '${name}' not found on server. Nothing to import.`);
+            process.exit(1);
+          }
+          throw e;
+        }
+        const tracked = getTrackedResources("node", profile, client.baseUrl, dbPath);
+        if (tracked.includes(name)) {
+          printInfo(`INFO Node '${name}' is already imported.`);
+          return;
+        }
+        trackResource("node", name, profile, client.baseUrl, dbPath);
+        printSuccess(`OK Imported node '${name}' into your Mine list.`);
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
   // ── delete ────────────────────────────────────────────────────────────────
   grp
     .command("delete")

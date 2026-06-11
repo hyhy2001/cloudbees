@@ -314,6 +314,32 @@ export function registerJobCommands(ctx: PluginContext): void {
       }
     });
 
+  // ── import ────────────────────────────────────────────────────────────────
+  grp
+    .command("import")
+    .description("Track an existing server job as yours (adds it to your Mine list)")
+    .argument("<name>", "Job name as it appears on the server")
+    .action(async (name: string) => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        const job = await getJob(client, name);
+        if (!job) {
+          printError(`Job '${name}' not found on server. Nothing to import.`);
+          process.exit(1);
+        }
+        const tracked = getTrackedResources("job", profile, client.baseUrl, dbPath);
+        if (tracked.includes(name)) {
+          printInfo(`INFO Job '${name}' is already imported.`);
+          return;
+        }
+        trackResource("job", name, profile, client.baseUrl, dbPath);
+        printSuccess(`OK Imported job '${name}' into your Mine list.`);
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
   // ── run ───────────────────────────────────────────────────────────────────
   grp
     .command("run")

@@ -5,7 +5,7 @@
 import readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import type { PluginContext } from "../../registry/types";
-import { printError, printSuccess, readHidden, tableFormatter } from "../../core/cli/output";
+import { printError, printSuccess, printInfo, readHidden, tableFormatter } from "../../core/cli/output";
 import { loadSession } from "../../core/session/index";
 import {
   getTrackedResources,
@@ -201,6 +201,41 @@ export function registerCredentialCommands(ctx: PluginContext): void {
         await deleteCredential(client, credId, sessionUsername(dbPath), opts.store);
         untrackResource("credential", credId, profile, client.baseUrl, dbPath);
         printSuccess(`OK Credential '${credId}' deleted from ${opts.store} store.`);
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
+  // ── import ──────────────────────────────────────────────────────────────────
+  grp
+    .command("import")
+    .argument("<cred_id>")
+    .option("--store <store>", "Credential store: 'system' or 'user'", "system")
+    .description("Track an existing server credential as yours (adds it to Mine)")
+    .action(async (credId: string, opts: { store: string }) => {
+      try {
+        validateStore(opts.store);
+        const client = await ctx.getClient({ useController: true });
+        // Verify the credential exists on the server before tracking it.
+        try {
+          await getCredential(client, credId, sessionUsername(dbPath), opts.store);
+        } catch (e) {
+          const msg = String(e instanceof Error ? e.message : e);
+          if (msg.includes("404")) {
+            printError(`Credential '${credId}' not found in ${opts.store} store.`, e);
+          } else {
+            printError(`Could not verify credential '${credId}': ${msg}`, e);
+          }
+          process.exit(1);
+        }
+        const tracked = getTrackedResources("credential", profile, client.baseUrl, dbPath);
+        if (tracked.includes(credId)) {
+          printInfo(`INFO Credential '${credId}' is already imported.`);
+          return;
+        }
+        trackResource("credential", credId, profile, client.baseUrl, dbPath);
+        printSuccess(`OK Imported '${credId}' into Mine.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
