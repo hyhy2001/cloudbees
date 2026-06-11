@@ -10,9 +10,10 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps } from "../../registry/types";
+import { useKeymap, bindingsToHints, type KeyBinding } from "../../core/tui/keymap";
 import { SYM, borderStyle } from "../../core/tui/symbols";
 import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
@@ -203,37 +204,21 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, store, refetch],
   );
 
-  // ── Key bindings ───────────────────────────────────────────────────────────
-  useInput(
-    (input, _key) => {
-      switch (input) {
-        case "c":
-          void createCred();
-          break;
-        case "d":
-          if (current && current.typeName !== "[DELETED_ON_SERVER]")
-            void removeCred(current.id);
-          break;
-        case "S":
-          // Store toggle is a server-side scope change — cache key changes,
-          // useResource will auto-fetch the new key on next render.
-          setStore((s) => (s === "system" ? "user" : "system"));
-          break;
-        case "a":
-          setShowAll((v) => !v);
-          break;
-        case "f":
-          setAutoRefresh((v) => !v);
-          break;
-        case "R":
-          void refetch();
-          break;
-        default:
-          break;
-      }
-    },
-    { isActive: active },
+  // ── Declarative keymap ────────────────────────────────────────────────────
+  const hasRow = current !== undefined && current.typeName !== "[DELETED_ON_SERVER]";
+  const bindings = useMemo<KeyBinding[]>(
+    () => [
+      { key: "c", label: "new", run: () => void createCred() },
+      { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeCred(current.id); } },
+      { key: "S", label: "store", run: () => setStore((s) => (s === "system" ? "user" : "system")) },
+      { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
+      { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
+      { key: "R", label: "refresh", run: () => void refetch() },
+    ],
+    [current, hasRow, createCred, removeCred, refetch],
   );
+  useKeymap(bindings, { isActive: active });
+  useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
 
   const scope = showAll ? (
     <Text color={THEME.yellow}>ALL</Text>
@@ -249,8 +234,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {/* Header */}
       <Text>
         {" "}
-        {SYM.gear} Credentials{"  "}
-        <Text color={THEME.dim}>c=new · d=del · S=store · a=mine/all · f=auto · R=refresh</Text>
+        {SYM.gear} Credentials
       </Text>
       <Text>
         {" "}
@@ -266,7 +250,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
-            {SYM.warn} Not logged in — press l
+            {SYM.warn} Not logged in — run: bee auth login
           </Text>
         </Box>
       ) : isInitialLoading ? (

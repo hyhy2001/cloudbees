@@ -5,10 +5,11 @@
  * No DataTable — just an info panel with key bindings.
  */
 
-import React, { useCallback } from "react";
-import { Box, Text, useInput } from "ink";
+import React, { useCallback, useEffect, useMemo } from "react";
+import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps } from "../../registry/types";
+import { useKeymap, bindingsToHints, type KeyBinding } from "../../core/tui/keymap";
 import { SYM, borderStyle } from "../../core/tui/symbols";
 import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
@@ -60,21 +61,15 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [ctx, refetch]);
 
-  useInput(
-    (input) => {
-      switch (input) {
-        case "c":
-          void doClearCache();
-          break;
-        case "R":
-          void refetch();
-          break;
-        default:
-          break;
-      }
-    },
-    { isActive: active },
+  const bindings = useMemo<KeyBinding[]>(
+    () => [
+      { key: "c", label: "clear cache", run: () => void doClearCache() },
+      { key: "R", label: "refresh", run: () => void refetch() },
+    ],
+    [doClearCache, refetch],
   );
+  useKeymap(bindings, { isActive: active });
+  useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
 
   const notLoggedIn = !ctx.loggedIn;
   const errMsg = error ? error.message : "";
@@ -84,8 +79,7 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {/* Header */}
       <Text>
         {" "}
-        {SYM.gear} Settings{"  "}
-        <Text color={THEME.dim}>c=clear cache · R=refresh</Text>
+        {SYM.gear} Settings
       </Text>
       <Text>
         {" "}

@@ -7,9 +7,10 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps } from "../../registry/types";
+import { useKeymap, bindingsToHints, type KeyBinding } from "../../core/tui/keymap";
 import { SYM, borderStyle } from "../../core/tui/symbols";
 import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
@@ -209,41 +210,21 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, refetch],
   );
 
-  // ── Key bindings ───────────────────────────────────────────────────────────
-  useInput(
-    (input, key) => {
-      if (key.return) {
-        // Enter → inline detail is sufficient for nodes (no separate log view).
-        return;
-      }
-      switch (input) {
-        case "n":
-          void createNode();
-          break;
-        case "d":
-          if (current && current.labels !== "[DELETED_ON_SERVER]") void removeNode(current.name);
-          break;
-        case "o":
-          if (current && current.labels !== "[DELETED_ON_SERVER]") void doToggleOffline(current);
-          break;
-        case "a":
-          setShowAll((v) => !v);
-          break;
-        case "f":
-          setAutoRefresh((v) => !v);
-          break;
-        case "R":
-          void refetch();
-          break;
-        case "l":
-          // l key: same as Enter — inline detail is shown; no-op here
-          break;
-        default:
-          break;
-      }
-    },
-    { isActive: active },
+  // ── Declarative keymap ────────────────────────────────────────────────────
+  const hasRow = current !== undefined && current.labels !== "[DELETED_ON_SERVER]";
+  const bindings = useMemo<KeyBinding[]>(
+    () => [
+      { key: "n", label: "new", run: () => void createNode() },
+      { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeNode(current.name); } },
+      { key: "o", label: "toggle offline", when: () => hasRow, run: () => { if (current) void doToggleOffline(current); } },
+      { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
+      { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
+      { key: "R", label: "refresh", run: () => void refetch() },
+    ],
+    [current, hasRow, createNode, removeNode, doToggleOffline, refetch],
   );
+  useKeymap(bindings, { isActive: active });
+  useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
 
   const scope = showAll ? (
     <Text color={THEME.yellow}>ALL</Text>
@@ -259,8 +240,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {/* Header */}
       <Text>
         {" "}
-        {SYM.online} Nodes{"  "}
-        <Text color={THEME.dim}>n=new · d=del · o=toggle offline · a=mine/all · f=auto · R=refresh</Text>
+        {SYM.online} Nodes
       </Text>
       <Text>
         {" "}
@@ -273,7 +253,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
-            {SYM.warn} Not logged in — press l
+            {SYM.warn} Not logged in — run: bee auth login
           </Text>
         </Box>
       ) : isInitialLoading ? (

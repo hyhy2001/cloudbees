@@ -6,10 +6,11 @@
  * controller list is fetched from the Operations Center, not a controller.
  */
 
-import React, { useCallback, useMemo, useState } from "react";
-import { Box, Text, useInput } from "ink";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps } from "../../registry/types";
+import { useKeymap, bindingsToHints, type KeyBinding } from "../../core/tui/keymap";
 import { SYM, borderStyle } from "../../core/tui/symbols";
 import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
@@ -77,29 +78,18 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, refetch],
   );
 
-  // ── Key bindings ───────────────────────────────────────────────────────────
-  useInput(
-    (input, key) => {
-      if (key.return) {
-        if (current) void doSelectController(current);
-        return;
-      }
-      switch (input) {
-        case "s":
-          if (current) void doSelectController(current);
-          break;
-        case "f":
-          setAutoRefresh((v) => !v);
-          break;
-        case "R":
-          void refetch();
-          break;
-        default:
-          break;
-      }
-    },
-    { isActive: active },
+  // ── Declarative keymap ────────────────────────────────────────────────────
+  const bindings = useMemo<KeyBinding[]>(
+    () => [
+      { key: "Enter", label: "select", when: () => current !== undefined, run: () => { if (current) void doSelectController(current); } },
+      { key: "s", label: "select", hidden: true, when: () => current !== undefined, run: () => { if (current) void doSelectController(current); } },
+      { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
+      { key: "R", label: "refresh", run: () => void refetch() },
+    ],
+    [current, doSelectController, refetch],
   );
+  useKeymap(bindings, { isActive: active });
+  useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
 
   const notLoggedIn = !ctx.loggedIn;
   const errMsg = error ? error.message : "";
@@ -116,8 +106,7 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {/* Header */}
       <Text>
         {" "}
-        {SYM.gear} Controllers{"  "}
-        <Text color={THEME.dim}>s/Enter=select · f=auto · R=refresh</Text>
+        {SYM.gear} Controllers
       </Text>
       <Text>
         {" "}
@@ -135,7 +124,7 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
-            {SYM.warn} Not logged in — press l
+            {SYM.warn} Not logged in — run: bee auth login
           </Text>
         </Box>
       ) : isInitialLoading ? (

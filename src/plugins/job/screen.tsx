@@ -9,7 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps, TuiContext } from "../../registry/types";
 import { SYM, borderStyle } from "../../core/tui/symbols";
@@ -18,6 +18,7 @@ import { Spinner } from "../../core/tui/components/Spinner";
 import { DataTable } from "../../core/tui/components/DataTable";
 import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
+import { useKeymap, bindingsToHints, type KeyBinding } from "../../core/tui/keymap";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
 import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
@@ -89,9 +90,21 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRef = useRef(false);
 
-  useInput((input, key) => {
-    if (key.escape || input === "q" || input === "b") onClose();
-  });
+  // This overlay owns input while open: tell the shell to suspend its global
+  // keys so `q`/`b`/`Esc` close the log instead of quitting the whole app.
+  useEffect(() => {
+    ctx.setInputCaptured(true);
+    return () => ctx.setInputCaptured(false);
+  }, [ctx]);
+
+  useKeymap(
+    [
+      { key: "q", label: "back", run: onClose },
+      { key: "b", label: "back", run: onClose, hidden: true },
+      { key: "Esc", label: "back", run: onClose, hidden: true },
+    ],
+    { isActive: true },
+  );
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -379,46 +392,31 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [ctx, refetch]);
 
-  // Tab-local key handling — gated on `active` and no overlay open.
-  useInput(
-    (input, key) => {
-      if (logJob) return; // log viewer owns input while open
-      if (key.return) {
-        // Detail is shown inline; Enter opens the log as the most useful action.
-        if (current) setLogJob(current.name);
-        return;
-      }
-      switch (input) {
-        case "a":
-          setShowAll((v) => !v); // pure client-side filter — no refetch
-          break;
-        case "f":
-          setAutoRefresh((v) => !v); // toggle opt-in background polling
-          break;
-        case "r":
-          if (current) void runJob(current.name);
-          break;
-        case "s":
-          if (current) void stopJob(current);
-          break;
-        case "l":
-          if (current) setLogJob(current.name);
-          break;
-        case "n":
-          void newJob();
-          break;
-        case "d":
-          if (current) void removeJob(current.name);
-          break;
-        case "R":
-          void refetch();
-          break;
-        default:
-          break;
-      }
-    },
-    { isActive: active && !logJob },
+  // Declarative keymap — the single source for both dispatch and footer hints.
+  // `F` (not `f`) toggles auto-refresh so it can't collide with the table's
+  // Ctrl+f paging.
+  const hasRow = current !== undefined && current.color !== "[DELETED_ON_SERVER]";
+  const bindings = useMemo<KeyBinding[]>(
+    () => [
+      { key: "Enter", label: "log", group: "action", when: () => current !== undefined, run: () => { if (current) setLogJob(current.name); } },
+      { key: "r", label: "run", when: () => hasRow, run: () => { if (current) void runJob(current.name); } },
+      { key: "s", label: "stop", when: () => hasRow, run: () => { if (current) void stopJob(current); } },
+      { key: "l", label: "log", hidden: true, when: () => current !== undefined, run: () => { if (current) setLogJob(current.name); } },
+      { key: "n", label: "new", run: () => void newJob() },
+      { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeJob(current.name); } },
+      { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
+      { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
+      { key: "R", label: "refresh", run: () => void refetch() },
+    ],
+    [current, hasRow, runJob, stopJob, newJob, removeJob, refetch],
   );
+
+  useKeymap(bindings, { isActive: active && !logJob });
+
+  // Publish hints to the shell footer while this tab is the active one.
+  useEffect(() => {
+    if (active && !logJob) ctx.setActiveKeyHints(bindingsToHints(bindings));
+  }, [active, logJob, bindings, ctx]);
 
   if (logJob) {
     return <LogViewer ctx={ctx} jobName={logJob} onClose={() => setLogJob(null)} />;
@@ -439,8 +437,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {/* Header */}
       <Text>
         {" "}
-        {SYM.gear} Jobs{"  "}
-        <Text color={THEME.dim}>r=run · s=stop · l=log · n=new · d=del · a=mine/all · f=auto · R=refresh</Text>
+        {SYM.gear} Jobs
       </Text>
       <Text>
         {" "}
@@ -453,7 +450,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
-            {SYM.warn} Not logged in — press l
+            {SYM.warn} Not logged in — run: bee auth login
           </Text>
         </Box>
       ) : isInitialLoading ? (
