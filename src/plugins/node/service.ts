@@ -5,6 +5,12 @@
 import { XMLParser } from "fast-xml-parser";
 import type { CloudBeesClient } from "../../core/api/types";
 import { NodeDTO, NodeDetailDTO, nodeFromDict, nodeDetailFromDict } from "../../core/dtos/index";
+import {
+  buildLauncherXml,
+  buildRetentionXml,
+  type LauncherType,
+  type Availability,
+} from "./xml-builder";
 
 const _NODE_TREE =
   "computer[displayName,offline,numExecutors,assignedLabels[name],description]";
@@ -163,11 +169,71 @@ export interface UpdateNodeOptions {
   numExecutors?: number;
   labels?: string;
   desc?: string;
+  /** When set, the whole `<launcher>` subtree is rebuilt as ssh or jnlp. */
+  launcherType?: LauncherType;
+  host?: string;
+  port?: number;
+  credentialsId?: string;
+  javaPath?: string;
+  /** When set, the whole `<retentionStrategy>` subtree is rebuilt. */
+  availability?: Availability;
+  inDemandDelay?: number;
+  idleDelay?: number;
+}
+
+/** Parsed launcher + availability fields read back from a node's config.xml (for edit prefill). */
+export interface NodeConfig {
+  launcherType: LauncherType;
+  host: string;
+  port: number;
+  credentialsId: string;
+  javaPath: string;
+  availability: Availability;
+  inDemandDelay: number;
+  idleDelay: number;
+}
+
+/**
+ * Parse the launcher + retention subtrees out of a node config.xml so the edit
+ * form can prefill real values. Tolerant of missing elements (returns sensible
+ * defaults: jnlp launcher, always-on).
+ */
+export function parseNodeConfig(xml: string): NodeConfig {
+  const doc = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" }).parse(
+    xml,
+  ) as Record<string, unknown>;
+  const slave = (doc["slave"] ?? doc["hudson.slaves.DumbSlave"] ?? {}) as Record<string, unknown>;
+
+  const launcher = (slave["launcher"] ?? {}) as Record<string, unknown>;
+  const launcherClass = String(launcher["@_class"] ?? "");
+  const launcherType: LauncherType = launcherClass.includes("SSH") ? "ssh" : "jnlp";
+
+  const retention = (slave["retentionStrategy"] ?? {}) as Record<string, unknown>;
+  const retentionClass = String(retention["@_class"] ?? "");
+  const availability: Availability = retentionClass.includes("Demand") ? "demand" : "always";
+
+  const numOr = (v: unknown, def: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : def;
+  };
+
+  return {
+    launcherType,
+    host: String(launcher["host"] ?? ""),
+    port: numOr(launcher["port"], 22),
+    credentialsId: String(launcher["credentialsId"] ?? ""),
+    javaPath: String(launcher["javaPath"] ?? ""),
+    availability,
+    inDemandDelay: numOr(retention["inDemandDelay"], 0),
+    idleDelay: numOr(retention["idleDelay"], 1),
+  };
 }
 
 /**
  * Partial update of node config.xml — only overwrites provided fields.
- * Mirrors the Python ET-based partial update via string-level replacement.
+ * Text fields (description/remoteFS/numExecutors/label) are patched in place;
+ * `launcherType` and `availability`, when given, swap the whole `<launcher>` /
+ * `<retentionStrategy>` subtree (handles both self-closing and child forms).
  */
 export async function updateNode(
   client: CloudBeesClient,
@@ -192,11 +258,41 @@ export async function updateNode(
     return src.replace(/<\/slave>\s*$/, `  <${tag}>${escaped}</${tag}>\n</slave>`);
   };
 
+  // Swap a whole subtree element (matches both `<tag .../>` and `<tag ...>..</tag>`).
+  const swapElement = (src: string, tag: string, block: string): string => {
+    const paired = new RegExp(`[ \\t]*<${tag}(\\s[^>]*)?>[\\s\\S]*?</${tag}>`);
+    const selfClosing = new RegExp(`[ \\t]*<${tag}(\\s[^>]*)?/>`);
+    if (paired.test(src)) return src.replace(paired, block);
+    if (selfClosing.test(src)) return src.replace(selfClosing, block);
+    // Insert before closing </slave> if the element is missing entirely.
+    return src.replace(/<\/slave>\s*$/, `${block}\n</slave>`);
+  };
+
   if (opts.desc !== undefined) xml = setElement(xml, "description", opts.desc);
   if (opts.remoteDir !== undefined) xml = setElement(xml, "remoteFS", opts.remoteDir);
   if (opts.numExecutors !== undefined)
     xml = setElement(xml, "numExecutors", String(opts.numExecutors));
   if (opts.labels !== undefined) xml = setElement(xml, "label", opts.labels);
+
+  if (opts.launcherType !== undefined) {
+    const block = buildLauncherXml({
+      type: opts.launcherType,
+      host: opts.host,
+      port: opts.port,
+      credentialsId: opts.credentialsId,
+      javaPath: opts.javaPath,
+    });
+    xml = swapElement(xml, "launcher", block);
+  }
+
+  if (opts.availability !== undefined) {
+    const block = buildRetentionXml({
+      availability: opts.availability,
+      inDemandDelay: opts.inDemandDelay,
+      idleDelay: opts.idleDelay,
+    });
+    xml = swapElement(xml, "retentionStrategy", block);
+  }
 
   await client.postXml(`/computer/${name}/config.xml`, xml, { invalidate: "nodes." });
 }
