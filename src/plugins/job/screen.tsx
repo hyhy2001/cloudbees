@@ -19,6 +19,7 @@ import { DataTable } from "../../core/tui/components/DataTable";
 import { SearchBar } from "../../core/tui/components/SearchBar";
 import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
+import { ParamListEditor } from "../../core/tui/components/ParamListEditor";
 import { useKeymap, bindingsToHints, type KeyBinding } from "../../core/tui/keymap";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
@@ -185,6 +186,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   // Overlays local to this tab.
   const [logJob, setLogJob] = useState<string | null>(null);
+  // Job whose build parameters are being edited (ParamListEditor overlay).
+  const [paramJob, setParamJob] = useState<string | null>(null);
 
   // Inline "/" search box (client-side filter; no refetch). Disabled while the
   // log overlay is open.
@@ -531,6 +534,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "l", label: "log", hidden: true, when: () => current !== undefined, run: () => { if (current) setLogJob(current.name); } },
       { key: "n", label: "new", run: () => void newJob() },
       { key: "e", label: "edit", when: () => hasRow, run: () => { if (current) void editJob(current); } },
+      { key: "p", label: "params", when: () => hasRow, run: () => { if (current) setParamJob(current.name); } },
       { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.name); } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeJob(current.name); } },
       { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
@@ -545,15 +549,42 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   // While typing in the search box, the search hook owns input — suspend the
   // action keymap (and the table's nav) so letters don't trigger actions.
-  useKeymap(bindings, { isActive: active && !logJob && !search.editing });
+  useKeymap(bindings, { isActive: active && !logJob && !paramJob && !search.editing });
 
   // Publish hints to the shell footer while this tab is the active one.
   useEffect(() => {
-    if (active && !logJob) ctx.setActiveKeyHints(bindingsToHints(bindings));
-  }, [active, logJob, bindings, ctx]);
+    if (active && !logJob && !paramJob) ctx.setActiveKeyHints(bindingsToHints(bindings));
+  }, [active, logJob, paramJob, bindings, ctx]);
 
   if (logJob) {
     return <LogViewer ctx={ctx} jobName={logJob} onClose={() => setLogJob(null)} />;
+  }
+
+  if (paramJob) {
+    return (
+      <ParamListEditor
+        initial={[]}
+        setInputCaptured={ctx.setInputCaptured}
+        onResult={(params) => {
+          const name = paramJob;
+          setParamJob(null);
+          if (!params) return;
+          void (async () => {
+            try {
+              const client = await ctx.getClient({ useController: true });
+              await updateJobFreestyle(
+                client, name, null, null, null, null, null, null, null, null, false, false,
+                params, params.length === 0,
+              );
+              ctx.notify(`${SYM.ok} Updated parameters: ${name}`, "success");
+              void refetch();
+            } catch (err) {
+              ctx.notify(err instanceof Error ? err.message : String(err), "error");
+            }
+          })();
+        }}
+      />
+    );
   }
 
   const scope = showAll ? (
