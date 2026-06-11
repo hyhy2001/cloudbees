@@ -33,18 +33,22 @@ import {
   createUsernamePassword,
   updateCredential,
   deleteCredential,
+  getCredentialConfig,
 } from "./service";
 import {
   getTrackedResources,
   trackResource,
   untrackResource,
 } from "../../core/db/repositories/resource-repo";
+import { useDimensions } from "../../core/tui/data/use-dimensions";
+import { getScopeShowAll, setScopeShowAll } from "../../core/db/repositories/scope-repo";
 
 // ─── Credentials screen ───────────────────────────────────────────────────────
 
 const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
-  const [showAll, setShowAll] = useState(true);
+  const [showAll, setShowAll] = useState(() => getScopeShowAll("credential", ctx.dbPath));
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const { columns: termCols } = useDimensions();
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
   // Store is a server-side scope — changing it refetches from a different endpoint.
   const [store, setStore] = useState<"system" | "user">("system");
@@ -151,10 +155,10 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         <FormModal
           title={`${SYM.gear} Create Credential`}
           fields={[
-            { name: "id", label: "ID", required: true },
-            { name: "username", label: "Username", required: true },
-            { name: "password", label: "Password", required: true, password: true },
-            { name: "desc", label: "Description" },
+            { name: "id", label: "ID", required: true, hint: "unique id" },
+            { name: "username", label: "Username", required: true, hint: "login user" },
+            { name: "password", label: "Password", required: true, password: true, hint: "secret token" },
+            { name: "desc", label: "Description", hint: "optional" },
           ]}
           onResult={resolve}
         />
@@ -192,15 +196,24 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // description is prefilled. Blank username/password → undefined (keeps existing).
   const editCred = useCallback(
     async (cred: CredentialDTO) => {
+      // Prefill the REAL current username + description (Jenkins hides the password).
+      let prefill = { username: "", description: cred.description ?? "" };
+      try {
+        const cfgClient = await ctx.getClient({ useController: true });
+        prefill = await getCredentialConfig(cfgClient, cred.id, ctx.username, store);
+      } catch (err) {
+        ctx.notify(err instanceof Error ? err.message : String(err), "error");
+        return;
+      }
       const result = await ctx.openModal<Record<string, string>>({
         id: "edit-credential",
         render: (resolve) => (
           <FormModal
             title={`${SYM.dot} Edit Credential: ${cred.id}`}
             fields={[
-              { name: "username", label: "Username", placeholder: "leave blank = unchanged" },
-              { name: "password", label: "Password", password: true, placeholder: "leave blank = unchanged" },
-              { name: "desc", label: "Description", initial: cred.description ?? "" },
+              { name: "username", label: "Username", initial: prefill.username, hint: "login user" },
+              { name: "password", label: "Password", password: true, hint: "blank = keep current" },
+              { name: "desc", label: "Description", initial: prefill.description, hint: "optional" },
             ]}
             onResult={resolve}
           />
@@ -273,20 +286,24 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const hasRow = current !== undefined && current.typeName !== "[DELETED_ON_SERVER]";
   // Importable = a real server row not yet in the Mine list (most useful in All view).
   const canImport = hasRow && current !== undefined && !trackedIds.has(current.id);
+  // Unimportable = a tracked row that can be removed from Mine.
+  const canUntrack = hasRow && current !== undefined && trackedIds.has(current.id);
   const bindings = useMemo<KeyBinding[]>(
     () => [
-      { key: "c", label: "new", run: () => void createCred() },
+      { key: "n", label: "new", run: () => void createCred() },
+      { key: "c", label: "new", hidden: true, run: () => void createCred() },
       { key: "e", label: "edit", when: () => hasRow, run: () => { if (current) void editCred(current); } },
       { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.id); } },
+      { key: "u", label: "unimport", when: () => canUntrack, run: () => { if (current) { untrackResource("credential", current.id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.id}' from Mine`, "success"); void refetch(); } } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeCred(current.id); } },
       { key: "S", label: "store", run: () => setStore((s) => (s === "system" ? "user" : "system")) },
-      { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
+      { key: "a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("credential", nv, ctx.dbPath); return nv; }) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, canImport, createCred, editCred, doImport, removeCred, refetch, search],
+    [current, hasRow, canImport, canUntrack, baseUrl, store, ctx, createCred, editCred, doImport, removeCred, refetch, search],
   );
   useKeymap(bindings, { isActive: active && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
@@ -343,12 +360,13 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           )}
           <SearchBar state={search} />
           <DataTable
+            tableWidth={termCols}
             columns={[
               { header: "", width: 2 },
-              { header: "ID", width: 28 },
+              { header: "ID", width: 28, flex: true },
               { header: "Type", width: 22 },
               { header: "Scope", width: 10 },
-              { header: "Description", width: 34 },
+              { header: "Description", width: 34, flex: true },
             ]}
             rows={credentials.map((c) => {
               const isDeleted = c.typeName === "[DELETED_ON_SERVER]";
@@ -369,7 +387,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             cursor={cursor}
             onCursorChange={setCursor}
             active={active && !search.editing}
-            emptyText="No credentials. Press c to create one."
+            emptyText="No credentials. Press n to create one."
           />
 
           {/* Detail panel */}

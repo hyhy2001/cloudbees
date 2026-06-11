@@ -42,6 +42,7 @@ import {
   updateJobFreestyle,
 } from "./service";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
+import { getScopeShowAll, setScopeShowAll } from "../../core/db/repositories/scope-repo";
 import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
 import { listNodes } from "../node/service";
 import { ScheduleBuilder } from "../../core/tui/components/ScheduleBuilder";
@@ -181,7 +182,10 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
 
 const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Mine/All is now a pure client-side filter — no refetch on toggle (P6).
-  const [showAll, setShowAll] = useState(true);
+  // Initial scope is persisted per resource-type (Q10).
+  const [showAll, setShowAll] = useState(() => getScopeShowAll("job", ctx.dbPath));
+  // Live terminal width for auto-scaling the table (Q4).
+  const { columns: termCols } = useDimensions();
   // Opt-in auto-refresh (legacy P13): OFF by default, toggled with `f`.
   const [autoRefresh, setAutoRefresh] = useState(false);
   // The screen's HTTP base url, captured once a client is available. Used both
@@ -405,17 +409,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         <FormModal
           title={`${SYM.gear} Create New Job`}
           fields={[
-            { name: "name", label: "Job Name", required: true },
-            { name: "job_type", label: "Type", options: ["freestyle", "folder"], initial: "freestyle" },
+            { name: "name", label: "Job Name", required: true, hint: "unique id" },
+            { name: "job_type", label: "Type", options: ["freestyle", "folder"], initial: "freestyle", hint: "freestyle/folder" },
             { name: "desc", label: "Description" },
-            { name: "shell_cmd", label: "Shell Command", placeholder: "freestyle only" },
-            { name: "chdir", label: "Working Dir", placeholder: "cd <dir> && before command" },
-            { name: "node", label: "Node/Label", options: nodeOptions, initial: NONE_OPTION },
-            { name: "schedule", label: "Schedule (cron)" },
-            { name: "email", label: "Email" },
-            { name: "email_cond", label: "Email Condition", options: ["failed", "success", "always"], initial: "failed" },
-            { name: "email_keywords", label: "Email Keywords", placeholder: "comma-separated" },
-            { name: "email_regex", label: "Email Regex" },
+            { name: "shell_cmd", label: "Shell Command", placeholder: "freestyle only", hint: "shell to run" },
+            { name: "chdir", label: "Working Dir", placeholder: "cd <dir> && before command", path: true, hint: "Tab completes local FS" },
+            { name: "node", label: "Node/Label", options: nodeOptions, initial: NONE_OPTION, hint: "where it runs" },
+            { name: "email", label: "Email", hint: "recipient(s)" },
+            { name: "email_cond", label: "Email Condition", options: ["failed", "success", "always"], initial: "failed", hint: "when to mail" },
+            { name: "email_keywords", label: "Email Keywords", placeholder: "comma-separated", hint: "any-of, comma sep" },
+            { name: "email_regex", label: "Email Regex", hint: "Java regex" },
           ]}
           onResult={resolve}
         />
@@ -438,7 +441,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           result.shell_cmd || "echo hello",
           result.chdir || null,
           result.node && result.node !== NONE_OPTION ? result.node : null,
-          result.schedule || null,
+          null, // schedule owned by the `t` key (ScheduleBuilder), never set here
           result.email || null,
           result.email_cond || "failed",
           keywords,
@@ -467,21 +470,22 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           <FormModal
             title={`${SYM.gear} Edit Job: ${job.name}`}
             fields={[
-              { name: "desc", label: "Description", initial: job.description ?? "" },
-              { name: "shell_cmd", label: "Shell Command", placeholder: "leave blank = unchanged" },
-              { name: "node", label: "Node/Label", options: nodeOptions, initial: NONE_OPTION },
-              { name: "schedule", label: "Schedule (cron)", initial: val("schedule") },
-              { name: "email", label: "Email", initial: val("email") },
+              { name: "desc", label: "Description", initial: s.description || job.description || "", hint: "free text" },
+              { name: "shell_cmd", label: "Shell Command", initial: s.shell_cmd || "", hint: "shell to run" },
+              { name: "chdir", label: "Working Dir", initial: s.chdir || "", path: true, hint: "Tab completes local FS" },
+              { name: "node", label: "Node/Label", options: nodeOptions, initial: s.node && s.node !== "-" ? s.node : NONE_OPTION, hint: "where it runs" },
+              { name: "email", label: "Email", initial: val("email"), hint: "recipient(s)" },
               {
                 name: "email_cond",
                 label: "Email Condition",
                 options: ["failed", "success", "always"],
                 initial: val("email_cond") || "failed",
+                hint: "when to mail",
               },
-              { name: "email_keywords", label: "Email Keywords", placeholder: "comma-separated", initial: val("email_keywords") },
-              { name: "email_regex", label: "Email Regex", initial: val("email_regex") },
-              { name: "clear_keywords", label: "Clear Keywords", options: ["no", "yes"], initial: "no" },
-              { name: "clear_regex", label: "Clear Regex", options: ["no", "yes"], initial: "no" },
+              { name: "email_keywords", label: "Email Keywords", placeholder: "comma-separated", initial: val("email_keywords"), hint: "any-of, comma sep" },
+              { name: "email_regex", label: "Email Regex", initial: val("email_regex"), hint: "Java regex" },
+              { name: "clear_keywords", label: "Clear Keywords", options: ["no", "yes"], initial: "no", hint: "wipe on save" },
+              { name: "clear_regex", label: "Clear Regex", options: ["no", "yes"], initial: "no", hint: "wipe on save" },
             ]}
             onResult={resolve}
           />
@@ -493,13 +497,18 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         const keywords = result.email_keywords
           ? result.email_keywords.split(",").map((k) => k.trim()).filter(Boolean)
           : null;
+        // chdir folds into the shell command (updateJobFreestyle has no chdir
+        // param). Only compose when shell_cmd is set; otherwise pass null = unchanged.
+        const finalShell = result.shell_cmd
+          ? (result.chdir ? `cd ${result.chdir} && ${result.shell_cmd}` : result.shell_cmd)
+          : null;
         await updateJobFreestyle(
           client,
           job.name,
           result.desc ?? null,
-          result.shell_cmd || null,
+          finalShell,
           result.node && result.node !== NONE_OPTION ? result.node : null,
-          result.schedule || null,
+          null,
           result.email || null,
           result.email_cond || null,
           keywords,
@@ -533,6 +542,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const hasRow = current !== undefined && current.color !== "[DELETED_ON_SERVER]";
   // Importable = a real server row not yet in the Mine list (most useful in All view).
   const canImport = hasRow && current !== undefined && !trackedNames.has(current.name);
+  // Untrackable = a row already in Mine (inverse of import).
+  const canUntrack = hasRow && current !== undefined && trackedNames.has(current.name);
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "Enter", label: "log", group: "action", when: () => current !== undefined, run: () => { if (current) setLogJob(current.name); } },
@@ -544,15 +555,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "p", label: "params", when: () => hasRow, run: () => { if (current) setParamJob(current.name); } },
       { key: "t", label: "schedule", when: () => hasRow, run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); } },
       { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.name); } },
+      { key: "u", label: "unimport", when: () => canUntrack, run: () => { if (current) { untrackResource("job", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeJob(current.name); } },
-      { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
+      { key: "a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("job", nv, ctx.dbPath); return nv; }) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
       // Esc clears an active query (only shown/handled when one is set).
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, canImport, summary, runJob, stopJob, newJob, editJob, doImport, removeJob, refetch, search],
+    [current, hasRow, canImport, canUntrack, baseUrl, summary, runJob, stopJob, newJob, editJob, doImport, removeJob, refetch, search],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
@@ -672,13 +684,14 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           )}
           <SearchBar state={search} />
           <DataTable
+            tableWidth={termCols}
             columns={[
               { header: "", width: 2 },
               { header: "Status", width: 12 },
               { header: "T", width: 3 },
-              { header: "Name", width: 42 },
+              { header: "Name", width: 42, flex: true },
               { header: "Build #", width: 9 },
-              { header: "Description", width: 30 },
+              { header: "Description", width: 30, flex: true },
             ]}
             rows={jobs.map((j) => {
               const st = statusCell(j.color);

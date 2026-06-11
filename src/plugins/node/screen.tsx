@@ -36,6 +36,8 @@ import {
 } from "./service";
 import { listCredentials } from "../credential/service";
 import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
+import { useDimensions } from "../../core/tui/data/use-dimensions";
+import { getScopeShowAll, setScopeShowAll } from "../../core/db/repositories/scope-repo";
 import {
   getTrackedResources,
   trackResource,
@@ -45,9 +47,10 @@ import {
 // ─── Nodes screen ─────────────────────────────────────────────────────────────
 
 const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
-  const [showAll, setShowAll] = useState(true);
+  const [showAll, setShowAll] = useState(() => getScopeShowAll("node", ctx.dbPath));
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
+  const { columns: termCols } = useDimensions();
 
   // Inline "/" search box (client-side filter; no refetch).
   const search = useSearch({ isActive: active, onEditingChange: ctx.setInputCaptured });
@@ -165,19 +168,18 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         <FormModal
           title={`${SYM.gear} Create New Node`}
           fields={[
-            { name: "name", label: "Node Name", required: true },
-            { name: "remoteDir", label: "Remote Dir", required: true },
-            { name: "numExecutors", label: "Executors", initial: "1" },
-            { name: "labels", label: "Labels" },
-            { name: "desc", label: "Description" },
+            { name: "name", label: "Node Name", required: true, hint: "node name" },
+            { name: "remoteDir", label: "Remote Dir", required: true, path: true, hint: "Tab completes local FS" },
+            { name: "numExecutors", label: "Executors", initial: "1", hint: "e.g. 1" },
+            { name: "labels", label: "Labels", hint: "space-separated" },
+            { name: "desc", label: "Description", hint: "optional" },
             { name: "launcher", label: "Launch method", options: ["ssh", "jnlp"], initial: "ssh" },
-            { name: "host", label: "SSH Host", placeholder: "ssh only" },
-            { name: "port", label: "SSH Port", placeholder: "ssh only (default 22)" },
-            { name: "credentialsId", label: "SSH Credential", options: credentialOptions },
-            { name: "javaPath", label: "Java Path", placeholder: "ssh only (blank = default)" },
+            { name: "host", label: "SSH Host", placeholder: "ssh only", hint: "ssh host/IP" },
+            { name: "port", label: "SSH Port", placeholder: "ssh only (default 22)", hint: "default 22" },
+            { name: "credentialsId", label: "SSH Credential", options: credentialOptions.length > 0 ? credentialOptions : [NONE_OPTION] },
             { name: "availability", label: "Availability", options: ["always", "demand"], initial: "always" },
-            { name: "inDemandDelay", label: "In-demand Delay", initial: "0" },
-            { name: "idleDelay", label: "Idle Delay", initial: "1" },
+            { name: "inDemandDelay", label: "In-demand Delay", initial: "0", hint: "minutes" },
+            { name: "idleDelay", label: "Idle Delay", initial: "1", hint: "minutes" },
           ]}
           onResult={resolve}
         />
@@ -198,7 +200,6 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         host: isSsh ? (result.host ?? "") : "",
         port: isSsh && result.port ? parseInt(result.port, 10) : undefined,
         credentialsId: isSsh ? credId || undefined : undefined,
-        javaPath: isSsh ? result.javaPath || undefined : undefined,
         availability: result.availability === "demand" ? "demand" : "always",
         inDemandDelay: result.inDemandDelay ? parseInt(result.inDemandDelay, 10) : undefined,
         idleDelay: result.idleDelay ? parseInt(result.idleDelay, 10) : undefined,
@@ -282,27 +283,27 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       // Prefill the credential cycler: put the current cred id first so it shows
       // as the initial value even if it isn't in the Mine list.
       const credInitial = cfg.credentialsId || NONE_OPTION;
-      const credChoices = credentialOptions.includes(credInitial)
-        ? credentialOptions
-        : [credInitial, ...credentialOptions];
+      const baseCreds = credentialOptions.length > 0 ? credentialOptions : [NONE_OPTION];
+      const credChoices = baseCreds.includes(credInitial)
+        ? baseCreds
+        : [credInitial, ...baseCreds];
       const result = await ctx.openModal<Record<string, string>>({
         id: "edit-node",
         render: (resolve) => (
           <FormModal
             title={`${SYM.gear} Edit Node: ${node.name}`}
             fields={[
-              { name: "remoteDir", label: "Remote Dir", initial: detail.remoteDir ?? "" },
-              { name: "numExecutors", label: "Executors", initial: String(detail.numExecutors ?? 1) },
-              { name: "labels", label: "Labels", initial: detail.labels ?? "" },
-              { name: "desc", label: "Description", initial: detail.description ?? "" },
+              { name: "remoteDir", label: "Remote Dir", initial: detail.remoteDir ?? "", path: true, hint: "Tab completes local FS" },
+              { name: "numExecutors", label: "Executors", initial: String(detail.numExecutors ?? 1), hint: "e.g. 1" },
+              { name: "labels", label: "Labels", initial: detail.labels ?? "", hint: "space-separated" },
+              { name: "desc", label: "Description", initial: detail.description ?? "", hint: "optional" },
               { name: "launcher", label: "Launch method", options: ["ssh", "jnlp"], initial: cfg.launcherType },
-              { name: "host", label: "SSH Host", initial: cfg.host },
-              { name: "port", label: "SSH Port", initial: String(cfg.port) },
+              { name: "host", label: "SSH Host", initial: cfg.host, hint: "ssh host/IP" },
+              { name: "port", label: "SSH Port", initial: String(cfg.port), hint: "default 22" },
               { name: "credentialsId", label: "SSH Credential", options: credChoices, initial: credInitial },
-              { name: "javaPath", label: "Java Path", initial: cfg.javaPath },
               { name: "availability", label: "Availability", options: ["always", "demand"], initial: cfg.availability },
-              { name: "inDemandDelay", label: "In-demand Delay", initial: String(cfg.inDemandDelay) },
-              { name: "idleDelay", label: "Idle Delay", initial: String(cfg.idleDelay) },
+              { name: "inDemandDelay", label: "In-demand Delay", initial: String(cfg.inDemandDelay), hint: "minutes" },
+              { name: "idleDelay", label: "Idle Delay", initial: String(cfg.idleDelay), hint: "minutes" },
             ]}
             onResult={resolve}
           />
@@ -321,7 +322,6 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           host: result.host,
           port: result.port ? parseInt(result.port, 10) : undefined,
           credentialsId: credId,
-          javaPath: result.javaPath,
           availability: result.availability === "demand" ? "demand" : "always",
           inDemandDelay: result.inDemandDelay ? parseInt(result.inDemandDelay, 10) : undefined,
           idleDelay: result.idleDelay ? parseInt(result.idleDelay, 10) : undefined,
@@ -350,20 +350,23 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const hasRow = current !== undefined && current.labels !== "[DELETED_ON_SERVER]";
   // Importable = a real server row not yet in the Mine list (most useful in All view).
   const canImport = hasRow && current !== undefined && !trackedNames.has(current.name);
+  // Untrackable = a row currently in the Mine list (can be removed from Mine).
+  const canUntrack = hasRow && current !== undefined && trackedNames.has(current.name);
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "n", label: "new", run: () => void createNode() },
       { key: "e", label: "edit", when: () => hasRow, run: () => { if (current) void editNode(current); } },
       { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.name); } },
+      { key: "u", label: "unimport", when: () => canUntrack, run: () => { if (current) { untrackResource("node", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeNode(current.name); } },
       { key: "o", label: "toggle offline", when: () => hasRow, run: () => { if (current) void doToggleOffline(current); } },
-      { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
+      { key: "a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("node", nv, ctx.dbPath); return nv; }) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, canImport, createNode, editNode, doImport, removeNode, doToggleOffline, refetch, search],
+    [current, hasRow, canImport, canUntrack, baseUrl, createNode, editNode, doImport, removeNode, doToggleOffline, refetch, search],
   );
   useKeymap(bindings, { isActive: active && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
@@ -417,13 +420,14 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           )}
           <SearchBar state={search} />
           <DataTable
+            tableWidth={termCols}
             columns={[
               { header: "", width: 2 },
               { header: "Status", width: 10 },
-              { header: "Name", width: 36 },
+              { header: "Name", width: 36, flex: true },
               { header: "Exec", width: 6 },
-              { header: "Labels", width: 28 },
-              { header: "Description", width: 26 },
+              { header: "Labels", width: 28, flex: true },
+              { header: "Description", width: 26, flex: true },
             ]}
             rows={nodes.map((n) => {
               const isDeleted = n.labels === "[DELETED_ON_SERVER]";

@@ -25,8 +25,7 @@ export interface BeeAppProps {
 }
 
 const GLOBAL_HINTS = [
-  { key: "1-9", label: "tab" },
-  { key: "Tab", label: "next" },
+  { key: "←→/Tab", label: "switch tab" },
   { key: "?", label: "help" },
   { key: "q", label: "quit" },
 ];
@@ -118,14 +117,6 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
     { key: "shift+tab", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => (t - 1 + count) % count) },
     { key: "left", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => (t - 1 + count) % count) },
     { key: "right", label: "next", group: "global", hidden: true, run: () => setTabIndex((t) => (t + 1) % count) },
-    // Number keys 1..9 jump to a tab.
-    ...Array.from({ length: Math.min(count, 9) }, (_, i): KeyBinding => ({
-      key: String(i + 1),
-      label: `tab${i + 1}`,
-      group: "global",
-      hidden: true,
-      run: () => setTabIndex(i),
-    })),
   ];
 
   // While help is open, only its dismiss keys are live.
@@ -157,7 +148,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
               bold={on}
             >
               {" "}
-              {i + 1}:{s.icon ? `${s.icon} ` : ""}
+              {s.icon ? `${s.icon} ` : ""}
               {s.title}{" "}
             </Text>
           );
@@ -209,7 +200,7 @@ const HelpScreen: React.FC<{ screens: TuiScreen[] }> = ({ screens }) => (
       <Text color={THEME.normal} bold>
         Global
       </Text>
-      <Text color={THEME.dim}> 1-9 jump tab · Tab/Shift+Tab cycle · ←/→ cycle · ? help · q quit</Text>
+      <Text color={THEME.dim}> Tab/Shift+Tab cycle · ←/→ cycle · ? help · q quit</Text>
       <Text color={THEME.normal} bold>
         {" "}
       </Text>
