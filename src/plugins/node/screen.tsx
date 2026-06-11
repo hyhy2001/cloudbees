@@ -42,8 +42,6 @@ import {
   untrackResource,
 } from "../../core/db/repositories/resource-repo";
 
-const PROFILE = "default";
-
 // ─── Nodes screen ─────────────────────────────────────────────────────────────
 
 const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
@@ -98,14 +96,14 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Tracked names for Mine filter + [DELETED_ON_SERVER] synthesis.
   const trackedNames = useMemo(() => {
     if (!baseUrl) return new Set<string>();
-    return new Set(getTrackedResources("node", PROFILE, baseUrl, ctx.dbPath));
-  }, [baseUrl, ctx.dbPath, allNodes]);
+    return new Set(getTrackedResources("node", ctx.profile, baseUrl, ctx.dbPath));
+  }, [baseUrl, ctx.dbPath, ctx.profile, allNodes]);
 
   // Tracked credential IDs (system store) — for the SSH credential dropdown.
   const trackedCreds = useMemo(() => {
     if (!baseUrl) return new Set<string>();
-    return new Set(getTrackedResources("credential", PROFILE, `${baseUrl}.system`, ctx.dbPath));
-  }, [baseUrl, ctx.dbPath]);
+    return new Set(getTrackedResources("credential", ctx.profile, `${baseUrl}.system`, ctx.dbPath));
+  }, [baseUrl, ctx.dbPath, ctx.profile]);
 
   // Credential picker options (Mine credentials in the system store), prefetched.
   const credentialOptions = useMineOptions({
@@ -205,7 +203,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         inDemandDelay: result.inDemandDelay ? parseInt(result.inDemandDelay, 10) : undefined,
         idleDelay: result.idleDelay ? parseInt(result.idleDelay, 10) : undefined,
       });
-      trackResource("node", result.name, PROFILE, client.baseUrl, ctx.dbPath);
+      trackResource("node", result.name, ctx.profile, client.baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Created node: ${result.name}`, "success");
       void refetch();
     } catch (err) {
@@ -228,7 +226,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       try {
         const client = await ctx.getClient({ useController: true });
         await deleteNode(client, name);
-        untrackResource("node", name, PROFILE, client.baseUrl, ctx.dbPath);
+        untrackResource("node", name, ctx.profile, client.baseUrl, ctx.dbPath);
         ctx.notify(`${SYM.ok} Deleted: ${name}`, "success");
         void refetch();
       } catch (err) {
@@ -341,7 +339,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const doImport = useCallback(
     (name: string) => {
       if (!baseUrl) return;
-      trackResource("node", name, PROFILE, baseUrl, ctx.dbPath);
+      trackResource("node", name, ctx.profile, baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Imported '${name}' into Mine`, "success");
       void refetch();
     },

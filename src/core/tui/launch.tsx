@@ -8,7 +8,7 @@ import { render } from "ink";
 import { BeeApp } from "./app";
 import { TuiProvider } from "./context";
 import { collectScreens } from "../../registry/tui";
-import { loadSession } from "../session/session";
+import { loadSession, getActiveProfileName } from "../session/session";
 import { getActiveController } from "../client-factory";
 
 export async function launchTui(dbPath?: string): Promise<void> {
@@ -22,6 +22,7 @@ export async function launchTui(dbPath?: string): Promise<void> {
     username: session?.username ?? "",
     activeController: active ? active[0] : null,
     loggedIn: session !== null,
+    profile: getActiveProfileName(dbPath),
   };
 
   const screens = collectScreens();

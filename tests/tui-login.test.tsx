@@ -8,7 +8,7 @@ import { collectScreens } from "../src/registry/tui";
 test("logged-out shell shows the login hint and opens the login modal on 'l'", async () => {
   const screens = collectScreens();
   const { lastFrame, stdin } = render(
-    <TuiProvider initialSession={{ username: "", activeController: null, loggedIn: false }}>
+    <TuiProvider initialSession={{ username: "", activeController: null, loggedIn: false, profile: "default" }}>
       <BeeApp screens={screens} />
     </TuiProvider>,
   );
@@ -28,7 +28,7 @@ test("logged-out shell shows the login hint and opens the login modal on 'l'", a
 test("logged-in shell does NOT show the login hint", () => {
   const screens = collectScreens();
   const { lastFrame } = render(
-    <TuiProvider initialSession={{ username: "huy", activeController: "prod", loggedIn: true }}>
+    <TuiProvider initialSession={{ username: "huy", activeController: "prod", loggedIn: true, profile: "default" }}>
       <BeeApp screens={screens} />
     </TuiProvider>,
   );

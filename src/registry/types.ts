@@ -118,6 +118,10 @@ export interface TuiContext {
   activeController: string | null;
   /** Whether a session is currently loaded. */
   loggedIn: boolean;
+  /** Active profile name. */
+  profile: string;
+  /** Switch the active profile; returns false if the target has no session. */
+  switchProfile(profileName: string): boolean;
   /** Push a modal and resolve with its result (or null if dismissed). */
   openModal<T>(spec: ModalSpec<T>): Promise<T | null>;
   /** Show a transient toast notification. */

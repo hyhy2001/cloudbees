@@ -40,8 +40,6 @@ import {
   untrackResource,
 } from "../../core/db/repositories/resource-repo";
 
-const PROFILE = "default";
-
 // ─── Credentials screen ───────────────────────────────────────────────────────
 
 const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
@@ -101,9 +99,9 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const trackedIds = useMemo(() => {
     if (!baseUrl) return new Set<string>();
     return new Set(
-      getTrackedResources("credential", PROFILE, `${baseUrl}.${store}`, ctx.dbPath),
+      getTrackedResources("credential", ctx.profile, `${baseUrl}.${store}`, ctx.dbPath),
     );
-  }, [baseUrl, store, ctx.dbPath, allCredentials]);
+  }, [baseUrl, store, ctx.dbPath, ctx.profile, allCredentials]);
 
   // ── View pipeline: Mine/All filter + synthetic deleted rows (client-side) ──
   const scoped = useMemo(() => {
@@ -178,7 +176,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       trackResource(
         "credential",
         result.id,
-        PROFILE,
+        ctx.profile,
         `${client.baseUrl}.${store}`,
         ctx.dbPath,
       );
@@ -247,7 +245,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         untrackResource(
           "credential",
           id,
-          PROFILE,
+          ctx.profile,
           `${client.baseUrl}.${store}`,
           ctx.dbPath,
         );
@@ -264,7 +262,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const doImport = useCallback(
     (id: string) => {
       if (!baseUrl) return;
-      trackResource("credential", id, PROFILE, `${baseUrl}.${store}`, ctx.dbPath);
+      trackResource("credential", id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath);
       ctx.notify(`${SYM.ok} Imported '${id}' into Mine`, "success");
       void refetch();
     },

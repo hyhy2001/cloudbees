@@ -6,6 +6,7 @@
 import type { PluginContext } from "../../registry/types";
 import { printSuccess, printError, tableFormatter } from "../../core/cli/output";
 import { login, logout, deleteProfile, listProfiles } from "./service";
+import { switchProfile, getActiveProfileName } from "../../core/session/index";
 
 /**
  * Read a line from stdin with echo disabled (hidden input for token).
@@ -106,13 +107,29 @@ export function registerAuthCommands(ctx: PluginContext): void {
         console.log("No profiles found. Run: bee auth login");
         return;
       }
+      const activeName = getActiveProfileName(dbPath);
       const rows = profiles.map((p) => [
+        p.name === activeName ? "*" : "",
         p.name,
         p.serverUrl,
         p.username,
         p.isDefault ? "*" : "",
       ]);
       const formatter = ctx.getFormatter("table") ?? tableFormatter;
-      console.log(formatter.table(["Profile", "Server", "Username", "Default"], rows));
+      console.log(formatter.table(["Active", "Profile", "Server", "Username", "Default"], rows));
+    });
+
+  // ── use ────────────────────────────────────────────────────────────────────
+  grp
+    .command("use <profile>")
+    .aliases(["switch"])
+    .description("Switch the active profile")
+    .action((profileName: string) => {
+      if (switchProfile(profileName, dbPath)) {
+        printSuccess(`OK Active profile: ${profileName}`);
+      } else {
+        printError(`Profile '${profileName}' has no saved session. Run: bee auth login --profile ${profileName}`);
+        process.exit(1);
+      }
     });
 }

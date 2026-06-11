@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import type { TuiContext as ITuiContext, ModalSpec, NotifyLevel, GetClientOptions } from "../../registry/types";
 import type { CloudBeesClient } from "../api/types";
 import { getClient as coreGetClient, loginSession, getActiveController } from "../client-factory";
+import { loadSession, getActiveProfileName, switchProfile as coreSwitchProfile } from "../session/session";
 import type { ToastMessage } from "./components/Toast";
 
 interface ActiveModal {
@@ -23,6 +24,7 @@ interface SessionInfo {
   username: string;
   activeController: string | null;
   loggedIn: boolean;
+  profile: string;
 }
 
 interface TuiState extends ITuiContext {
@@ -104,7 +106,26 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
     async (serverUrl: string, username: string, token: string) => {
       await loginSession(serverUrl, username, token, dbPath);
       const active = getActiveController(dbPath);
-      setSession({ username, activeController: active ? active[0] : null, loggedIn: true });
+      setSession({ username, activeController: active ? active[0] : null, loggedIn: true, profile: getActiveProfileName(dbPath) });
+    },
+    [dbPath],
+  );
+
+  // Switch the active profile via core; on success, refresh the in-memory
+  // session so every screen re-renders against the newly-active profile.
+  const switchProfile = useCallback(
+    (profileName: string): boolean => {
+      const ok = coreSwitchProfile(profileName, dbPath);
+      if (!ok) return false;
+      const next = loadSession(dbPath);
+      const active = getActiveController(dbPath);
+      setSession({
+        username: next?.username ?? "",
+        activeController: active ? active[0] : null,
+        loggedIn: next !== null,
+        profile: getActiveProfileName(dbPath),
+      });
+      return true;
     },
     [dbPath],
   );
@@ -115,6 +136,8 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
       username: session.username,
       activeController: session.activeController,
       loggedIn: session.loggedIn,
+      profile: session.profile,
+      switchProfile,
       openModal,
       notify,
       dbPath,
@@ -127,7 +150,7 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
       activeKeyHints,
       inputCaptured,
     }),
-    [getClient, session, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, login, activeKeyHints, inputCaptured],
+    [getClient, session, switchProfile, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, login, activeKeyHints, inputCaptured],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

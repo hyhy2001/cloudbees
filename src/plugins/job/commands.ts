@@ -7,6 +7,7 @@ import * as readline from "readline";
 import type { PluginContext } from "../../registry/types";
 import { printSuccess, printError, printInfo, printWarning, tableFormatter } from "../../core/cli/output";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
+import { getActiveProfileName } from "../../core/session/index";
 import {
   listJobs,
   getJob,
@@ -76,7 +77,7 @@ function parseParamDefs(raw: string[]): StringParamDef[] {
 
 export function registerJobCommands(ctx: PluginContext): void {
   const dbPath = process.env["CB_DB_PATH"];
-  const profile = "default";
+  const profile = getActiveProfileName(dbPath);
 
   const grp = ctx.program
     .command("job")

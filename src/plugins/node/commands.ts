@@ -5,6 +5,7 @@
 import readline from "node:readline";
 import type { PluginContext } from "../../registry/types";
 import { printError, printInfo, printSuccess, tableFormatter } from "../../core/cli/output";
+import { getActiveProfileName } from "../../core/session/index";
 import {
   getTrackedResources,
   trackResource,
@@ -34,7 +35,7 @@ function confirm(question: string): Promise<boolean> {
 
 export function registerNodeCommands(ctx: PluginContext): void {
   const dbPath = process.env["CB_DB_PATH"];
-  const profile = "default";
+  const profile = getActiveProfileName(dbPath);
 
   const grp = ctx.program.command("node").description("Manage CloudBees agent nodes");
 

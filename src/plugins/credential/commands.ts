@@ -6,7 +6,7 @@ import readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import type { PluginContext } from "../../registry/types";
 import { printError, printSuccess, printInfo, readHidden, tableFormatter } from "../../core/cli/output";
-import { loadSession } from "../../core/session/index";
+import { loadSession, getActiveProfileName } from "../../core/session/index";
 import {
   getTrackedResources,
   trackResource,
@@ -48,7 +48,7 @@ function validateStore(store: string): void {
 
 export function registerCredentialCommands(ctx: PluginContext): void {
   const dbPath = process.env["CB_DB_PATH"];
-  const profile = "default";
+  const profile = getActiveProfileName(dbPath);
 
   const grp = ctx.program.command("cred").description("Manage CloudBees credentials");
 

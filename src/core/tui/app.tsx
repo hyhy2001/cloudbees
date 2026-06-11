@@ -18,6 +18,7 @@ import { Toast } from "./components/Toast";
 import { StatusBar } from "./components/StatusBar";
 import { FormModal } from "./components/FormModal";
 import { useKeymap, type KeyBinding } from "./keymap";
+import { listProfiles } from "../db/repositories/profile-repo";
 
 export interface BeeAppProps {
   screens: TuiScreen[];
@@ -73,6 +74,42 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
             tui.notify(`${SYM.ok} Logged in as ${vals.username}`, "success");
           } catch (err) {
             tui.notify(err instanceof Error ? err.message : String(err), "error");
+          }
+        });
+      },
+    },
+    // Profile switcher — only while logged in; lists profiles and switches the active one.
+    {
+      key: "P",
+      label: "profile",
+      group: "global",
+      when: () => tui.loggedIn,
+      run: () => {
+        const profiles = listProfiles(tui.dbPath);
+        if (profiles.length <= 1) {
+          tui.notify("Only one profile", "info");
+          return;
+        }
+        const names = profiles.map((p) => p.name);
+        void tui.openModal<Record<string, string>>({
+          id: "switch-profile",
+          render: (resolve) => (
+            <FormModal
+              title={`${SYM.bee} Switch Profile`}
+              fields={[
+                { name: "profile", label: "Profile", options: names, initial: tui.profile },
+              ]}
+              onResult={resolve}
+            />
+          ),
+        }).then((vals) => {
+          if (!vals) return;
+          const name = vals.profile!;
+          if (name === tui.profile) return;
+          if (tui.switchProfile(name)) {
+            tui.notify(`${SYM.arrow} Switched to ${name}`, "success");
+          } else {
+            tui.notify(`No session for profile '${name}'`, "error");
           }
         });
       },

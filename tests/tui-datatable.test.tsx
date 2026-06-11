@@ -182,6 +182,7 @@ function renderBeeApp(loggedIn: boolean) {
         username: loggedIn ? "alice" : "",
         activeController: null,
         loggedIn,
+        profile: "default",
       }}
     >
       <BeeApp screens={[stubScreen]} />

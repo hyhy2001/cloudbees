@@ -46,8 +46,6 @@ import { listNodes } from "../node/service";
 import { ScheduleBuilder } from "../../core/tui/components/ScheduleBuilder";
 import { parseCron } from "../../core/tui/data/cron-schedule";
 
-const PROFILE = "default";
-
 // ─── Status + type rendering (port of _status_markup / _type_label) ─────────
 
 interface StatusCell {
@@ -243,15 +241,15 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Tracked names for the Mine filter + [DELETED_ON_SERVER] synthesis.
   const trackedNames = useMemo(() => {
     if (!baseUrl) return new Set<string>();
-    return new Set(getTrackedResources("job", PROFILE, baseUrl, ctx.dbPath));
-  }, [baseUrl, ctx.dbPath, allJobs]);
+    return new Set(getTrackedResources("job", ctx.profile, baseUrl, ctx.dbPath));
+  }, [baseUrl, ctx.dbPath, ctx.profile, allJobs]);
 
   // Mine nodes → dropdown options for the job's Node/Label field. "(none)" maps
   // to "run anywhere" (no assignedNode). Fetched in the background once ready.
   const trackedNodeNames = useMemo(() => {
     if (!baseUrl) return new Set<string>();
-    return new Set(getTrackedResources("node", PROFILE, baseUrl, ctx.dbPath));
-  }, [baseUrl, ctx.dbPath]);
+    return new Set(getTrackedResources("node", ctx.profile, baseUrl, ctx.dbPath));
+  }, [baseUrl, ctx.dbPath, ctx.profile]);
   const nodeOptions = useMineOptions({
     enabled: ctx.loggedIn && baseUrl !== null,
     fetch: async () => {
@@ -386,7 +384,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       try {
         const client = await ctx.getClient({ useController: true });
         await deleteJob(client, name);
-        untrackResource("job", name, PROFILE, client.baseUrl, ctx.dbPath);
+        untrackResource("job", name, ctx.profile, client.baseUrl, ctx.dbPath);
         ctx.notify(`${SYM.ok} Deleted: ${name}`, "success");
         void refetch();
       } catch (err) {
@@ -443,7 +441,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           result.email_regex || null,
         );
       }
-      trackResource("job", result.name, PROFILE, client.baseUrl, ctx.dbPath);
+      trackResource("job", result.name, ctx.profile, client.baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Created ${jobType}: ${result.name}`, "success");
       void refetch();
     } catch (err) {
@@ -518,7 +516,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const doImport = useCallback(
     (name: string) => {
       if (!baseUrl) return;
-      trackResource("job", name, PROFILE, baseUrl, ctx.dbPath);
+      trackResource("job", name, ctx.profile, baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Imported '${name}' into Mine`, "success");
       void refetch();
     },
