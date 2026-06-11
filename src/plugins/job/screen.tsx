@@ -37,6 +37,7 @@ import {
   createFreestyleJob,
   createFolder,
   streamLastBuildLog,
+  updateJobFreestyle,
 } from "./service";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
 
@@ -408,6 +409,56 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [ctx, refetch]);
 
+  // Edit = update an existing job's config. Prefills from the detail-panel
+  // summary already fetched for the highlighted row. Blank fields = unchanged
+  // (updateJobFreestyle does a partial update). Shell command can't be read back
+  // from the summary, so leaving it blank keeps the current command.
+  const editJob = useCallback(
+    async (job: JobDTO) => {
+      const s = summary ?? {};
+      const result = await ctx.openModal<Record<string, string>>({
+        id: "edit-job",
+        render: (resolve) => (
+          <FormModal
+            title={`${SYM.gear} Edit Job: ${job.name}`}
+            fields={[
+              { name: "desc", label: "Description", initial: job.description ?? "" },
+              { name: "shell_cmd", label: "Shell Command", placeholder: "leave blank = unchanged" },
+              { name: "schedule", label: "Schedule (cron)", initial: s.schedule && s.schedule !== "-" ? s.schedule : "" },
+              { name: "email", label: "Email", initial: s.email && s.email !== "-" ? s.email : "" },
+              {
+                name: "email_cond",
+                label: "Email Condition",
+                options: ["failed", "success", "always"],
+                initial: s.email_cond && s.email_cond !== "-" ? s.email_cond : "failed",
+              },
+            ]}
+            onResult={resolve}
+          />
+        ),
+      });
+      if (!result) return;
+      try {
+        const client = await ctx.getClient({ useController: true });
+        await updateJobFreestyle(
+          client,
+          job.name,
+          result.desc ?? null,
+          result.shell_cmd || null,
+          null,
+          result.schedule || null,
+          result.email || null,
+          result.email_cond || null,
+        );
+        ctx.notify(`${SYM.ok} Updated: ${job.name}`, "success");
+        void refetch();
+      } catch (err) {
+        ctx.notify(err instanceof Error ? err.message : String(err), "error");
+      }
+    },
+    [ctx, refetch, summary],
+  );
+
   // Import = track an existing server job into Mine (for jobs created outside bee).
   const doImport = useCallback(
     (name: string) => {
@@ -432,6 +483,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "s", label: "stop", when: () => hasRow, run: () => { if (current) void stopJob(current); } },
       { key: "l", label: "log", hidden: true, when: () => current !== undefined, run: () => { if (current) setLogJob(current.name); } },
       { key: "n", label: "new", run: () => void newJob() },
+      { key: "e", label: "edit", when: () => hasRow, run: () => { if (current) void editJob(current); } },
       { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.name); } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeJob(current.name); } },
       { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
@@ -441,7 +493,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, canImport, runJob, stopJob, newJob, doImport, removeJob, refetch, search],
+    [current, hasRow, canImport, runJob, stopJob, newJob, editJob, doImport, removeJob, refetch, search],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
