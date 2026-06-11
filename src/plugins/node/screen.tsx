@@ -225,11 +225,25 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, refetch],
   );
 
+  // Import = track an existing server node into Mine (for nodes created outside bee).
+  const doImport = useCallback(
+    (name: string) => {
+      if (!baseUrl) return;
+      trackResource("node", name, PROFILE, baseUrl, ctx.dbPath);
+      ctx.notify(`${SYM.ok} Imported '${name}' into Mine`, "success");
+      void refetch();
+    },
+    [baseUrl, ctx, refetch],
+  );
+
   // ── Declarative keymap ────────────────────────────────────────────────────
   const hasRow = current !== undefined && current.labels !== "[DELETED_ON_SERVER]";
+  // Importable = a real server row not yet in the Mine list (most useful in All view).
+  const canImport = hasRow && current !== undefined && !trackedNames.has(current.name);
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "n", label: "new", run: () => void createNode() },
+      { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.name); } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeNode(current.name); } },
       { key: "o", label: "toggle offline", when: () => hasRow, run: () => { if (current) void doToggleOffline(current); } },
       { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
@@ -238,7 +252,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, createNode, removeNode, doToggleOffline, refetch, search],
+    [current, hasRow, canImport, createNode, doImport, removeNode, doToggleOffline, refetch, search],
   );
   useKeymap(bindings, { isActive: active && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);

@@ -219,11 +219,25 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, store, refetch],
   );
 
+  // Import = track an existing server credential into Mine (for credentials created outside bee).
+  const doImport = useCallback(
+    (id: string) => {
+      if (!baseUrl) return;
+      trackResource("credential", id, PROFILE, `${baseUrl}.${store}`, ctx.dbPath);
+      ctx.notify(`${SYM.ok} Imported '${id}' into Mine`, "success");
+      void refetch();
+    },
+    [baseUrl, store, ctx, refetch],
+  );
+
   // ── Declarative keymap ────────────────────────────────────────────────────
   const hasRow = current !== undefined && current.typeName !== "[DELETED_ON_SERVER]";
+  // Importable = a real server row not yet in the Mine list (most useful in All view).
+  const canImport = hasRow && current !== undefined && !trackedIds.has(current.id);
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "c", label: "new", run: () => void createCred() },
+      { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.id); } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeCred(current.id); } },
       { key: "S", label: "store", run: () => setStore((s) => (s === "system" ? "user" : "system")) },
       { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
@@ -232,7 +246,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, createCred, removeCred, refetch, search],
+    [current, hasRow, canImport, createCred, doImport, removeCred, refetch, search],
   );
   useKeymap(bindings, { isActive: active && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);

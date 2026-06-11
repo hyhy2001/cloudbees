@@ -408,10 +408,23 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [ctx, refetch]);
 
+  // Import = track an existing server job into Mine (for jobs created outside bee).
+  const doImport = useCallback(
+    (name: string) => {
+      if (!baseUrl) return;
+      trackResource("job", name, PROFILE, baseUrl, ctx.dbPath);
+      ctx.notify(`${SYM.ok} Imported '${name}' into Mine`, "success");
+      void refetch();
+    },
+    [baseUrl, ctx, refetch],
+  );
+
   // Declarative keymap — the single source for both dispatch and footer hints.
   // `F` (not `f`) toggles auto-refresh so it can't collide with the table's
   // Ctrl+f paging.
   const hasRow = current !== undefined && current.color !== "[DELETED_ON_SERVER]";
+  // Importable = a real server row not yet in the Mine list (most useful in All view).
+  const canImport = hasRow && current !== undefined && !trackedNames.has(current.name);
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "Enter", label: "log", group: "action", when: () => current !== undefined, run: () => { if (current) setLogJob(current.name); } },
@@ -419,6 +432,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "s", label: "stop", when: () => hasRow, run: () => { if (current) void stopJob(current); } },
       { key: "l", label: "log", hidden: true, when: () => current !== undefined, run: () => { if (current) setLogJob(current.name); } },
       { key: "n", label: "new", run: () => void newJob() },
+      { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.name); } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeJob(current.name); } },
       { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
@@ -427,7 +441,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, runJob, stopJob, newJob, removeJob, refetch, search],
+    [current, hasRow, canImport, runJob, stopJob, newJob, doImport, removeJob, refetch, search],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
