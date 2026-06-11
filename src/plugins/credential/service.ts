@@ -13,6 +13,7 @@ import { buildUsernamePasswordCredXml } from "./xml-builder";
 
 /** Valid store choices — exposed for CLI validation. */
 export const CREDENTIAL_STORES = ["system", "user"] as const;
+/** Union of the two valid store values: `"system"` or `"user"`. */
 export type CredentialStore = (typeof CREDENTIAL_STORES)[number];
 
 /** REST path segment for the credential store. */
@@ -23,6 +24,7 @@ export function getUserSeg(username = "", store: string = "system"): string {
   return "/credentials/store/system/domain/_";
 }
 
+/** Lists credentials in the resolved store, requesting `id,typeName,description,scope,displayName` fields. Results are cached per `baseUrl` + store. */
 export async function listCredentials(
   client: CloudBeesClient,
   username = "",
@@ -36,6 +38,7 @@ export async function listCredentials(
   return (data?.credentials ?? []).map((c) => credentialFromDict(c as Record<string, unknown>));
 }
 
+/** Fetches a single credential by ID from `<storePath>/credential/<credId>/api/json`. */
 export async function getCredential(
   client: CloudBeesClient,
   credId: string,
@@ -50,6 +53,10 @@ export async function getCredential(
   return credentialFromDict(data ?? {});
 }
 
+/**
+ * Posts a `Username with password` credential XML to `<storePath>/createCredentials`.
+ * Scope defaults to `GLOBAL`; `store="user"` scopes it to the per-user store.
+ */
 export async function createUsernamePassword(
   client: CloudBeesClient,
   credId: string,
@@ -65,6 +72,7 @@ export async function createUsernamePassword(
   await client.postXml(`${userSeg}/createCredentials`, xml, { invalidate: "credentials." });
 }
 
+/** Deletes a credential via `<storePath>/credential/<credId>/doDelete`. Invalidates the `credentials.` cache. */
 export async function deleteCredential(
   client: CloudBeesClient,
   credId: string,

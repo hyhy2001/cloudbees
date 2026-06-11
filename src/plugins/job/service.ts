@@ -50,6 +50,11 @@ export async function listJobs(client: CloudBeesClient): Promise<JobDTO[]> {
   return jobs.map((j) => jobFromDict(j));
 }
 
+/**
+ * Looks up a job by name. First confirms existence via `/job/<name>/api/json`, then fetches
+ * full detail from the list endpoint. Returns a minimal DTO if the job exists but isn't in
+ * the list (e.g. inside a folder), or `null` on 404.
+ */
 export async function getJob(client: CloudBeesClient, name: string): Promise<JobDTO | null> {
   try {
     // Try direct endpoint first to confirm existence
@@ -98,6 +103,7 @@ export async function triggerJob(client: CloudBeesClient, name: string): Promise
   await client.post(`/job/${name}/build`, { invalidate: "jobs." });
 }
 
+/** Triggers a parameterised build via `/job/<name>/buildWithParameters` (form-encoded POST). */
 export async function triggerJobWithParams(
   client: CloudBeesClient,
   name: string,
@@ -114,6 +120,7 @@ export async function triggerJobWithParams(
   });
 }
 
+/** Sends a stop request to `/job/<jobName>/<buildNumber>/stop`. Invalidates the `jobs.` cache. */
 export async function stopBuild(
   client: CloudBeesClient,
   jobName: string,
@@ -126,6 +133,7 @@ export async function stopBuild(
 // Build detail / log
 // ---------------------------------------------------------------------------
 
+/** Fetches full build metadata from `/job/<jobName>/<buildNumber>/api/json` and maps it to a `BuildDTO`. */
 export async function getBuildDetail(
   client: CloudBeesClient,
   jobName: string,
@@ -137,6 +145,11 @@ export async function getBuildDetail(
   return buildFromDict((data as Record<string, unknown>) ?? {});
 }
 
+/**
+ * Returns the most recent build number from `lastBuild[number]`. Falls back to the
+ * `builds[]` array on a 400 (some Jenkins versions omit `lastBuild`). Returns `null`
+ * when no builds exist.
+ */
 export async function getLastBuildNumber(
   client: CloudBeesClient,
   jobName: string,
@@ -172,6 +185,7 @@ export async function getLastBuildNumber(
   }
 }
 
+/** Fetches the full console log for a specific build from `/job/<jobName>/<buildNumber>/consoleText`. */
 export async function getBuildLog(
   client: CloudBeesClient,
   jobName: string,
@@ -180,6 +194,7 @@ export async function getBuildLog(
   return client.getText(`/job/${jobName}/${buildNumber}/consoleText`);
 }
 
+/** Resolves the latest build number then returns its full console log. Returns `"(No builds found)"` if the job has never run. */
 export async function getLastBuildLog(
   client: CloudBeesClient,
   jobName: string,
@@ -189,6 +204,11 @@ export async function getLastBuildLog(
   return getBuildLog(client, jobName, buildNum);
 }
 
+/**
+ * Progressive log fetch for a specific build via `X-Text-Size` / `X-More-Data` headers.
+ * @param start Byte offset to resume from (pass the previous `newOffset` on subsequent calls).
+ * @returns `[text, newOffset, hasMore]` — keep calling while `hasMore` is true.
+ */
 export async function streamBuildLog(
   client: CloudBeesClient,
   jobName: string,
@@ -201,6 +221,12 @@ export async function streamBuildLog(
   );
 }
 
+/**
+ * Progressive log fetch for the most recent build. Resolves the build number first;
+ * returns `["", start, false]` when no builds exist.
+ * @param start Byte offset to resume from.
+ * @returns `[text, newOffset, hasMore]`
+ */
 export async function streamLastBuildLog(
   client: CloudBeesClient,
   jobName: string,
@@ -211,6 +237,10 @@ export async function streamLastBuildLog(
   return streamBuildLog(client, jobName, buildNum, start);
 }
 
+/**
+ * Returns the most recent `count` builds from `builds[]{0,count}` (newest-first).
+ * Includes `number`, `result`, `building`, `duration`, `timestamp`, and `url`.
+ */
 export async function getBuildHistory(
   client: CloudBeesClient,
   jobName: string,
@@ -223,6 +253,10 @@ export async function getBuildHistory(
   return builds.map((b) => buildFromDict(b));
 }
 
+/**
+ * Polls `getBuildDetail` every `pollInterval` seconds until `build.building` is false
+ * or `timeout` seconds elapse. Returns the final build state regardless of timeout.
+ */
 export async function waitForBuild(
   client: CloudBeesClient,
   jobName: string,
@@ -243,6 +277,11 @@ export async function waitForBuild(
 // Create / Copy / Delete
 // ---------------------------------------------------------------------------
 
+/**
+ * Creates a Freestyle project via `/createItem` with a full `config.xml` built by
+ * `buildFreestyleXml`. Email filter keywords/regex are encoded into the presend script
+ * and require a non-empty `email` recipient.
+ */
 export async function createFreestyleJob(
   client: CloudBeesClient,
   name: string,
@@ -278,6 +317,7 @@ export async function createFreestyleJob(
   });
 }
 
+/** Creates a CloudBees/Jenkins Folder via `/createItem` using the `com.cloudbees.hudson.plugins.folder.Folder` class XML. */
 export async function createFolder(
   client: CloudBeesClient,
   name: string,
@@ -289,6 +329,7 @@ export async function createFolder(
   });
 }
 
+/** Copies a job by reading the source `config.xml` and posting it verbatim to `/createItem?name=<destName>`. */
 export async function copyJob(
   client: CloudBeesClient,
   srcName: string,
@@ -313,6 +354,12 @@ export async function deleteJob(client: CloudBeesClient, name: string): Promise<
 // Config summary (read config.xml and extract schedule + email info)
 // ---------------------------------------------------------------------------
 
+/**
+ * Parses a job's `config.xml` and extracts the human-readable config summary:
+ * cron schedule, email recipient, send condition (`failed`/`success`/`always`),
+ * and anti-spam filter keywords/regex decoded from the ExtendedEmailPublisher presend script.
+ * Returns `-` for any field not present in the config.
+ */
 export async function getJobConfigSummary(
   client: CloudBeesClient,
   name: string,

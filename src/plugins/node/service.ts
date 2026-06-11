@@ -17,6 +17,7 @@ function formEncode(data: Record<string, string>): string {
     .join("&");
 }
 
+/** Lists all agents via `/computer/api/json` using the lightweight `_NODE_TREE` projection; results are cached per `baseUrl`. */
 export async function listNodes(client: CloudBeesClient): Promise<NodeDTO[]> {
   const data = await client.get<{ computer?: unknown[] }>(
     `/computer/api/json?tree=${_NODE_TREE}`,
@@ -26,6 +27,10 @@ export async function listNodes(client: CloudBeesClient): Promise<NodeDTO[]> {
   return computers.map((c) => nodeFromDict(c as Record<string, unknown>));
 }
 
+/**
+ * Fetches full node detail from `/computer/<name>/api/json`, then best-effort appends
+ * the raw `config.xml` (silently omitted if the endpoint returns an error).
+ */
 export async function getNode(client: CloudBeesClient, name: string): Promise<NodeDetailDTO> {
   const data = await client.get<Record<string, unknown>>(`/computer/${name}/api/json`, {
     cacheKey: `nodes.detail.${name}`,
@@ -39,6 +44,7 @@ export async function getNode(client: CloudBeesClient, name: string): Promise<No
   return dto;
 }
 
+/** Options for creating a permanent (DumbSlave) agent. Omitting `host` selects the JNLP launcher; providing `host` selects SSH. */
 export interface CreateNodeOptions {
   name: string;
   remoteDir: string;
@@ -51,6 +57,10 @@ export interface CreateNodeOptions {
   javaPath?: string;
 }
 
+/**
+ * Creates a `hudson.slaves.DumbSlave` via `/computer/doCreateItem` (form-encoded POST).
+ * Chooses SSH launcher when `opts.host` is set, JNLP launcher otherwise.
+ */
 export async function createPermanentNode(
   client: CloudBeesClient,
   opts: CreateNodeOptions,
@@ -115,6 +125,7 @@ export async function createPermanentNode(
   });
 }
 
+/** Copies an existing agent config to a new name via `/computer/doCreateItem` with `mode=copy`. */
 export async function copyNode(
   client: CloudBeesClient,
   sourceName: string,
@@ -128,10 +139,15 @@ export async function copyNode(
   });
 }
 
+/** Permanently removes an agent via `/computer/<name>/doDelete`. Invalidates the `nodes.` cache. */
 export async function deleteNode(client: CloudBeesClient, name: string): Promise<void> {
   await client.post(`/computer/${name}/doDelete`, { invalidate: "nodes." });
 }
 
+/**
+ * Flips the online/offline state of an agent via `/computer/<name>/toggleOffline`.
+ * The optional `reason` is passed as `offlineMessage` query param (visible in the Jenkins UI).
+ */
 export async function toggleOffline(
   client: CloudBeesClient,
   name: string,
@@ -141,6 +157,7 @@ export async function toggleOffline(
   await client.post(`/computer/${name}/toggleOffline${qs}`, { invalidate: "nodes." });
 }
 
+/** Fields that can be patched on an existing agent. All are optional; only provided fields are written. */
 export interface UpdateNodeOptions {
   remoteDir?: string;
   numExecutors?: number;
