@@ -35,9 +35,7 @@ export async function launchTui(dbPath?: string): Promise<void> {
 
   await waitUntilExit();
 
-  // Leave a clean terminal on quit: Ink keeps its last frame by default. clear()
-  // drops Ink's own output; the escape also wipes scrollback (\x1b[3J) and homes
-  // the cursor so no stale TUI frame lingers in the user's shell.
+  // Drop only Ink's last frame on quit (it keeps it by default) so no stale TUI
+  // frame lingers — the terminal's prior scrollback is left untouched.
   clear();
-  if (process.stdout.isTTY) process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
 }
