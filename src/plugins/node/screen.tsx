@@ -172,10 +172,11 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             { name: "numExecutors", label: "Executors", initial: "1" },
             { name: "labels", label: "Labels" },
             { name: "desc", label: "Description" },
-            { name: "host", label: "SSH Host", placeholder: "blank = JNLP launcher" },
-            { name: "port", label: "SSH Port", placeholder: "SSH only (default 22)" },
+            { name: "launcher", label: "Launch method", options: ["ssh", "jnlp"], initial: "ssh" },
+            { name: "host", label: "SSH Host", placeholder: "ssh only" },
+            { name: "port", label: "SSH Port", placeholder: "ssh only (default 22)" },
             { name: "credentialsId", label: "SSH Credential", options: credentialOptions },
-            { name: "javaPath", label: "Java Path", placeholder: "SSH only (blank = default)" },
+            { name: "javaPath", label: "Java Path", placeholder: "ssh only (blank = default)" },
             { name: "availability", label: "Availability", options: ["always", "demand"], initial: "always" },
             { name: "inDemandDelay", label: "In-demand Delay", initial: "0" },
             { name: "idleDelay", label: "Idle Delay", initial: "1" },
@@ -188,16 +189,18 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     try {
       const client = await ctx.getClient({ useController: true });
       const credId = result.credentialsId === NONE_OPTION ? "" : result.credentialsId;
+      // JNLP launcher: the service picks JNLP when host is empty, so drop host.
+      const isSsh = result.launcher !== "jnlp";
       await createPermanentNode(client, {
         name: result.name,
         remoteDir: result.remoteDir,
         numExecutors: result.numExecutors ? parseInt(result.numExecutors, 10) : 1,
         labels: result.labels ?? "",
         desc: result.desc ?? "",
-        host: result.host ?? "",
-        port: result.port ? parseInt(result.port, 10) : undefined,
-        credentialsId: credId || undefined,
-        javaPath: result.javaPath || undefined,
+        host: isSsh ? (result.host ?? "") : "",
+        port: isSsh && result.port ? parseInt(result.port, 10) : undefined,
+        credentialsId: isSsh ? credId || undefined : undefined,
+        javaPath: isSsh ? result.javaPath || undefined : undefined,
         availability: result.availability === "demand" ? "demand" : "always",
         inDemandDelay: result.inDemandDelay ? parseInt(result.inDemandDelay, 10) : undefined,
         idleDelay: result.idleDelay ? parseInt(result.idleDelay, 10) : undefined,

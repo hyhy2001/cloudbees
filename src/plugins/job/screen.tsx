@@ -43,6 +43,8 @@ import {
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
 import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
 import { listNodes } from "../node/service";
+import { ScheduleBuilder } from "../../core/tui/components/ScheduleBuilder";
+import { parseCron } from "../../core/tui/data/cron-schedule";
 
 const PROFILE = "default";
 
@@ -188,6 +190,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [logJob, setLogJob] = useState<string | null>(null);
   // Job whose build parameters are being edited (ParamListEditor overlay).
   const [paramJob, setParamJob] = useState<string | null>(null);
+  // Job whose schedule is being edited (ScheduleBuilder overlay). Holds the
+  // job name + its current cron (so the builder prefills from it).
+  const [scheduleJob, setScheduleJob] = useState<{ name: string; cron: string } | null>(null);
 
   // Inline "/" search box (client-side filter; no refetch). Disabled while the
   // log overlay is open.
@@ -535,6 +540,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "n", label: "new", run: () => void newJob() },
       { key: "e", label: "edit", when: () => hasRow, run: () => { if (current) void editJob(current); } },
       { key: "p", label: "params", when: () => hasRow, run: () => { if (current) setParamJob(current.name); } },
+      { key: "t", label: "schedule", when: () => hasRow, run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); } },
       { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.name); } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeJob(current.name); } },
       { key: "a", label: "mine/all", run: () => setShowAll((v) => !v) },
@@ -544,17 +550,17 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, canImport, runJob, stopJob, newJob, editJob, doImport, removeJob, refetch, search],
+    [current, hasRow, canImport, summary, runJob, stopJob, newJob, editJob, doImport, removeJob, refetch, search],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
   // action keymap (and the table's nav) so letters don't trigger actions.
-  useKeymap(bindings, { isActive: active && !logJob && !paramJob && !search.editing });
+  useKeymap(bindings, { isActive: active && !logJob && !paramJob && !scheduleJob && !search.editing });
 
   // Publish hints to the shell footer while this tab is the active one.
   useEffect(() => {
-    if (active && !logJob && !paramJob) ctx.setActiveKeyHints(bindingsToHints(bindings));
-  }, [active, logJob, paramJob, bindings, ctx]);
+    if (active && !logJob && !paramJob && !scheduleJob) ctx.setActiveKeyHints(bindingsToHints(bindings));
+  }, [active, logJob, paramJob, scheduleJob, bindings, ctx]);
 
   if (logJob) {
     return <LogViewer ctx={ctx} jobName={logJob} onClose={() => setLogJob(null)} />;
@@ -577,6 +583,32 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 params, params.length === 0,
               );
               ctx.notify(`${SYM.ok} Updated parameters: ${name}`, "success");
+              void refetch();
+            } catch (err) {
+              ctx.notify(err instanceof Error ? err.message : String(err), "error");
+            }
+          })();
+        }}
+      />
+    );
+  }
+
+  if (scheduleJob) {
+    return (
+      <ScheduleBuilder
+        initial={parseCron(scheduleJob.cron)}
+        setInputCaptured={ctx.setInputCaptured}
+        onResult={(cron) => {
+          const name = scheduleJob.name;
+          setScheduleJob(null);
+          if (cron === null) return; // cancelled
+          void (async () => {
+            try {
+              const client = await ctx.getClient({ useController: true });
+              // schedule "" removes the trigger; updateJobFreestyle treats the
+              // schedule arg as: null = unchanged, "" = clear, value = set.
+              await updateJobFreestyle(client, name, null, null, null, cron);
+              ctx.notify(`${SYM.ok} Updated schedule: ${name}`, "success");
               void refetch();
             } catch (err) {
               ctx.notify(err instanceof Error ? err.message : String(err), "error");
