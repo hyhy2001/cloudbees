@@ -10,6 +10,7 @@ data/.bee_secret
 # local tooling state (not part of the project)
 .claude/
 .atlas/
+CLAUDE.md
 
 # project-local bun toolchain (bootstrapped by `make`)
 .bun/
