@@ -54,6 +54,33 @@ export async function getCredential(
 }
 
 /**
+ * Read a credential's username + description from its config.xml.
+ *
+ * Jenkins NEVER returns the password/secret (it is write-only), so the edit
+ * form cannot prefill it — only username and description can be shown as their
+ * real current values. Returns "" for each field that isn't present.
+ */
+export async function getCredentialConfig(
+  client: CloudBeesClient,
+  credId: string,
+  username = "",
+  store = "system",
+): Promise<{ username: string; description: string }> {
+  const userSeg = getUserSeg(username, store);
+  const xml = await client.getText(`${userSeg}/credential/${credId}/config.xml`);
+  const pick = (tag: string): string => {
+    const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+    if (!m || m[1] === undefined) return "";
+    return m[1]
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&")
+      .trim();
+  };
+  return { username: pick("username"), description: pick("description") };
+}
+
+/**
  * Posts a `Username with password` credential XML to `<storePath>/createCredentials`.
  * Scope defaults to `GLOBAL`; `store="user"` scopes it to the per-user store.
  */

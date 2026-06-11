@@ -373,6 +373,10 @@ export async function getJobConfigSummary(
     email_cond: "-",
     email_keywords: "-",
     email_regex: "-",
+    description: "",
+    shell_cmd: "",
+    chdir: "",
+    node: "",
   };
 
   try {
@@ -446,6 +450,34 @@ export async function getJobConfigSummary(
           if (typeof rec === "string" && rec.trim()) {
             summary.email = rec.trim() + " (Built-in Mailer)";
           }
+        }
+      }
+    }
+
+    // 3. Description
+    const desc = project["description"];
+    if (typeof desc === "string" && desc.trim()) summary.description = desc.trim();
+
+    // 4. Assigned node (empty when the job can roam)
+    const assigned = project["assignedNode"];
+    if (typeof assigned === "string" && assigned.trim()) summary.node = assigned.trim();
+
+    // 5. Shell command (first hudson.tasks.Shell builder). Split a leading
+    //    `cd <dir> && <rest>` back into chdir + shell_cmd so the edit form shows
+    //    the same two fields the create form used.
+    const builders = project["builders"] as Record<string, unknown> | undefined;
+    if (builders) {
+      let shell = builders["hudson.tasks.Shell"] as Record<string, unknown> | undefined;
+      // Multiple shell builders parse as an array — take the first.
+      if (Array.isArray(shell)) shell = shell[0] as Record<string, unknown> | undefined;
+      const cmd = shell?.["command"];
+      if (typeof cmd === "string" && cmd.length > 0) {
+        const m = cmd.match(/^cd\s+(.+?)\s+&&\s+([\s\S]*)$/);
+        if (m) {
+          summary.chdir = m[1]!.trim();
+          summary.shell_cmd = m[2]!;
+        } else {
+          summary.shell_cmd = cmd;
         }
       }
     }

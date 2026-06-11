@@ -9,6 +9,18 @@ export interface JobConfigSummary {
   email_cond: string;
   email_keywords: string;
   email_regex: string;
+  /** Job description. "" when none. Used to prefill the edit form. */
+  description: string;
+  /**
+   * Shell command from the first hudson.tasks.Shell builder, with a leading
+   * `cd <dir> && ` stripped into `chdir`. "" when no shell builder. Used to
+   * prefill the edit form (so the user sees the real value, not "leave blank").
+   */
+  shell_cmd: string;
+  /** Working dir extracted from a leading `cd <dir> && ` in the shell command. "" when none. */
+  chdir: string;
+  /** Assigned node/label (<assignedNode>), or "" when the job can roam anywhere. */
+  node: string;
 }
 
 /** Parsed email-filter metadata stored in the presendScript marker line. */
