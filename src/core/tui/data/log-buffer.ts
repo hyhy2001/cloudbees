@@ -21,6 +21,9 @@ export const DEFAULT_MAX_LINES = 2000;
  * The chunk is split on "\n"; a trailing newline does not produce a spurious
  * empty last line.
  */
+// Matches all standard ANSI/VT100 escape sequences (CSI, OSC, etc.)
+const ANSI_RE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))/g;
+
 export function appendChunk(
   prev: readonly string[],
   chunk: string | undefined,
@@ -28,7 +31,7 @@ export function appendChunk(
 ): string[] {
   if (!chunk) return prev as string[];
   // Drop a single trailing newline so we don't append an empty line each poll.
-  const normalized = chunk.endsWith("\n") ? chunk.slice(0, -1) : chunk;
+  const normalized = (chunk.endsWith("\n") ? chunk.slice(0, -1) : chunk).replace(ANSI_RE, "");
   if (normalized === "") return prev as string[];
   const incoming = normalized.split("\n");
   const merged = prev.length === 0 ? incoming : [...prev, ...incoming];
