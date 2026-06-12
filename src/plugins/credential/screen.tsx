@@ -380,14 +380,14 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               const mine = trackedIds.has(c.id);
               return [
                 { text: mine ? SYM.tracked : "", color: THEME.success },
-                { text: c.id.slice(0, 28) },
+                { text: c.id },
                 {
                   text: isDeleted ? "[DELETED_ON_SERVER]" : c.typeName.slice(0, 22),
                   color: isDeleted ? THEME.error : undefined,
                   dim: isDeleted,
                 },
                 { text: (c.scope ?? "").slice(0, 10), dim: true },
-                { text: (c.description ?? "").slice(0, 34) },
+                { text: c.description ?? "" },
               ];
             })}
             rowKeys={rowKeys}

@@ -132,7 +132,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   const active = screens[tabIndex];
 
   return (
-    <Box flexDirection="column" paddingX={1}>
+    <Box flexDirection="column" paddingX={1} width="100%">
       {/* Header / tab bar */}
       <Box>
         <Text color={THEME.active} bold>

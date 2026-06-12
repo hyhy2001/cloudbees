@@ -20,6 +20,7 @@ import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
 import { useSearch } from "../../core/tui/data/use-search";
 import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
+import { useDimensions } from "../../core/tui/data/use-dimensions";
 import { useAutoRefresh } from "../../core/tui/data/use-auto-refresh";
 import { getTtl } from "../../core/cache/policy";
 import type { ControllerDTO } from "../../core/dtos/controller";
@@ -33,6 +34,7 @@ import {
 
 const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const { columns: termCols } = useDimensions();
 
   // Inline "/" search box (client-side filter; no refetch).
   const search = useSearch({ isActive: active, onEditingChange: ctx.setInputCaptured });
@@ -165,11 +167,12 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           )}
           <SearchBar state={search} />
           <DataTable
+            tableWidth={termCols}
             columns={[
               { header: " ", width: 3 },
-              { header: "Name", width: 30 },
+              { header: "Name", width: 30, flex: true },
               { header: "Type", width: 18 },
-              { header: "URL", width: 40 },
+              { header: "URL", width: 40, flex: true },
               { header: "Status", width: 8 },
             ]}
             rows={rows.map((c) => {
@@ -179,9 +182,9 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               const statusColor = c.online ? THEME.success : THEME.warning;
               return [
                 { text: indicator, color: isActive ? THEME.success : undefined },
-                { text: c.name.slice(0, 30) },
+                { text: c.name },
                 { text: typeLabel(c.className).slice(0, 18), color: THEME.blue },
-                { text: c.url.slice(0, 40), dim: true },
+                { text: c.url, dim: true },
                 { text: statusText, color: statusColor },
               ];
             })}

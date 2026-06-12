@@ -708,9 +708,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 { text: mine ? SYM.tracked : "", color: THEME.success },
                 { text: st.text, color: st.color, dim: st.dim },
                 { text: tp.text, color: tp.color, dim: (tp as { dim?: boolean }).dim },
-                { text: j.name.slice(0, 42) },
+                { text: j.name },
                 { text: j.lastBuildNumber ? `#${j.lastBuildNumber}` : "—" },
-                { text: (j.description ?? "").slice(0, 30) },
+                { text: j.description ?? "" },
               ];
             })}
             rowKeys={rowKeys}
