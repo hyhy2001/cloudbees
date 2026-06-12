@@ -48,6 +48,7 @@ import { listNodes } from "../node/service";
 import { ScheduleBuilder } from "../../core/tui/components/ScheduleBuilder";
 import { EmailBuilder, type EmailSpec } from "../../core/tui/components/EmailBuilder";
 import { parseCron } from "../../domain/schedule";
+import type { JobConfigSummary } from "./types";
 
 // ─── Status + type rendering (port of _status_markup / _type_label) ─────────
 
@@ -318,7 +319,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const current = jobs[cursor];
 
   // Detail panel (config summary for the highlighted job).
-  const [summary, setSummary] = useState<Record<string, string> | null>(null);
+  const [summary, setSummary] = useState<JobConfigSummary | null>(null);
 
   // Fetch config summary for the highlighted job (detail panel).
   useEffect(() => {
@@ -331,7 +332,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       try {
         const client = await ctx.getClient({ useController: true });
         const s = await getJobConfigSummary(client, current.name);
-        if (!cancelled) setSummary(s as unknown as Record<string, string>);
+        if (!cancelled) setSummary(s);
       } catch {
         if (!cancelled) setSummary(null);
       }
@@ -466,17 +467,17 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // from the summary, so leaving it blank keeps the current command.
   const editJob = useCallback(
     async (job: JobDTO) => {
-      const s = summary ?? {};
+      const s = summary;
       const result = await ctx.openModal<Record<string, string>>({
         id: "edit-job",
         render: (resolve) => (
           <FormModal
             title={`${SYM.gear} Edit Job: ${job.name}`}
             fields={[
-              { name: "desc", label: "Description", initial: s.description || job.description || "", hint: "free text" },
-              { name: "shell_cmd", label: "Shell Command", initial: s.shell_cmd || "", hint: "shell to run" },
-              { name: "chdir", label: "Working Dir", initial: s.chdir || "", path: true, hint: "Tab completes local FS" },
-              { name: "node", label: "Node/Label", options: nodeOptions, initial: s.node && s.node !== "-" ? s.node : NONE_OPTION, hint: "where it runs" },
+              { name: "desc", label: "Description", initial: s?.description || job.description || "", hint: "free text" },
+              { name: "shell_cmd", label: "Shell Command", initial: s?.shell_cmd || "", hint: "shell to run" },
+              { name: "chdir", label: "Working Dir", initial: s?.chdir || "", path: true, hint: "Tab completes local FS" },
+              { name: "node", label: "Node/Label", options: nodeOptions, initial: s?.node && s.node !== "-" ? s.node : NONE_OPTION, hint: "where it runs" },
             ]}
             onResult={resolve}
           />
@@ -498,10 +499,10 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           result.node && result.node !== NONE_OPTION ? result.node : null,
         );
         ctx.notify(`${SYM.ok} Updated: ${job.name}`, "success");
-        const initDesc = s.description || job.description || "";
-        const initShell = s.shell_cmd || "";
-        const initChdir = s.chdir || "";
-        const initNode = s.node && s.node !== "-" ? s.node : NONE_OPTION;
+        const initDesc = s?.description || job.description || "";
+        const initShell = s?.shell_cmd || "";
+        const initChdir = s?.chdir || "";
+        const initNode = s?.node && s.node !== "-" ? s.node : NONE_OPTION;
         const parts = [`bee job update ${job.name}`];
         if (result.desc !== initDesc) parts.push(`--description "${result.desc}"`);
         if (result.shell_cmd !== initShell || result.chdir !== initChdir) {
@@ -549,16 +550,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "t", label: "schedule", when: () => hasRow, run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); } },
       { key: "m", label: "email", when: () => hasRow, run: () => {
         if (!current) return;
-        const s = summary ?? {};
-        const hasEmail = s.email && s.email !== "-";
+        const s = summary;
+        const hasEmail = s?.email && s.email !== "-";
         setEmailJob({
           name: current.name,
           spec: {
             enabled: !!hasEmail,
-            email: hasEmail ? s.email! : "",
-            emailCond: (s.email_cond && s.email_cond !== "-") ? s.email_cond : "failed",
-            emailKeywords: (s.email_keywords && s.email_keywords !== "-") ? s.email_keywords : "",
-            emailRegex: (s.email_regex && s.email_regex !== "-") ? s.email_regex : "",
+            email: hasEmail ? s!.email : "",
+            emailCond: (s?.email_cond && s.email_cond !== "-") ? s.email_cond : "failed",
+            emailKeywords: (s?.email_keywords && s.email_keywords !== "-") ? s.email_keywords : "",
+            emailRegex: (s?.email_regex && s.email_regex !== "-") ? s.email_regex : "",
           },
         });
       } },
@@ -593,7 +594,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   if (paramJob) {
     return (
       <ParamListEditor
-        initial={[]}
+        initial={summary?.params ?? []}
         setInputCaptured={ctx.setInputCaptured}
         onResult={(params) => {
           const name = paramJob;

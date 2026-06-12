@@ -21,6 +21,8 @@ export interface JobConfigSummary {
   chdir: string;
   /** Assigned node/label (<assignedNode>), or "" when the job can roam anywhere. */
   node: string;
+  /** Existing string parameter definitions. [] when none. */
+  params: StringParamDef[];
 }
 
 /** A single String build-parameter definition on a job. */

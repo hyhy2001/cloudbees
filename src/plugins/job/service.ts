@@ -368,6 +368,7 @@ export async function getJobConfigSummary(
     shell_cmd: "",
     chdir: "",
     node: "",
+    params: [],
   };
 
   try {
@@ -469,6 +470,32 @@ export async function getJobConfigSummary(
           summary.shell_cmd = m[2]!;
         } else {
           summary.shell_cmd = cmd;
+        }
+      }
+    }
+
+    // 6. Build parameters (hudson.model.ParametersDefinitionProperty)
+    const properties = project["properties"] as Record<string, unknown> | undefined;
+    if (properties) {
+      const paramsProp = properties["hudson.model.ParametersDefinitionProperty"] as
+        | Record<string, unknown>
+        | undefined;
+      if (paramsProp) {
+        const defs = paramsProp["parameterDefinitions"] as Record<string, unknown> | undefined;
+        if (defs) {
+          const raw = defs["hudson.model.StringParameterDefinition"];
+          const items: Array<Record<string, unknown>> = Array.isArray(raw)
+            ? (raw as Array<Record<string, unknown>>)
+            : raw
+            ? [raw as Record<string, unknown>]
+            : [];
+          summary.params = items
+            .map((d) => ({
+              name: typeof d["name"] === "string" ? d["name"] : "",
+              defaultValue: typeof d["defaultValue"] === "string" ? d["defaultValue"] : "",
+              description: typeof d["description"] === "string" ? d["description"] : undefined,
+            }))
+            .filter((d) => d.name.length > 0);
         }
       }
     }
