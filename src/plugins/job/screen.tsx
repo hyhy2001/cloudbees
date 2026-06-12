@@ -98,6 +98,8 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
   const offsetRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRef = useRef(false);
+  const getClientRef = useRef(ctx.getClient);
+  getClientRef.current = ctx.getClient;
   const { rows: termRows } = useDimensions();
 
   // This overlay owns input while open: tell the shell to suspend its global
@@ -122,7 +124,7 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
     const poll = async () => {
       if (cancelledRef.current) return;
       try {
-        const client = await ctx.getClient({ useController: true });
+        const client = await getClientRef.current({ useController: true });
         const [text, newOffset, hasMore] = await streamLastBuildLog(client, jobName, offsetRef.current);
         if (cancelledRef.current) return;
         if (text) {
@@ -149,7 +151,7 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
       cancelledRef.current = true;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [ctx, jobName]);
+  }, [jobName]);
 
   // Show only the tail that fits the real terminal height. Reserve rows for the
   // app header/footer/toast chrome + this viewer's own title line and borders.
