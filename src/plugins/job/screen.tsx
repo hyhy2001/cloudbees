@@ -498,10 +498,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           result.node && result.node !== NONE_OPTION ? result.node : null,
         );
         ctx.notify(`${SYM.ok} Updated: ${job.name}`, "success");
+        const initDesc = s.description || job.description || "";
+        const initShell = s.shell_cmd || "";
+        const initChdir = s.chdir || "";
+        const initNode = s.node && s.node !== "-" ? s.node : NONE_OPTION;
         const parts = [`bee job update ${job.name}`];
-        if (result.desc) parts.push(`--description "${result.desc}"`);
-        if (finalShell) parts.push(`--shell "${finalShell}"`);
-        if (result.node && result.node !== NONE_OPTION) parts.push(`--node "${result.node}"`);
+        if (result.desc !== initDesc) parts.push(`--description "${result.desc}"`);
+        if (result.shell_cmd !== initShell || result.chdir !== initChdir) {
+          if (finalShell) parts.push(`--shell "${finalShell}"`);
+        }
+        if (result.node !== initNode && result.node !== NONE_OPTION) parts.push(`--node "${result.node}"`);
         ctx.logCommand(parts.join(" "));
         void refetch();
       } catch (err) {
@@ -670,7 +676,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 );
               }
               ctx.notify(`${SYM.ok} Updated email: ${name}`, "success");
-              ctx.logCommand(`bee job update ${name} --email "${spec.email}"`);
+              if (!spec.enabled) {
+                ctx.logCommand(`bee job update ${name} --email ""`);
+              } else {
+                const ep = [`bee job update ${name}`];
+                if (spec.email) ep.push(`--email "${spec.email}"`);
+                if (spec.emailCond) ep.push(`--email-cond "${spec.emailCond}"`);
+                if (spec.emailKeywords) ep.push(`--email-keywords "${spec.emailKeywords}"`);
+                if (spec.emailRegex) ep.push(`--email-regex "${spec.emailRegex}"`);
+                ctx.logCommand(ep.join(" "));
+              }
               void refetch();
             } catch (err) {
               ctx.notify(err instanceof Error ? err.message : String(err), "error");

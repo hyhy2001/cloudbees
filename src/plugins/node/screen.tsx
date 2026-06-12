@@ -346,20 +346,20 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         });
         ctx.notify(`${SYM.ok} Updated node: ${node.name}`, "success");
         const np = [`bee node update ${node.name}`];
-        if (result.remoteDir) np.push(`--remote-dir "${result.remoteDir}"`);
-        if (result.numExecutors) np.push(`--executors ${result.numExecutors}`);
-        if (result.labels) np.push(`--labels "${result.labels}"`);
-        if (result.desc) np.push(`--description "${result.desc}"`);
-        np.push(`--launcher ${result.launcher}`);
+        if (result.remoteDir !== (cfg.remoteDir || detail.remoteDir || "")) np.push(`--remote-dir "${result.remoteDir}"`);
+        if (result.numExecutors !== String(detail.numExecutors ?? 1)) np.push(`--executors ${result.numExecutors}`);
+        if (result.labels !== (detail.labels ?? "")) np.push(`--labels "${result.labels}"`);
+        if (result.desc !== (detail.description ?? "")) np.push(`--description "${result.desc}"`);
+        if (result.launcher !== cfg.launcherType) np.push(`--launcher ${result.launcher}`);
         if (result.launcher !== "jnlp") {
-          if (result.host) np.push(`--host "${result.host}"`);
-          if (result.port) np.push(`--port ${result.port}`);
-          if (result.credentialsId && result.credentialsId !== NONE_OPTION) np.push(`--credential "${result.credentialsId}"`);
+          if (result.host !== cfg.host) np.push(`--host "${result.host}"`);
+          if (result.port !== String(cfg.port)) np.push(`--port ${result.port}`);
+          if (result.credentialsId !== credInitial && result.credentialsId !== NONE_OPTION) np.push(`--credential "${result.credentialsId}"`);
         }
-        np.push(`--availability ${result.availability}`);
+        if (result.availability !== cfg.availability) np.push(`--availability ${result.availability}`);
         if (result.availability === "demand") {
-          np.push(`--in-demand-delay ${result.inDemandDelay}`);
-          np.push(`--idle-delay ${result.idleDelay}`);
+          if (result.inDemandDelay !== String(cfg.inDemandDelay)) np.push(`--in-demand-delay ${result.inDemandDelay}`);
+          if (result.idleDelay !== String(cfg.idleDelay)) np.push(`--idle-delay ${result.idleDelay}`);
         }
         ctx.logCommand(np.join(" "));
         void refetch();

@@ -237,9 +237,9 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         );
         ctx.notify(`${SYM.ok} Updated credential: ${cred.id}`, "success");
         const cp = [`bee credential update ${cred.id}`];
-        if (result.username) cp.push(`--username "${result.username}"`);
+        if (result.username !== prefill.username) cp.push(`--username "${result.username}"`);
         if (result.password) cp.push(`--password "***"`);
-        if (result.desc) cp.push(`--description "${result.desc}"`);
+        if (result.desc !== prefill.description) cp.push(`--description "${result.desc}"`);
         ctx.logCommand(cp.join(" "));
         void refetch();
       } catch (err) {
