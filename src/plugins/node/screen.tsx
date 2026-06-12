@@ -452,10 +452,10 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               return [
                 { text: mine ? SYM.tracked : "", color: THEME.success },
                 { text: statusText, color: statusColor },
-                { text: n.name.slice(0, 36) },
+                { text: n.name },
                 { text: isDeleted ? "-" : String(n.numExecutors) },
-                { text: isDeleted ? "[DELETED_ON_SERVER]" : n.labels.slice(0, 28), dim: isDeleted },
-                { text: (n.description ?? "").slice(0, 26) },
+                { text: isDeleted ? "[DELETED_ON_SERVER]" : n.labels, dim: isDeleted },
+                { text: n.description ?? "" },
               ];
             })}
             rowKeys={rowKeys}
