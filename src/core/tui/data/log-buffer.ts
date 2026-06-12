@@ -21,6 +21,8 @@ export const DEFAULT_MAX_LINES = 2000;
  * The chunk is split on "\n"; a trailing newline does not produce a spurious
  * empty last line.
  */
+// Jenkins Console Notes: ESC[8m<base64 payload>ESC[0m — strip payload too, not just the codes.
+const JENKINS_NOTE_RE = /\x1b\[8m[^\x1b]*\x1b\[0*m/g;
 // Matches all standard ANSI/VT100 escape sequences (CSI, OSC, etc.)
 const ANSI_RE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))/g;
 
@@ -31,7 +33,9 @@ export function appendChunk(
 ): string[] {
   if (!chunk) return prev as string[];
   // Drop a single trailing newline so we don't append an empty line each poll.
-  const normalized = (chunk.endsWith("\n") ? chunk.slice(0, -1) : chunk).replace(ANSI_RE, "");
+  const normalized = (chunk.endsWith("\n") ? chunk.slice(0, -1) : chunk)
+    .replace(JENKINS_NOTE_RE, "")
+    .replace(ANSI_RE, "");
   if (normalized === "") return prev as string[];
   const incoming = normalized.split("\n");
   const merged = prev.length === 0 ? incoming : [...prev, ...incoming];
