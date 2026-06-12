@@ -88,7 +88,11 @@ export async function getJob(client: CloudBeesClient, name: string): Promise<Job
 // ---------------------------------------------------------------------------
 
 export async function triggerJob(client: CloudBeesClient, name: string): Promise<void> {
-  await client.post(`/job/${name}/build`, { invalidate: "jobs." });
+  await client.post(`/job/${name}/build`, {
+    body: "",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    invalidate: "jobs.",
+  });
 }
 
 /** Triggers a parameterised build via `/job/<name>/buildWithParameters` (form-encoded POST). */
