@@ -8,12 +8,49 @@ import { Command } from "commander";
 import { initDb } from "./core/db/connection";
 import { initPlugins } from "./registry";
 import { printError } from "./core/cli/output";
+import { existsSync, chmodSync, mkdirSync, writeFileSync } from "fs";
+import { symlinkSync, unlinkSync } from "fs";
+import { dirname, join } from "path";
+import { homedir } from "os";
 
 // Injected at build time via --define; falls back for `bun run` dev mode.
 declare const BEE_VERSION: string | undefined;
 const VERSION = typeof BEE_VERSION !== "undefined" ? BEE_VERSION : "0.3.0";
 
+async function runInstall(): Promise<void> {
+  // Only works from a compiled binary (not `bun run src/main.ts`).
+  const binaryPath = process.execPath;
+  const binaryDir = dirname(binaryPath);
+
+  const wrapperPath = join(binaryDir, "bee.csh");
+  const linkTarget = join(homedir(), ".local", "bin", "bee");
+
+  // Write csh wrapper next to the binary.
+  const wrapperContent = `#!/usr/bin/env csh\nexec "${binaryPath}" $*\n`;
+  writeFileSync(wrapperPath, wrapperContent, { mode: 0o755 });
+  chmodSync(wrapperPath, 0o755);
+  console.log(`  [OK] wrapper: ${wrapperPath}`);
+
+  // Create ~/.local/bin if missing.
+  mkdirSync(join(homedir(), ".local", "bin"), { recursive: true });
+
+  // Remove stale symlink or file at link target.
+  if (existsSync(linkTarget)) {
+    unlinkSync(linkTarget);
+  }
+  symlinkSync(wrapperPath, linkTarget);
+  console.log(`  [OK] symlink: ${linkTarget} -> ${wrapperPath}`);
+  console.log(`\nAdd ~/.local/bin to your PATH if not already present.`);
+}
+
 async function main(): Promise<void> {
+  // --install: self-install without needing source or make.
+  const argv = process.argv.slice(2);
+  if (argv.includes("--install")) {
+    await runInstall();
+    return;
+  }
+
   // 1. Ensure the local SQLite DB + schema exist.
   initDb();
 
@@ -23,7 +60,8 @@ async function main(): Promise<void> {
     .description("bee — CloudBees command-line tool")
     .version(VERSION, "-V, --version", "output the version number")
     .option("--debug", "enable debug logging and full stack traces")
-    .option("--ui", "launch the interactive TUI");
+    .option("--ui", "launch the interactive TUI")
+    .option("--install", "install bee: create wrapper + symlink to ~/.local/bin/bee");
 
   // --debug toggles the env flag the output layer reads.
   program.on("option:debug", () => {
@@ -35,7 +73,6 @@ async function main(): Promise<void> {
 
   // 4. `bee --ui` (or `bee` with no subcommand + --ui) launches the TUI.
   //    Checked before dispatch because a bare `--ui` has no subcommand to hook.
-  const argv = process.argv.slice(2);
   if (argv.includes("--ui")) {
     const { launchTui } = await import("./core/tui/launch");
     await launchTui(process.env.CB_DB_PATH);

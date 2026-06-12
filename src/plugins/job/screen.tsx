@@ -34,11 +34,14 @@ import {
   listJobs,
   getJobConfigSummary,
   triggerJob,
+  triggerJobWithParams,
   stopBuild,
   deleteJob,
   createFreestyleJob,
   createFolder,
   streamLastBuildLog,
+  streamBuildLog,
+  getBuildHistory,
   updateJobFreestyle,
 } from "./service";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
@@ -93,6 +96,8 @@ interface LogViewerProps {
 
 const POLL_MS = 2000;
 
+const LOG_PAGE = 10;
+
 const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
   const [lines, setLines] = useState<string[]>([]);
   const [status, setStatus] = useState("connecting…");
@@ -101,36 +106,106 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
   const cancelledRef = useRef(false);
   const getClientRef = useRef(ctx.getClient);
   getClientRef.current = ctx.getClient;
-  const { rows: termRows } = useDimensions();
+  const { rows: termRows, columns: termCols } = useDimensions();
 
-  // This overlay owns input while open: tell the shell to suspend its global
-  // keys so `q`/`b`/`Esc` close the log instead of quitting the whole app.
+  // Build history: sorted descending (latest first). null = not loaded yet.
+  const [buildNums, setBuildNums] = useState<number[] | null>(null);
+  const [buildIdx, setBuildIdx] = useState(0);
+
+  // Scroll offset (top line index into `lines`). -1 = pinned to bottom (auto-scroll).
+  const [scrollTop, setScrollTop] = useState(-1);
+
+  // Reserve rows: border(2) + title(1) + margin(1) + statusbar(1) + footer(1) = 6
+  const logRows = Math.max(5, termRows - 8);
+
+  const totalLines = lines.length;
+  // When pinned (-1), show the last logRows lines.
+  const effectiveTop = scrollTop < 0
+    ? Math.max(0, totalLines - logRows)
+    : Math.min(scrollTop, Math.max(0, totalLines - logRows));
+
+  const canScrollUp = effectiveTop > 0;
+  const canScrollDown = effectiveTop + logRows < totalLines;
+
+  const scrollBy = useCallback((delta: number) => {
+    setScrollTop((prev) => {
+      const base = prev < 0 ? Math.max(0, totalLines - logRows) : prev;
+      const next = Math.max(0, Math.min(base + delta, Math.max(0, totalLines - logRows)));
+      // Re-pin to bottom when scrolled all the way down.
+      return next >= Math.max(0, totalLines - logRows) ? -1 : next;
+    });
+  }, [totalLines, logRows]);
+
+  // When new lines arrive and we are pinned to bottom, stay pinned (no action needed
+  // since effectiveTop is recomputed from totalLines). If user has scrolled up,
+  // don't jump them back.
+
+  // Fetch build history once on mount.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        const history = await getBuildHistory(client, jobName, 20);
+        const nums = history.map((b) => b.number).sort((a, b) => b - a);
+        setBuildNums(nums.length > 0 ? nums : null);
+      } catch {
+        setBuildNums(null);
+      }
+    })();
+  }, [ctx, jobName]);
+
+  const buildNum = buildNums?.[buildIdx] ?? null;
+
   useEffect(() => {
     ctx.setInputCaptured(true);
     return () => ctx.setInputCaptured(false);
   }, [ctx]);
 
+  const goNewer = useCallback(() => { setBuildIdx((i) => Math.max(0, i - 1)); }, []);
+  const goOlder = useCallback(() => {
+    setBuildIdx((i) => (buildNums ? Math.min(buildNums.length - 1, i + 1) : i));
+  }, [buildNums]);
+
   useKeymap(
     [
-      { key: "q", label: "back", run: onClose },
-      { key: "b", label: "back", run: onClose, hidden: true },
-      { key: "Esc", label: "back", run: onClose, hidden: true },
+      { key: "q",      label: "back",  group: "nav", run: onClose },
+      { key: "b",      label: "back",  group: "nav", run: onClose, hidden: true },
+      { key: "Esc",    label: "back",  group: "nav", run: onClose, hidden: true },
+      { key: "j",      label: "↓",    group: "nav", hidden: true, when: () => canScrollDown, run: () => scrollBy(1) },
+      { key: "k",      label: "↑",    group: "nav", hidden: true, when: () => canScrollUp,   run: () => scrollBy(-1) },
+      { key: "down",   label: "↓",    group: "nav", hidden: true, when: () => canScrollDown, run: () => scrollBy(1) },
+      { key: "up",     label: "↑",    group: "nav", hidden: true, when: () => canScrollUp,   run: () => scrollBy(-1) },
+      { key: "ctrl+f", label: "pgdn", group: "nav", hidden: true, when: () => canScrollDown, run: () => scrollBy(LOG_PAGE) },
+      { key: "ctrl+b", label: "pgup", group: "nav", hidden: true, when: () => canScrollUp,   run: () => scrollBy(-LOG_PAGE) },
+      { key: "g",      label: "top",  group: "nav", hidden: true, run: () => setScrollTop(0) },
+      { key: "G",      label: "bottom", group: "nav", hidden: true, run: () => setScrollTop(-1) },
+      { key: "[", label: "older", run: goOlder, when: () => buildNums != null && buildIdx < (buildNums?.length ?? 0) - 1 },
+      { key: "]", label: "newer", run: goNewer, when: () => buildIdx > 0 },
     ],
     { isActive: true },
   );
 
+  // Re-stream whenever the target build changes; reset scroll to bottom.
   useEffect(() => {
+    setLines([]);
+    setScrollTop(-1);
+    setStatus("connecting…");
+    offsetRef.current = 0;
     cancelledRef.current = false;
+    if (timerRef.current) clearTimeout(timerRef.current);
 
     const poll = async () => {
       if (cancelledRef.current) return;
       try {
         const client = await getClientRef.current({ useController: true });
-        const [text, newOffset, hasMore] = await streamLastBuildLog(client, jobName, offsetRef.current);
+        let text: string, newOffset: number, hasMore: boolean;
+        if (buildNum != null) {
+          [text, newOffset, hasMore] = await streamBuildLog(client, jobName, buildNum, offsetRef.current);
+        } else {
+          [text, newOffset, hasMore] = await streamLastBuildLog(client, jobName, offsetRef.current);
+        }
         if (cancelledRef.current) return;
         if (text) {
-          // One state update for the whole chunk (ring-buffer capped) — not one
-          // write per line as the legacy did (P5).
           setLines((prev) => appendChunk(prev, text));
           offsetRef.current = newOffset;
         }
@@ -152,32 +227,65 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
       cancelledRef.current = true;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [jobName]);
+  }, [jobName, buildNum]);
 
-  // Show only the tail that fits the real terminal height. Reserve rows for the
-  // app header/footer/toast chrome + this viewer's own title line and borders.
-  const logRows = Math.max(5, termRows - 12);
-  const visible = lines.slice(-logRows);
+  const visible = lines.slice(effectiveTop, effectiveTop + logRows);
+
+  const buildLabel = buildNum != null
+    ? `#${buildNum}${buildNums ? ` [${buildIdx + 1}/${buildNums.length}]` : ""}`
+    : "latest";
+
+  // Scrollbar: render a 1-char wide track on the right side.
+  const renderScrollbar = (visibleRows: number): string[] => {
+    if (totalLines <= visibleRows) return Array(visibleRows).fill(" ");
+    const trackH = visibleRows;
+    const thumbH = Math.max(1, Math.round((visibleRows / totalLines) * trackH));
+    const thumbTop = Math.round((effectiveTop / Math.max(1, totalLines - visibleRows)) * (trackH - thumbH));
+    return Array.from({ length: trackH }, (_, i) =>
+      i >= thumbTop && i < thumbTop + thumbH ? "█" : "│"
+    );
+  };
+
+  const scrollbar = renderScrollbar(logRows);
+  const contentWidth = Math.max(10, termCols - 6); // border(2)+padding(2)+scrollbar(1)+gap(1)
 
   return (
-    <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} height={termRows - 8}>
+    <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} height={termRows - 4}>
       <Text>
         {SYM.arrow} Log: <Text bold>{jobName}</Text>{" "}
         <Text color={THEME.dim}>
-          [{status}] · q/Esc=back
+          {buildLabel} [{status}]{buildNums && buildNums.length > 1 ? " · [=older ]=newer" : ""}
         </Text>
       </Text>
-      <Box flexDirection="column" marginTop={1}>
-        {visible.length === 0 ? (
-          <Text color={THEME.dim}>(no output yet)</Text>
-        ) : (
-          visible.map((line, i) => (
-            <Text key={i} color={colorForLine(line)} wrap="truncate-end">
-              {line || " "}
-            </Text>
-          ))
+      <Box flexDirection="row" marginTop={1}>
+        {/* Log lines */}
+        <Box flexDirection="column" flexGrow={1}>
+          {visible.length === 0 ? (
+            <Text color={THEME.dim}>(no output yet)</Text>
+          ) : (
+            visible.map((line, i) => (
+              <Text key={effectiveTop + i} color={colorForLine(line)} wrap="truncate-end">
+                {line.slice(0, contentWidth) || " "}
+              </Text>
+            ))
+          )}
+        </Box>
+        {/* Scrollbar */}
+        {totalLines > logRows && (
+          <Box flexDirection="column" marginLeft={1}>
+            {scrollbar.map((ch, i) => (
+              <Text key={i} color={THEME.dim}>{ch}</Text>
+            ))}
+          </Box>
         )}
       </Box>
+      {/* Scroll position hint */}
+      {totalLines > logRows && (
+        <Text color={THEME.dim}>
+          {" "}lines {effectiveTop + 1}–{Math.min(effectiveTop + logRows, totalLines)}/{totalLines}
+          {scrollTop < 0 ? " [bottom]" : ""} · j/k scroll · g/G top/bottom
+        </Text>
+      )}
     </Box>
   );
 };
@@ -344,22 +452,52 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const runJob = useCallback(
     async (name: string) => {
-      const ok = await ctx.openModal<boolean>({
-        id: "confirm-run",
-        render: (resolve) => <ConfirmModal message={`Run job '${name}'?`} onResult={resolve} />,
-      });
-      if (!ok) return;
+      const paramDefs = summary?.params ?? [];
+      let runParams: Record<string, string> | null = null;
+
+      if (paramDefs.length > 0) {
+        // Job has parameters — collect values via FormModal before triggering.
+        const values = await ctx.openModal<Record<string, string>>({
+          id: "run-params",
+          render: (resolve) => (
+            <FormModal
+              title={`${SYM.gear} Run '${name}' — Parameters`}
+              fields={paramDefs.map((p) => ({
+                name: p.name,
+                label: p.name,
+                initial: p.defaultValue ?? "",
+              }))}
+              onResult={resolve}
+            />
+          ),
+        });
+        if (!values) return; // cancelled
+        runParams = values;
+      } else {
+        const ok = await ctx.openModal<boolean>({
+          id: "confirm-run",
+          render: (resolve) => <ConfirmModal message={`Run job '${name}'?`} onResult={resolve} />,
+        });
+        if (!ok) return;
+      }
+
       try {
         const client = await ctx.getClient({ useController: true });
-        await triggerJob(client, name);
+        if (runParams) {
+          await triggerJobWithParams(client, name, runParams);
+          const pairs = Object.entries(runParams).map(([k, v]) => `-p ${k}="${v}"`).join(" ");
+          ctx.logCommand(`bee job run ${name} ${pairs}`);
+        } else {
+          await triggerJob(client, name);
+          ctx.logCommand(`bee job run ${name}`);
+        }
         ctx.notify(`${SYM.ok} Triggered: ${name}`, "success");
-        ctx.logCommand(`bee job run ${name}`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
       }
     },
-    [ctx, refetch],
+    [ctx, refetch, summary],
   );
 
   const stopJob = useCallback(
