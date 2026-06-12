@@ -1,6 +1,8 @@
 .DEFAULT_GOAL := help
 
-SHELL := /bin/bash
+SHELL        := /bin/bash
+WRAPPER_CSH  := $(CURDIR)/bee.csh
+WRAPPER_LINK := $(CURDIR)/bee
 
 # --- Local bun toolchain (self-contained, no system bun) -------------------
 # bun is installed into ./.bun inside the repo so builds don't depend on a
@@ -27,8 +29,9 @@ help:
 	@echo ""
 	@echo "    make init        Install local bun + deps + build binary"
 	@echo "    make bun         Install bun locally into ./.bun (if missing)"
-	@echo "    make install     Install dependencies (bun install)"
+	@echo "    make install     Install deps + build binary + create bee.csh wrapper"
 	@echo "    make build       Compile binary → dist/bee"
+	@echo "    make deps        Install dependencies only (bun install)"
 	@echo "    make dev         Run from source: make dev ARGS='job list'"
 	@echo "    make run         Run the built binary: make run ARGS='job list'"
 	@echo "    make typecheck   Type-check the project (tsc --noEmit)"
@@ -45,11 +48,19 @@ $(BUN):
 
 bun: $(BUN)
 
-install: $(BUN)
+deps: $(BUN)
 	@mkdir -p "$(BUN_TMP)" "$(BUN_CACHE)"
 	@$(BUN_ENV) $(BUN) install --backend=copyfile
 
-build: install
+install: deps
+	@$(MAKE) build
+	@printf '#!/usr/bin/env csh\nexec "%s/dist/bee" $$*\n' "$(CURDIR)" > "$(WRAPPER_CSH)"
+	@chmod +x "$(WRAPPER_CSH)"
+	@ln -sf "$(WRAPPER_CSH)" "$(WRAPPER_LINK)"
+	@echo "  [OK] wrapper: $(WRAPPER_CSH)"
+	@echo "  [OK] symlink: $(WRAPPER_LINK) -> $(WRAPPER_CSH)"
+
+build: deps
 	@$(BUN_ENV) $(BUN) run build.ts
 
 init: build
@@ -76,4 +87,4 @@ clean:
 distclean: clean
 	@rm -rf $(BUN_INSTALL)
 
-.PHONY: help init bun install build dev test clean distclean run typecheck
+.PHONY: help init bun deps install build dev test clean distclean run typecheck
