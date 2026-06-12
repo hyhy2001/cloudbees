@@ -607,6 +607,15 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 params, params.length === 0,
               );
               ctx.notify(`${SYM.ok} Updated parameters: ${name}`, "success");
+              if (params.length === 0) {
+                ctx.logCommand(`bee job update ${name} --clear-params`);
+              } else {
+                const pp = [`bee job update ${name}`];
+                for (const p of params) {
+                  pp.push(`--param-def "${p.name}=${p.defaultValue ?? ""}"`);
+                }
+                ctx.logCommand(pp.join(" "));
+              }
               void refetch();
             } catch (err) {
               ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -633,6 +642,10 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               // schedule arg as: null = unchanged, "" = clear, value = set.
               await updateJobFreestyle(client, name, null, null, null, cron);
               ctx.notify(`${SYM.ok} Updated schedule: ${name}`, "success");
+              ctx.logCommand(cron
+                ? `bee job update ${name} --schedule "${cron}"`
+                : `bee job update ${name} --schedule ""`
+              );
               void refetch();
             } catch (err) {
               ctx.notify(err instanceof Error ? err.message : String(err), "error");
