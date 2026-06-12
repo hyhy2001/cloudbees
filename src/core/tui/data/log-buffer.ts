@@ -35,7 +35,8 @@ export function appendChunk(
   // Drop a single trailing newline so we don't append an empty line each poll.
   const normalized = (chunk.endsWith("\n") ? chunk.slice(0, -1) : chunk)
     .replace(JENKINS_NOTE_RE, "")
-    .replace(ANSI_RE, "");
+    .replace(ANSI_RE, "")
+    .replace(/\r/g, "");
   if (normalized === "") return prev as string[];
   const incoming = normalized.split("\n");
   const merged = prev.length === 0 ? incoming : [...prev, ...incoming];
