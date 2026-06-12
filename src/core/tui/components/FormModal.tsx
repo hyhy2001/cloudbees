@@ -170,11 +170,12 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
         // Build display with block cursor for active text fields.
         const cursorPos = isActive && !f.options ? Math.min(textPos, maskedRaw.length) : -1;
 
-        // Compute padding so hint starts at fixed column.
+        // Compute padding so hint starts at fixed column (HINT_COL).
+        // Use display length (not maskedRaw) so placeholder text is counted too.
+        // Options row adds "← " prefix and " →" suffix (+4).
         const labelPart = ` ${f.label.padEnd(LABEL_W)} `;
-        const valueLen = isActive && !f.options ? Math.max(maskedRaw.length, 1) : display.length;
-        const totalLeft = labelPart.length + (f.options ? 2 : 0) + valueLen + (f.options ? 2 : 0);
-        const pad = Math.max(1, HINT_COL - totalLeft);
+        const valueDisplayLen = f.options ? display.length + 4 : Math.max(display.length, cursorPos >= 0 ? 1 : 0);
+        const pad = Math.max(1, HINT_COL - labelPart.length - valueDisplayLen);
         const paddingStr = " ".repeat(pad);
 
         const before = cursorPos >= 0 ? maskedRaw.slice(0, cursorPos) : "";

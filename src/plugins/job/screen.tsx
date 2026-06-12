@@ -498,7 +498,11 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           result.node && result.node !== NONE_OPTION ? result.node : null,
         );
         ctx.notify(`${SYM.ok} Updated: ${job.name}`, "success");
-        ctx.logCommand(`bee job update ${job.name}`);
+        const parts = [`bee job update ${job.name}`];
+        if (result.desc) parts.push(`--description "${result.desc}"`);
+        if (finalShell) parts.push(`--shell "${finalShell}"`);
+        if (result.node && result.node !== NONE_OPTION) parts.push(`--node "${result.node}"`);
+        ctx.logCommand(parts.join(" "));
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");

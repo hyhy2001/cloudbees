@@ -206,7 +206,22 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       });
       trackResource("node", result.name, ctx.profile, client.baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Created node: ${result.name}`, "success");
-      ctx.logCommand(`bee node create ${result.name} --remote-dir "${result.remoteDir}"`);
+      const ncp = [`bee node create ${result.name}`, `--remote-dir "${result.remoteDir}"`];
+      if (result.numExecutors && result.numExecutors !== "1") ncp.push(`--executors ${result.numExecutors}`);
+      if (result.labels) ncp.push(`--labels "${result.labels}"`);
+      if (result.desc) ncp.push(`--description "${result.desc}"`);
+      ncp.push(`--launcher ${result.launcher}`);
+      if (isSsh) {
+        if (result.host) ncp.push(`--host "${result.host}"`);
+        if (result.port && result.port !== "22") ncp.push(`--port ${result.port}`);
+        if (credId) ncp.push(`--credential "${credId}"`);
+      }
+      if (result.availability === "demand") {
+        ncp.push(`--availability demand`);
+        if (result.inDemandDelay) ncp.push(`--in-demand-delay ${result.inDemandDelay}`);
+        if (result.idleDelay) ncp.push(`--idle-delay ${result.idleDelay}`);
+      }
+      ctx.logCommand(ncp.join(" "));
       void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -330,7 +345,23 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           idleDelay: result.idleDelay ? parseInt(result.idleDelay, 10) : undefined,
         });
         ctx.notify(`${SYM.ok} Updated node: ${node.name}`, "success");
-        ctx.logCommand(`bee node update ${node.name}`);
+        const np = [`bee node update ${node.name}`];
+        if (result.remoteDir) np.push(`--remote-dir "${result.remoteDir}"`);
+        if (result.numExecutors) np.push(`--executors ${result.numExecutors}`);
+        if (result.labels) np.push(`--labels "${result.labels}"`);
+        if (result.desc) np.push(`--description "${result.desc}"`);
+        np.push(`--launcher ${result.launcher}`);
+        if (result.launcher !== "jnlp") {
+          if (result.host) np.push(`--host "${result.host}"`);
+          if (result.port) np.push(`--port ${result.port}`);
+          if (result.credentialsId && result.credentialsId !== NONE_OPTION) np.push(`--credential "${result.credentialsId}"`);
+        }
+        np.push(`--availability ${result.availability}`);
+        if (result.availability === "demand") {
+          np.push(`--in-demand-delay ${result.inDemandDelay}`);
+          np.push(`--idle-delay ${result.idleDelay}`);
+        }
+        ctx.logCommand(np.join(" "));
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
