@@ -382,7 +382,8 @@ export function registerJobCommands(ctx: PluginContext): void {
       ) => {
         try {
           const client = await ctx.getClient({ useController: true });
-          const timeout = parseInt(opts.timeout, 10) || 120;
+          const parsedTimeout = parseInt(opts.timeout, 10);
+          const timeout = Number.isFinite(parsedTimeout) ? parsedTimeout : 120;
 
           let before = 0;
           if (opts.wait) {
@@ -412,8 +413,8 @@ export function registerJobCommands(ctx: PluginContext): void {
             }
             printSuccess(`OK Triggered: ${name}`);
           } catch (e) {
-            console.error(`[ERROR] Could not trigger job: ${e instanceof Error ? e.message : e}`);
-            return;
+            printError(`Could not trigger job: ${e instanceof Error ? e.message : e}`);
+            process.exit(1);
           }
 
           if (!opts.wait) return;
@@ -437,7 +438,7 @@ export function registerJobCommands(ctx: PluginContext): void {
 
           if (newBuildNum == null) {
             console.log("  Could not determine build number. Check Jenkins manually.");
-            return;
+            process.exit(1);
           }
 
           try {
@@ -449,6 +450,7 @@ export function registerJobCommands(ctx: PluginContext): void {
             console.log(`  Result: ${result}`);
           } catch (e) {
             printError(`Error while waiting for build: ${e instanceof Error ? e.message : e}`);
+            process.exit(1);
           }
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
@@ -466,6 +468,10 @@ export function registerJobCommands(ctx: PluginContext): void {
     .action(async (name: string, buildNumberStr: string) => {
       try {
         const buildNumber = parseInt(buildNumberStr, 10);
+        if (!Number.isInteger(buildNumber)) {
+          printError(`Invalid build number: '${buildNumberStr}'`);
+          process.exit(1);
+        }
         const client = await ctx.getClient({ useController: true });
         await stopBuild(client, name, buildNumber);
         printSuccess(`OK Stop requested: ${name} #${buildNumber}`);
@@ -490,6 +496,10 @@ export function registerJobCommands(ctx: PluginContext): void {
           let buildNumber: number | null = null;
           if (buildNumberArg != null) {
             buildNumber = parseInt(buildNumberArg, 10);
+            if (Number.isNaN(buildNumber)) {
+              printError(`Invalid build number: '${buildNumberArg}'`);
+              process.exit(1);
+            }
           } else {
             try {
               buildNumber = await getLastBuildNumber(client, name);
@@ -499,7 +509,7 @@ export function registerJobCommands(ctx: PluginContext): void {
               }
             } catch (e) {
               console.error(`[ERROR] Could not get last build number: ${e instanceof Error ? e.message : e}`);
-              return;
+              process.exit(1);
             }
           }
 
@@ -525,7 +535,7 @@ export function registerJobCommands(ctx: PluginContext): void {
             }
           } catch (e) {
             console.error(`[ERROR] Could not get build log: ${e instanceof Error ? e.message : e}`);
-            return;
+            process.exit(1);
           }
         } catch (err) {
           if ((err as NodeJS.ErrnoException).code === "ERR_USE_AFTER_CLOSE") return; // keyboard interrupt
@@ -543,7 +553,8 @@ export function registerJobCommands(ctx: PluginContext): void {
     .option("--count <n>", "Number of recent builds to show", "10")
     .action(async (name: string, opts: { count: string }) => {
       try {
-        const count = parseInt(opts.count, 10) || 10;
+        const parsedCount = parseInt(opts.count, 10);
+        const count = Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 10;
         const client = await ctx.getClient({ useController: true });
         const builds = await getBuildHistory(client, name, count);
 
@@ -579,6 +590,7 @@ export function registerJobCommands(ctx: PluginContext): void {
     .argument("<name>", "Job name")
     .option("--description <desc>", "Job description")
     .option("--shell <cmd>", "Shell command to run")
+    .option("--chdir <dir>", "Working dir prepended to --shell as 'cd <dir> && <cmd>'")
     .option("--node <node>", "Restrict job to a specific node/label")
     .option("--schedule <cron>", "Cron format schedule (e.g., 'H 8 * * *', or '' to remove)")
     .option("--email <emails>", "Comma-separated emails to notify, or '' to remove")
@@ -608,6 +620,7 @@ export function registerJobCommands(ctx: PluginContext): void {
         opts: {
           description?: string;
           shell?: string;
+          chdir?: string;
           node?: string;
           schedule?: string;
           email?: string;
@@ -630,11 +643,19 @@ export function registerJobCommands(ctx: PluginContext): void {
           const paramsInput =
             opts.paramDef.length > 0 ? parseParamDefs(opts.paramDef) : null;
 
+          // --chdir folds into the shell command (the service has no chdir slot):
+          // "cd <dir> && <cmd>". Only meaningful alongside --shell; without --shell
+          // there's nothing to prepend to, so chdir alone is a no-op.
+          const shellInput =
+            opts.shell != null && opts.chdir
+              ? `cd ${opts.chdir} && ${opts.shell}`
+              : opts.shell ?? null;
+
           await updateJobFreestyle(
             client,
             name,
             opts.description ?? null,
-            opts.shell ?? null,
+            shellInput,
             opts.node ?? null,
             opts.schedule ?? null,
             opts.email ?? null,

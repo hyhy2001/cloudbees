@@ -4,9 +4,9 @@
  */
 
 import type { PluginContext } from "../../registry/types";
-import { printSuccess, printError, tableFormatter } from "../../core/cli/output";
+import { printSuccess, printError, printInfo, tableFormatter } from "../../core/cli/output";
 import { login, logout, deleteProfile, listProfiles } from "./service";
-import { switchProfile, getActiveProfileName } from "../../core/session/index";
+import { switchProfile, getActiveProfileName, clearSession, loadSessionFor } from "../../core/session/index";
 
 /**
  * Read a line from stdin with echo disabled (hidden input for token).
@@ -63,7 +63,12 @@ export function registerAuthCommands(ctx: PluginContext): void {
           process.exit(1);
         }
 
-        const p = await login(url, username, token, opts.profile, true, dbPath);
+        // Don't steal the Default flag on every login: a profile is default
+        // only if it's the first one, or it was already the default (re-login).
+        const existing = listProfiles(dbPath);
+        const isDefault =
+          existing.length === 0 || existing.some((p) => p.name === opts.profile && p.isDefault);
+        const p = await login(url, username, token, opts.profile, isDefault, dbPath);
         printSuccess(`OK Logged in as '${p.username}' on ${p.serverUrl}`);
         console.log(`     Profile: ${p.name}`);
       } catch (err) {
@@ -78,8 +83,16 @@ export function registerAuthCommands(ctx: PluginContext): void {
     .description("Remove stored token for a profile")
     .option("--profile <profile>", "Profile to logout (default: active)")
     .action((opts: { profile?: string }) => {
+      // Resolve which profile we're logging out so we can tell the user whether
+      // anything actually happened (a typo'd --profile shouldn't claim success).
+      const target = opts.profile ?? getActiveProfileName(dbPath);
+      const hadSession = loadSessionFor(target, dbPath) !== null;
       logout(opts.profile, dbPath);
-      printSuccess("OK Logged out.");
+      if (hadSession) {
+        printSuccess(`OK Logged out of '${target}'.`);
+      } else {
+        printInfo(`INFO No active session for '${target}'.`);
+      }
     });
 
   // ── delete ─────────────────────────────────────────────────────────────────
@@ -89,6 +102,9 @@ export function registerAuthCommands(ctx: PluginContext): void {
     .requiredOption("--profile <profile>", "Profile name to delete")
     .action((opts: { profile: string }) => {
       try {
+        // Clear the profile's stored session first (token/url/user keys + move
+        // the active pointer off it) so a "deleted" profile can't stay logged in.
+        clearSession(opts.profile, dbPath);
         deleteProfile(opts.profile, dbPath);
         printSuccess(`OK Profile '${opts.profile}' deleted.`);
       } catch (err) {

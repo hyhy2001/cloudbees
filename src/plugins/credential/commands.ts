@@ -5,7 +5,7 @@
 import readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import type { PluginContext } from "../../registry/types";
-import { printError, printSuccess, printInfo, readHidden, tableFormatter } from "../../core/cli/output";
+import { printError, printSuccess, printInfo, printWarning, readHidden, tableFormatter } from "../../core/cli/output";
 import { loadSession, getActiveProfileName } from "../../core/session/index";
 import {
   getTrackedResources,
@@ -46,6 +46,25 @@ function validateStore(store: string): void {
   }
 }
 
+const CREDENTIAL_SCOPES = ["GLOBAL", "SYSTEM"] as const;
+
+function validateScope(scope: string): void {
+  if (!CREDENTIAL_SCOPES.includes(scope as (typeof CREDENTIAL_SCOPES)[number])) {
+    throw new Error(`Invalid scope '${scope}'. Choose from: ${CREDENTIAL_SCOPES.join(", ")}`);
+  }
+}
+
+/**
+ * `--store user` resolves to `/user/<username>/...`, but getUserSeg silently
+ * falls back to the system store when no username is available (logged out).
+ * Warn the user so they know they're operating on `system`, not `user`.
+ */
+function warnUserStoreFallback(store: string, dbPath?: string): void {
+  if (store === "user" && !sessionUsername(dbPath)) {
+    printWarning("WARN --store user requested but not logged in; using the system store.");
+  }
+}
+
 export function registerCredentialCommands(ctx: PluginContext): void {
   const dbPath = process.env["CB_DB_PATH"];
   const profile = getActiveProfileName(dbPath);
@@ -62,6 +81,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
     .action(async (opts: { output: string; all: boolean; store: string }) => {
       try {
         validateStore(opts.store);
+        warnUserStoreFallback(opts.store, dbPath);
         const client = await ctx.getClient({ useController: true });
         const username = sessionUsername(dbPath);
         const allCreds = await listCredentials(client, username, opts.store);
@@ -114,6 +134,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
     .action(async (credId: string, opts: { store: string }) => {
       try {
         validateStore(opts.store);
+        warnUserStoreFallback(opts.store, dbPath);
         const client = await ctx.getClient({ useController: true });
         const cred = await getCredential(client, credId, sessionUsername(dbPath), opts.store);
         const data: Record<string, unknown> = { ...cred };
@@ -149,6 +170,9 @@ export function registerCredentialCommands(ctx: PluginContext): void {
       }) => {
         try {
           validateStore(opts.store);
+          warnUserStoreFallback(opts.store, dbPath);
+        warnUserStoreFallback(opts.store, dbPath);
+          validateScope(opts.scope);
           const credId = opts.id || randomUUID();
           const password = opts.password ?? (await readHidden(`Password for '${opts.username}': `));
 
@@ -190,6 +214,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
     .action(async (credId: string, opts: { yes: boolean; store: string }) => {
       try {
         validateStore(opts.store);
+        warnUserStoreFallback(opts.store, dbPath);
         if (
           !opts.yes &&
           !(await confirm(`Delete credential '${credId}' from ${opts.store} store? [y/N] `))
@@ -216,6 +241,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
     .action(async (credId: string, opts: { store: string }) => {
       try {
         validateStore(opts.store);
+        warnUserStoreFallback(opts.store, dbPath);
         const client = await ctx.getClient({ useController: true });
         // Verify the credential exists on the server before tracking it.
         try {
@@ -258,6 +284,8 @@ export function registerCredentialCommands(ctx: PluginContext): void {
       ) => {
         try {
           validateStore(opts.store);
+          warnUserStoreFallback(opts.store, dbPath);
+        warnUserStoreFallback(opts.store, dbPath);
           const client = await ctx.getClient({ useController: true });
           await updateCredential(
             client,

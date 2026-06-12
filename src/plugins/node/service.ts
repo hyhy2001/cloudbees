@@ -291,22 +291,41 @@ export async function updateNode(
     xml = setElement(xml, "numExecutors", String(opts.numExecutors));
   if (opts.labels !== undefined) xml = setElement(xml, "label", opts.labels);
 
-  if (opts.launcherType !== undefined) {
+  // Launcher + retention are whole-subtree swaps, so a partial update must merge
+  // onto the node's CURRENT config — otherwise rebuilding from only the flags
+  // passed this call would reset omitted fields to builder defaults (wiping the
+  // existing credential/javaPath/port, or the demand delays). Parse once, then
+  // fill each unset field from the current value.
+  const current = parseNodeConfig(xml);
+
+  const launcherTouched =
+    opts.launcherType !== undefined ||
+    opts.host !== undefined ||
+    opts.port !== undefined ||
+    opts.credentialsId !== undefined ||
+    opts.javaPath !== undefined;
+
+  if (launcherTouched) {
     const block = buildLauncherXml({
-      type: opts.launcherType,
-      host: opts.host,
-      port: opts.port,
-      credentialsId: opts.credentialsId,
-      javaPath: opts.javaPath,
+      type: opts.launcherType ?? current.launcherType,
+      host: opts.host ?? current.host,
+      port: opts.port ?? current.port,
+      credentialsId: opts.credentialsId ?? current.credentialsId,
+      javaPath: opts.javaPath ?? current.javaPath,
     });
     xml = swapElement(xml, "launcher", block);
   }
 
-  if (opts.availability !== undefined) {
+  const retentionTouched =
+    opts.availability !== undefined ||
+    opts.inDemandDelay !== undefined ||
+    opts.idleDelay !== undefined;
+
+  if (retentionTouched) {
     const block = buildRetentionXml({
-      availability: opts.availability,
-      inDemandDelay: opts.inDemandDelay,
-      idleDelay: opts.idleDelay,
+      availability: opts.availability ?? current.availability,
+      inDemandDelay: opts.inDemandDelay ?? current.inDemandDelay,
+      idleDelay: opts.idleDelay ?? current.idleDelay,
     });
     xml = swapElement(xml, "retentionStrategy", block);
   }
