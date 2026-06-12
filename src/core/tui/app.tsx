@@ -192,7 +192,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
         borderLeft={false}
         borderRight={false}
       >
-        <StatusBar hints={[...tui.activeKeyHints, ...GLOBAL_HINTS]} />
+        <StatusBar hints={modalOpen || tui.inputCaptured ? [] : [...tui.activeKeyHints, ...GLOBAL_HINTS]} />
       </Box>
     </Box>
   );
