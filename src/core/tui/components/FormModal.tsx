@@ -167,21 +167,19 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
         const display = maskedRaw || (f.placeholder ? f.placeholder : "");
         const isPlaceholder = !maskedRaw && !!f.placeholder;
 
-        // Build display with inline cursor bar for active text fields.
-        let displayWithCursor: string;
-        if (isActive && !f.options) {
-          const pos = Math.min(textPos, maskedRaw.length);
-          displayWithCursor = maskedRaw.slice(0, pos) + "_" + maskedRaw.slice(pos);
-        } else {
-          displayWithCursor = display;
-        }
+        // Build display with block cursor for active text fields.
+        const cursorPos = isActive && !f.options ? Math.min(textPos, maskedRaw.length) : -1;
 
         // Compute padding so hint starts at fixed column.
         const labelPart = ` ${f.label.padEnd(LABEL_W)} `;
-        const valueLen = isActive && !f.options ? Math.max(maskedRaw.length + 1, 0) : display.length;
+        const valueLen = isActive && !f.options ? Math.max(maskedRaw.length, 1) : display.length;
         const totalLeft = labelPart.length + (f.options ? 2 : 0) + valueLen + (f.options ? 2 : 0);
         const pad = Math.max(1, HINT_COL - totalLeft);
         const paddingStr = " ".repeat(pad);
+
+        const before = cursorPos >= 0 ? maskedRaw.slice(0, cursorPos) : "";
+        const atCursor = cursorPos >= 0 ? (maskedRaw[cursorPos] ?? " ") : "";
+        const after = cursorPos >= 0 ? maskedRaw.slice(cursorPos + 1) : "";
 
         return (
           <Box key={f.name}>
@@ -192,9 +190,13 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
               <Text color={THEME.normal}>
                 {SYM.arrow} {maskedRaw} {SYM.arrow}
               </Text>
+            ) : cursorPos >= 0 ? (
+              <Text color={isPlaceholder ? THEME.dim : THEME.normal}>
+                {before}<Text inverse>{atCursor}</Text>{after}
+              </Text>
             ) : (
               <Text color={isPlaceholder ? THEME.dim : THEME.normal}>
-                {displayWithCursor}
+                {display}
               </Text>
             )}
             {f.hint ? (
