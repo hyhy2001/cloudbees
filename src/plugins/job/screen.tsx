@@ -641,6 +641,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   // Not-logged-in is a distinct, friendly state rather than an error.
   const notLoggedIn = !ctx.loggedIn;
+  const noController = ctx.loggedIn && !ctx.activeController;
   const errMsg = error ? error.message : "";
 
   return (
@@ -662,6 +663,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         <Box marginTop={1}>
           <Text color={THEME.warning}>
             {SYM.warn} Not logged in — press l to login
+          </Text>
+        </Box>
+      ) : noController ? (
+        <Box marginTop={1}>
+          <Text color={THEME.warning}>
+            {SYM.warn} No controller selected — open the Controllers tab and press Enter to select one
           </Text>
         </Box>
       ) : isInitialLoading ? (

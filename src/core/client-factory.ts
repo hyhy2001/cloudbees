@@ -12,7 +12,7 @@
  */
 import { CloudBeesClientImpl } from "./api/client";
 import type { CloudBeesClient } from "./api/types";
-import { AuthError } from "./api/errors";
+import { AuthError, CBError } from "./api/errors";
 import { loadSession, saveSession, getActiveProfileName } from "./session/session";
 import { getSetting } from "./db/repositories/settings-repo";
 import { saveProfile, listProfiles } from "./db/repositories/profile-repo";
@@ -52,7 +52,12 @@ export function getClient(opts: GetClientOptions & { dbPath?: string } = {}): Cl
   let baseUrl = session.serverUrl;
   if (useController) {
     const active = getActiveController(dbPath);
-    if (active && active[1]) baseUrl = active[1];
+    if (!active || !active[1]) {
+      throw new CBError(
+        "No active controller selected. Run: bee controller select <name>",
+      );
+    }
+    baseUrl = active[1];
   }
 
   return new CloudBeesClientImpl(baseUrl, session.rawToken, { dbPath });
