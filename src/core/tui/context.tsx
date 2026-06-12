@@ -27,6 +27,8 @@ interface SessionInfo {
   profile: string;
 }
 
+const MAX_COMMAND_LOG = 200;
+
 interface TuiState extends ITuiContext {
   /** Currently rendered modal (or null). */
   activeModal: ActiveModal | null;
@@ -38,6 +40,8 @@ interface TuiState extends ITuiContext {
   activeKeyHints: { key: string; label: string }[];
   /** True while a non-modal overlay owns input (shell suspends global keys). */
   inputCaptured: boolean;
+  /** Accumulated CLI-equivalent command log entries. */
+  commandLog: string[];
 }
 
 const Ctx = createContext<TuiState | null>(null);
@@ -60,6 +64,7 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [activeKeyHints, setActiveKeyHintsState] = useState<{ key: string; label: string }[]>([]);
   const [inputCaptured, setInputCapturedState] = useState(false);
+  const [commandLog, setCommandLog] = useState<string[]>([]);
   const toastSeq = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -139,6 +144,13 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
     setSession((prev) => ({ ...prev, activeController: active ? active[0] : null }));
   }, [dbPath]);
 
+  const logCommand = useCallback((cmd: string) => {
+    setCommandLog((prev) => {
+      const next = [...prev, cmd];
+      return next.length > MAX_COMMAND_LOG ? next.slice(next.length - MAX_COMMAND_LOG) : next;
+    });
+  }, []);
+
   const value = useMemo<TuiState>(
     () => ({
       getClient,
@@ -159,8 +171,10 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
       login,
       activeKeyHints,
       inputCaptured,
+      commandLog,
+      logCommand,
     }),
-    [getClient, session, switchProfile, refreshController, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, login, activeKeyHints, inputCaptured],
+    [getClient, session, switchProfile, refreshController, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, login, activeKeyHints, inputCaptured, commandLog, logCommand],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

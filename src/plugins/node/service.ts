@@ -208,6 +208,7 @@ export interface NodeConfig {
   availability: Availability;
   inDemandDelay: number;
   idleDelay: number;
+  remoteDir: string;
 }
 
 /**
@@ -243,6 +244,7 @@ export function parseNodeConfig(xml: string): NodeConfig {
     availability,
     inDemandDelay: numOr(retention["inDemandDelay"], 0),
     idleDelay: numOr(retention["idleDelay"], 1),
+    remoteDir: String(slave["remoteFS"] ?? ""),
   };
 }
 

@@ -5,9 +5,11 @@
  * Fields are filled top to bottom. Tab / Enter moves to the next field;
  * on the last field, Enter submits. Esc cancels. A field marked `password`
  * renders its value masked. A field with `options` cycles with ←/→.
+ * Free-text fields support Home/End to jump cursor to start/end.
+ * Fields with `visible` returning false are skipped in nav and not rendered.
  *
- * Deliberately dependency-free (no ink-text-input): a small useInput handler
- * covers the editing we need (printable chars + backspace).
+ * Hints are displayed at a fixed column (col 3) so they form a clean right
+ * margin regardless of value length.
  */
 
 import React, { useState } from "react";
@@ -18,38 +20,28 @@ import { SYM } from "../symbols";
 import { completePath } from "../data/path-complete";
 
 export interface FormField {
-  /** Stable key used in the result object. */
   name: string;
-  /** Visible label. */
   label: string;
-  /** Placeholder shown when empty. */
   placeholder?: string;
-  /** Mask the value (passwords). */
   password?: boolean;
-  /** If set, the field is a cycler over these options (←/→) rather than free text. */
   options?: string[];
-  /** Initial value (or initial option for option fields). */
   initial?: string;
-  /** Field must be non-empty to submit. */
   required?: boolean;
-  /** Short guidance shown dimmed to the right of the field (how to fill it). */
   hint?: string;
-  /**
-   * Free-text field that completes against the LOCAL filesystem on Tab. The
-   * machine running bee browses its own FS — only literally correct for an agent
-   * on this same host. Completion is convenience; the typed string is sent as-is.
-   */
   path?: boolean;
+  /** When provided, field is hidden (not rendered, not navigable) if it returns false. */
+  visible?: (values: Record<string, string>) => boolean;
 }
 
-/** Props for FormModal. `onResult` receives the filled values, or null on cancel. */
 export interface FormModalProps {
   title: string;
   fields: FormField[];
   onResult: (values: Record<string, string> | null) => void;
 }
 
-/** Sequential multi-field form rendered as a modal overlay. */
+/** Column at which hints start (relative to label+value area). */
+const HINT_COL = 42;
+
 export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult }) => {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
@@ -60,21 +52,40 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
   });
   const [cursor, setCursor] = useState(0);
   const [error, setError] = useState("");
-  // Candidate basenames from the last path-completion (shown as a hint).
   const [candidates, setCandidates] = useState<string[]>([]);
+  // Cursor position within the current text field (in characters from start).
+  const [textPos, setTextPos] = useState(0);
 
-  const field = fields[cursor]!;
+  // Only fields currently visible participate in navigation.
+  const visibleFields = fields.filter((f) => !f.visible || f.visible(values));
+  const field = visibleFields[cursor] ?? visibleFields[0];
 
-  function setFieldValue(name: string, value: string): void {
+  function setFieldValue(name: string, value: string, pos?: number): void {
     setValues((prev) => ({ ...prev, [name]: value }));
+    if (pos !== undefined) setTextPos(pos);
+    else if (pos === undefined && field?.name === name) {
+      // keep pos clamped to new length
+      setTextPos((p) => Math.min(p, value.length));
+    }
+  }
+
+  // Reset textPos when moving to a different field.
+  function moveTo(next: number): void {
+    setCursor(next);
+    const nextField = visibleFields[next];
+    if (nextField) {
+      const val = values[nextField.name] ?? "";
+      setTextPos(val.length); // cursor at end on entry
+    }
+    setCandidates([]);
   }
 
   function submit(): void {
-    for (const f of fields) {
+    for (const f of visibleFields) {
       if (f.required && !values[f.name]?.trim()) {
         setError(`${f.label} is required`);
-        // jump cursor to the offending field
-        setCursor(fields.indexOf(f));
+        const idx = visibleFields.indexOf(f);
+        moveTo(idx);
         return;
       }
     }
@@ -82,97 +93,117 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
   }
 
   useInput((input, key) => {
-    if (key.escape) {
-      onResult(null);
-      return;
-    }
+    if (key.escape) { onResult(null); return; }
+    if (!field) return;
 
-    // Option cycler fields: ←/→ to change.
     if (field.options) {
       const opts = field.options;
       const idx = opts.indexOf(values[field.name] ?? opts[0]!);
-      if (key.leftArrow) {
-        setFieldValue(field.name, opts[(idx - 1 + opts.length) % opts.length]!);
-        return;
-      }
-      if (key.rightArrow) {
-        setFieldValue(field.name, opts[(idx + 1) % opts.length]!);
-        return;
-      }
+      if (key.leftArrow) { setFieldValue(field.name, opts[(idx - 1 + opts.length) % opts.length]!); return; }
+      if (key.rightArrow) { setFieldValue(field.name, opts[(idx + 1) % opts.length]!); return; }
     }
 
-    // Tab on a path field completes against the local FS instead of moving on.
     if (key.tab && field.path && !field.options) {
       const { completed, candidates: cands } = completePath(values[field.name] ?? "");
-      setFieldValue(field.name, completed);
+      setFieldValue(field.name, completed, completed.length);
       setCandidates(cands.slice(0, 12));
       return;
     }
 
-    // Navigation between fields.
     if (key.tab || key.downArrow) {
-      setCandidates([]);
-      setCursor((c) => Math.min(c + 1, fields.length - 1));
+      moveTo(Math.min(cursor + 1, visibleFields.length - 1));
       return;
     }
     if (key.upArrow) {
-      setCursor((c) => Math.max(c - 1, 0));
+      moveTo(Math.max(cursor - 1, 0));
       return;
     }
     if (key.return) {
-      if (cursor < fields.length - 1) {
-        setCursor((c) => c + 1);
-      } else {
-        submit();
-      }
+      if (cursor < visibleFields.length - 1) { moveTo(cursor + 1); }
+      else { submit(); }
       return;
     }
 
-    // Free-text editing (skip for option fields).
     if (!field.options) {
+      const val = values[field.name] ?? "";
+
+      // Home / End — jump cursor within text.
+      if (key.ctrl && input === "a") { setTextPos(0); return; }   // Ctrl+A = home
+      if (key.ctrl && input === "e") { setTextPos(val.length); return; } // Ctrl+E = end
+      // Ink passes Home/End as ctrl sequences on most terminals.
+      if ((key as { home?: boolean }).home) { setTextPos(0); return; }
+      if ((key as { end?: boolean }).end) { setTextPos(val.length); return; }
+
+      if (key.leftArrow && !field.options) { setTextPos((p) => Math.max(0, p - 1)); return; }
+      if (key.rightArrow && !field.options) { setTextPos((p) => Math.min(val.length, p + 1)); return; }
+
       if (key.backspace || key.delete) {
-        setFieldValue(field.name, (values[field.name] ?? "").slice(0, -1));
+        if (textPos > 0) {
+          const next = val.slice(0, textPos - 1) + val.slice(textPos);
+          setFieldValue(field.name, next, textPos - 1);
+        }
         return;
       }
       if (input && !key.ctrl && !key.meta) {
-        setFieldValue(field.name, (values[field.name] ?? "") + input);
+        const next = val.slice(0, textPos) + input + val.slice(textPos);
+        setFieldValue(field.name, next, textPos + input.length);
       }
     }
   });
 
+  // The hint column: pad the label+value area to HINT_COL characters.
+  // label.padEnd(16) + " " + value area = roughly 17+value chars; clamp to avoid wrapping.
+  const LABEL_W = 16;
+
   return (
     <Modal title={title}>
-      {fields.map((f, i) => {
-        const isActive = i === cursor;
+      {fields.map((f) => {
+        const isVisible = !f.visible || f.visible(values);
+        if (!isVisible) return null;
+        const visIdx = visibleFields.indexOf(f);
+        const isActive = visIdx === cursor;
         const raw = values[f.name] ?? "";
-        const shown = f.password ? "*".repeat(raw.length) : raw;
-        const display = shown || (f.placeholder ? `${f.placeholder}` : "");
-        const isPlaceholder = !shown && !!f.placeholder;
+        const maskedRaw = f.password ? "*".repeat(raw.length) : raw;
+        const display = maskedRaw || (f.placeholder ? f.placeholder : "");
+        const isPlaceholder = !maskedRaw && !!f.placeholder;
+
+        // Build display with inline cursor bar for active text fields.
+        let displayWithCursor: string;
+        if (isActive && !f.options) {
+          const pos = Math.min(textPos, maskedRaw.length);
+          displayWithCursor = maskedRaw.slice(0, pos) + "_" + maskedRaw.slice(pos);
+        } else {
+          displayWithCursor = display;
+        }
+
+        // Compute padding so hint starts at fixed column.
+        const labelPart = ` ${f.label.padEnd(LABEL_W)} `;
+        const valueLen = isActive && !f.options ? Math.max(maskedRaw.length + 1, 0) : display.length;
+        const totalLeft = labelPart.length + (f.options ? 2 : 0) + valueLen + (f.options ? 2 : 0);
+        const pad = Math.max(1, HINT_COL - totalLeft);
+        const paddingStr = " ".repeat(pad);
+
         return (
           <Box key={f.name}>
             <Text color={isActive ? THEME.active : THEME.dim}>
-              {isActive ? SYM.arrow : " "} {f.label.padEnd(16)}
+              {isActive ? SYM.arrow : " "} {f.label.padEnd(LABEL_W)}
             </Text>
             {f.options ? (
               <Text color={THEME.normal}>
-                {SYM.arrow} {shown} {SYM.arrow}
+                {SYM.arrow} {maskedRaw} {SYM.arrow}
               </Text>
             ) : (
               <Text color={isPlaceholder ? THEME.dim : THEME.normal}>
-                {display}
-                {isActive ? "_" : ""}
+                {displayWithCursor}
               </Text>
             )}
             {f.hint ? (
-              <Text color={THEME.dim}>
-                {"   "}
-                {f.hint}
-              </Text>
+              <Text color={THEME.dim}>{paddingStr}{f.hint}</Text>
             ) : null}
           </Box>
         );
       })}
-      {candidates.length > 0 && field.path ? (
+      {candidates.length > 0 && field?.path ? (
         <Box marginTop={1}>
           <Text color={THEME.dim} wrap="truncate-end">
             {candidates.join("  ")}
@@ -181,14 +212,12 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
       ) : null}
       {error ? (
         <Box marginTop={1}>
-          <Text color={THEME.error}>
-            {SYM.fail} {error}
-          </Text>
+          <Text color={THEME.error}>{SYM.fail} {error}</Text>
         </Box>
       ) : null}
       <Box marginTop={1}>
         <Text color={THEME.dim}>
-          {field.path ? "Tab complete · ↑↓ move" : "Tab/↑↓ move"} · Enter next/submit · Esc cancel
+          {field?.path ? "Tab complete · ↑↓ move" : "↑↓/Tab move"} · ←→{field?.options ? " cycle" : " cursor"} · Home/End · Enter next/submit · Esc cancel
         </Text>
       </Box>
     </Modal>

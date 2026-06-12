@@ -9,7 +9,7 @@
  * and triggers a real refetch, unlike Mine/All which is client-side only.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps } from "../../registry/types";
@@ -155,7 +155,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         <FormModal
           title={`${SYM.gear} Create Credential`}
           fields={[
-            { name: "id", label: "ID", required: true, hint: "unique id" },
+            { name: "id", label: "ID", hint: "blank = auto-generate" },
             { name: "username", label: "Username", required: true, hint: "login user" },
             { name: "password", label: "Password", required: true, password: true, hint: "secret token" },
             { name: "desc", label: "Description", hint: "optional" },
@@ -164,7 +164,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         />
       ),
     });
-    if (!result || !result.id || !result.username || !result.password) return;
+    if (!result || !result.username || !result.password) return;
     try {
       const client = await ctx.getClient({ useController: true });
       await createUsernamePassword(
@@ -177,14 +177,18 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         ctx.username,
         store,
       );
-      trackResource(
-        "credential",
-        result.id,
-        ctx.profile,
-        `${client.baseUrl}.${store}`,
-        ctx.dbPath,
-      );
-      ctx.notify(`${SYM.ok} Created credential: ${result.id}`, "success");
+      if (result.id?.trim()) {
+        trackResource(
+          "credential",
+          result.id,
+          ctx.profile,
+          `${client.baseUrl}.${store}`,
+          ctx.dbPath,
+        );
+      }
+      const displayId = result.id?.trim() || "(auto-generated)";
+      ctx.notify(`${SYM.ok} Created credential: ${displayId}`, "success");
+      ctx.logCommand(`bee credential create ${result.id || ""} --username ${result.username}${result.desc ? ` --description "${result.desc}"` : ""}`);
       void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -232,6 +236,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           store,
         );
         ctx.notify(`${SYM.ok} Updated credential: ${cred.id}`, "success");
+        ctx.logCommand(`bee credential update ${cred.id}`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -263,6 +268,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           ctx.dbPath,
         );
         ctx.notify(`${SYM.ok} Deleted: ${id}`, "success");
+        ctx.logCommand(`bee credential delete ${id} --yes`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -277,6 +283,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       if (!baseUrl) return;
       trackResource("credential", id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath);
       ctx.notify(`${SYM.ok} Imported '${id}' into Mine`, "success");
+      ctx.logCommand(`bee credential import ${id}`);
       void refetch();
     },
     [baseUrl, store, ctx, refetch],

@@ -16,6 +16,7 @@ import { SYM, borderStyle } from "./symbols";
 import { THEME } from "./theme";
 import { Toast } from "./components/Toast";
 import { StatusBar } from "./components/StatusBar";
+import { CommandLog } from "./components/CommandLog";
 import { FormModal } from "./components/FormModal";
 import { useKeymap, type KeyBinding } from "./keymap";
 import { listProfiles } from "../db/repositories/profile-repo";
@@ -26,6 +27,7 @@ export interface BeeAppProps {
 
 const GLOBAL_HINTS = [
   { key: "←→/Tab", label: "switch tab" },
+  { key: "L", label: "log" },
   { key: "?", label: "help" },
   { key: "q", label: "quit" },
 ];
@@ -35,6 +37,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   const tui = useTui();
   const [tabIndex, setTabIndex] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
+  const [showLog, setShowLog] = useState(true);
 
   const modalOpen = tui.activeModal !== null;
   const count = screens.length;
@@ -117,6 +120,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
     { key: "shift+tab", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => (t - 1 + count) % count) },
     { key: "left", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => (t - 1 + count) % count) },
     { key: "right", label: "next", group: "global", hidden: true, run: () => setTabIndex((t) => (t + 1) % count) },
+    { key: "L", label: "log", group: "global", run: () => setShowLog((v) => !v) },
   ];
 
   // While help is open, only its dismiss keys are live.
@@ -176,6 +180,9 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
       <Box marginTop={1}>
         <Toast message={tui.toast} />
       </Box>
+
+      {/* Command Log pane — toggled with L */}
+      {showLog && <CommandLog entries={tui.commandLog} />}
 
       {/* Footer */}
       <Box

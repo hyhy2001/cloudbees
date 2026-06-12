@@ -147,6 +147,8 @@ export interface TuiContext {
    * logged-in state. Used by the login modal. Throws on invalid credentials.
    */
   login(serverUrl: string, username: string, token: string): Promise<void>;
+  /** Append a CLI-equivalent command string to the command log pane. */
+  logCommand(cmd: string): void;
 }
 
 /**

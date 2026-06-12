@@ -1,5 +1,7 @@
 node_modules/
 dist/
+legacy/
+makefile_vars
 data/*.db
 *.tsbuildinfo
 

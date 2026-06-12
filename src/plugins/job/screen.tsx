@@ -8,7 +8,7 @@
  * — no logic is duplicated here, only presentation + interaction.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps, TuiContext } from "../../registry/types";
@@ -46,6 +46,7 @@ import { getScopeShowAll, setScopeShowAll } from "../../core/db/repositories/sco
 import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
 import { listNodes } from "../node/service";
 import { ScheduleBuilder } from "../../core/tui/components/ScheduleBuilder";
+import { EmailBuilder, type EmailSpec } from "../../core/tui/components/EmailBuilder";
 import { parseCron } from "../../domain/schedule";
 
 // ─── Status + type rendering (port of _status_markup / _type_label) ─────────
@@ -199,10 +200,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Job whose schedule is being edited (ScheduleBuilder overlay). Holds the
   // job name + its current cron (so the builder prefills from it).
   const [scheduleJob, setScheduleJob] = useState<{ name: string; cron: string } | null>(null);
+  // Job whose email config is being edited (EmailBuilder overlay).
+  const [emailJob, setEmailJob] = useState<{ name: string; spec: EmailSpec } | null>(null);
 
   // Inline "/" search box (client-side filter; no refetch). Disabled while the
   // log overlay is open.
-  const search = useSearch({ isActive: active && logJob === null, onEditingChange: ctx.setInputCaptured });
+  const search = useSearch({ isActive: active && logJob === null && emailJob === null, onEditingChange: ctx.setInputCaptured });
 
   // Resolve the controller base url once (cheap; client-factory caches session).
   useEffect(() => {
@@ -347,6 +350,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         const client = await ctx.getClient({ useController: true });
         await triggerJob(client, name);
         ctx.notify(`${SYM.ok} Triggered: ${name}`, "success");
+        ctx.logCommand(`bee job run ${name}`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -372,6 +376,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         const client = await ctx.getClient({ useController: true });
         await stopBuild(client, job.name, job.lastBuildNumber);
         ctx.notify(`${SYM.ok} Stopped build #${job.lastBuildNumber}`, "success");
+        ctx.logCommand(`bee job stop ${job.name} ${job.lastBuildNumber}`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -394,6 +399,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         await deleteJob(client, name);
         untrackResource("job", name, ctx.profile, client.baseUrl, ctx.dbPath);
         ctx.notify(`${SYM.ok} Deleted: ${name}`, "success");
+        ctx.logCommand(`bee job delete ${name} --yes`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -415,10 +421,6 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             { name: "shell_cmd", label: "Shell Command", placeholder: "freestyle only", hint: "shell to run" },
             { name: "chdir", label: "Working Dir", placeholder: "cd <dir> && before command", path: true, hint: "Tab completes local FS" },
             { name: "node", label: "Node/Label", options: nodeOptions, initial: NONE_OPTION, hint: "where it runs" },
-            { name: "email", label: "Email", hint: "recipient(s)" },
-            { name: "email_cond", label: "Email Condition", options: ["failed", "success", "always"], initial: "failed", hint: "when to mail" },
-            { name: "email_keywords", label: "Email Keywords", placeholder: "comma-separated", hint: "any-of, comma sep" },
-            { name: "email_regex", label: "Email Regex", hint: "Java regex" },
           ]}
           onResult={resolve}
         />
@@ -431,9 +433,6 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       if (jobType === "folder") {
         await createFolder(client, result.name, result.desc ?? "");
       } else {
-        const keywords = result.email_keywords
-          ? result.email_keywords.split(",").map((k) => k.trim()).filter(Boolean)
-          : null;
         await createFreestyleJob(
           client,
           result.name,
@@ -441,15 +440,18 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           result.shell_cmd || "echo hello",
           result.chdir || null,
           result.node && result.node !== NONE_OPTION ? result.node : null,
-          null, // schedule owned by the `t` key (ScheduleBuilder), never set here
-          result.email || null,
-          result.email_cond || "failed",
-          keywords,
-          result.email_regex || null,
+          null, // schedule owned by `t` key
+          null, // email owned by `m` key
+          "failed",
+          null,
+          null,
         );
       }
       trackResource("job", result.name, ctx.profile, client.baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Created ${jobType}: ${result.name}`, "success");
+      ctx.logCommand(jobType === "folder"
+        ? `bee job create folder ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}`
+        : `bee job create freestyle ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== "None" ? ` --node ${result.node}` : ""}`);
       void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -463,7 +465,6 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const editJob = useCallback(
     async (job: JobDTO) => {
       const s = summary ?? {};
-      const val = (k: string) => (s[k] && s[k] !== "-" ? s[k]! : "");
       const result = await ctx.openModal<Record<string, string>>({
         id: "edit-job",
         render: (resolve) => (
@@ -474,18 +475,6 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               { name: "shell_cmd", label: "Shell Command", initial: s.shell_cmd || "", hint: "shell to run" },
               { name: "chdir", label: "Working Dir", initial: s.chdir || "", path: true, hint: "Tab completes local FS" },
               { name: "node", label: "Node/Label", options: nodeOptions, initial: s.node && s.node !== "-" ? s.node : NONE_OPTION, hint: "where it runs" },
-              { name: "email", label: "Email", initial: val("email"), hint: "recipient(s)" },
-              {
-                name: "email_cond",
-                label: "Email Condition",
-                options: ["failed", "success", "always"],
-                initial: val("email_cond") || "failed",
-                hint: "when to mail",
-              },
-              { name: "email_keywords", label: "Email Keywords", placeholder: "comma-separated", initial: val("email_keywords"), hint: "any-of, comma sep" },
-              { name: "email_regex", label: "Email Regex", initial: val("email_regex"), hint: "Java regex" },
-              { name: "clear_keywords", label: "Clear Keywords", options: ["no", "yes"], initial: "no", hint: "wipe on save" },
-              { name: "clear_regex", label: "Clear Regex", options: ["no", "yes"], initial: "no", hint: "wipe on save" },
             ]}
             onResult={resolve}
           />
@@ -494,9 +483,6 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       if (!result) return;
       try {
         const client = await ctx.getClient({ useController: true });
-        const keywords = result.email_keywords
-          ? result.email_keywords.split(",").map((k) => k.trim()).filter(Boolean)
-          : null;
         // chdir folds into the shell command (updateJobFreestyle has no chdir
         // param). Only compose when shell_cmd is set; otherwise pass null = unchanged.
         const finalShell = result.shell_cmd
@@ -508,15 +494,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           result.desc ?? null,
           finalShell,
           result.node && result.node !== NONE_OPTION ? result.node : null,
-          null,
-          result.email || null,
-          result.email_cond || null,
-          keywords,
-          result.email_regex || null,
-          result.clear_keywords === "yes",
-          result.clear_regex === "yes",
         );
         ctx.notify(`${SYM.ok} Updated: ${job.name}`, "success");
+        ctx.logCommand(`bee job update ${job.name}`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -531,6 +511,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       if (!baseUrl) return;
       trackResource("job", name, ctx.profile, baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Imported '${name}' into Mine`, "success");
+      ctx.logCommand(`bee job import ${name}`);
       void refetch();
     },
     [baseUrl, ctx, refetch],
@@ -554,6 +535,21 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "e", label: "edit", when: () => hasRow, run: () => { if (current) void editJob(current); } },
       { key: "p", label: "params", when: () => hasRow, run: () => { if (current) setParamJob(current.name); } },
       { key: "t", label: "schedule", when: () => hasRow, run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); } },
+      { key: "m", label: "email", when: () => hasRow, run: () => {
+        if (!current) return;
+        const s = summary ?? {};
+        const hasEmail = s.email && s.email !== "-";
+        setEmailJob({
+          name: current.name,
+          spec: {
+            enabled: !!hasEmail,
+            email: hasEmail ? s.email! : "",
+            emailCond: (s.email_cond && s.email_cond !== "-") ? s.email_cond : "failed",
+            emailKeywords: (s.email_keywords && s.email_keywords !== "-") ? s.email_keywords : "",
+            emailRegex: (s.email_regex && s.email_regex !== "-") ? s.email_regex : "",
+          },
+        });
+      } },
       { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.name); } },
       { key: "u", label: "unimport", when: () => canUntrack, run: () => { if (current) { untrackResource("job", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeJob(current.name); } },
@@ -569,12 +565,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   // While typing in the search box, the search hook owns input — suspend the
   // action keymap (and the table's nav) so letters don't trigger actions.
-  useKeymap(bindings, { isActive: active && !logJob && !paramJob && !scheduleJob && !search.editing });
+  useKeymap(bindings, { isActive: active && !logJob && !paramJob && !scheduleJob && !emailJob && !search.editing });
 
   // Publish hints to the shell footer while this tab is the active one.
   useEffect(() => {
-    if (active && !logJob && !paramJob && !scheduleJob) ctx.setActiveKeyHints(bindingsToHints(bindings));
-  }, [active, logJob, paramJob, scheduleJob, bindings, ctx]);
+    if (active && !logJob && !paramJob && !scheduleJob && !emailJob) ctx.setActiveKeyHints(bindingsToHints(bindings));
+  }, [active, logJob, paramJob, scheduleJob, emailJob, bindings, ctx]);
 
   if (logJob) {
     return <LogViewer ctx={ctx} jobName={logJob} onClose={() => setLogJob(null)} />;
@@ -623,6 +619,50 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               // schedule arg as: null = unchanged, "" = clear, value = set.
               await updateJobFreestyle(client, name, null, null, null, cron);
               ctx.notify(`${SYM.ok} Updated schedule: ${name}`, "success");
+              void refetch();
+            } catch (err) {
+              ctx.notify(err instanceof Error ? err.message : String(err), "error");
+            }
+          })();
+        }}
+      />
+    );
+  }
+
+  if (emailJob) {
+    return (
+      <EmailBuilder
+        initial={emailJob.spec}
+        setInputCaptured={ctx.setInputCaptured}
+        onResult={(spec) => {
+          const name = emailJob.name;
+          setEmailJob(null);
+          if (!spec) return;
+          void (async () => {
+            try {
+              const client = await ctx.getClient({ useController: true });
+              if (!spec.enabled) {
+                // Clear email by setting recipient to empty string.
+                await updateJobFreestyle(
+                  client, name, null, null, null, null,
+                  "", null, null, null, true, true,
+                );
+              } else {
+                const keywords = spec.emailKeywords
+                  ? spec.emailKeywords.split(",").map((k) => k.trim()).filter(Boolean)
+                  : null;
+                await updateJobFreestyle(
+                  client, name, null, null, null, null,
+                  spec.email || null,
+                  spec.emailCond || null,
+                  keywords,
+                  spec.emailRegex || null,
+                  !spec.emailKeywords, // clear keywords if field left empty
+                  !spec.emailRegex,    // clear regex if field left empty
+                );
+              }
+              ctx.notify(`${SYM.ok} Updated email: ${name}`, "success");
+              ctx.logCommand(`bee job update ${name} --email "${spec.email}"`);
               void refetch();
             } catch (err) {
               ctx.notify(err instanceof Error ? err.message : String(err), "error");

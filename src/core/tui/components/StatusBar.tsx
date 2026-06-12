@@ -16,13 +16,11 @@ export interface KeyHint {
 /** Footer bar that renders a row of key hints for the active tab. */
 export const StatusBar: React.FC<{ hints: KeyHint[] }> = ({ hints }) => {
   return (
-    <Box>
+    <Box flexWrap="wrap">
       {hints.map((h, i) => (
         <Text key={i}>
-          <Text color={THEME.keyhint} bold>
-            {" "}
-            {h.key}
-          </Text>
+          {i > 0 && <Text color={THEME.dim}>  ·  </Text>}
+          <Text color={THEME.keyhint} bold>{h.key}</Text>
           <Text color={THEME.dim}> {h.label}</Text>
         </Text>
       ))}

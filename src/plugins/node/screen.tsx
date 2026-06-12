@@ -6,7 +6,7 @@
  *   useResource → computeView → useStableCursor → DataTable
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps } from "../../registry/types";
@@ -163,28 +163,28 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const createNode = useCallback(async () => {
     const result = await ctx.openModal<Record<string, string>>({
-      id: "create-node",
-      render: (resolve) => (
-        <FormModal
-          title={`${SYM.gear} Create New Node`}
-          fields={[
-            { name: "name", label: "Node Name", required: true, hint: "node name" },
-            { name: "remoteDir", label: "Remote Dir", required: true, path: true, hint: "Tab completes local FS" },
-            { name: "numExecutors", label: "Executors", initial: "1", hint: "e.g. 1" },
-            { name: "labels", label: "Labels", hint: "space-separated" },
-            { name: "desc", label: "Description", hint: "optional" },
-            { name: "launcher", label: "Launch method", options: ["ssh", "jnlp"], initial: "ssh" },
-            { name: "host", label: "SSH Host", placeholder: "ssh only", hint: "ssh host/IP" },
-            { name: "port", label: "SSH Port", placeholder: "ssh only (default 22)", hint: "default 22" },
-            { name: "credentialsId", label: "SSH Credential", options: credentialOptions.length > 0 ? credentialOptions : [NONE_OPTION] },
-            { name: "availability", label: "Availability", options: ["always", "demand"], initial: "always" },
-            { name: "inDemandDelay", label: "In-demand Delay", initial: "0", hint: "minutes" },
-            { name: "idleDelay", label: "Idle Delay", initial: "1", hint: "minutes" },
-          ]}
-          onResult={resolve}
-        />
-      ),
-    });
+        id: "create-node",
+        render: (resolve) => (
+          <FormModal
+            title={`${SYM.gear} Create New Node`}
+            fields={[
+              { name: "name", label: "Node Name", required: true, hint: "unique id" },
+              { name: "remoteDir", label: "Remote Dir", required: true, path: true, hint: "Tab completes local FS" },
+              { name: "numExecutors", label: "Executors", initial: "1", hint: "e.g. 1" },
+              { name: "labels", label: "Labels", hint: "space-separated" },
+              { name: "desc", label: "Description", hint: "optional" },
+              { name: "launcher", label: "Launch method", options: ["ssh", "jnlp"], initial: "ssh" },
+              { name: "host", label: "SSH Host", hint: "hostname or IP", visible: (v) => v["launcher"] !== "jnlp" },
+              { name: "port", label: "SSH Port", placeholder: "22", hint: "default 22", visible: (v) => v["launcher"] !== "jnlp" },
+              { name: "credentialsId", label: "SSH Credential", options: credentialOptions.length > 0 ? credentialOptions : [NONE_OPTION], visible: (v) => v["launcher"] !== "jnlp" },
+              { name: "availability", label: "Availability", options: ["always", "demand"], initial: "always" },
+              { name: "inDemandDelay", label: "In-demand Delay", initial: "0", hint: "minutes", visible: (v) => v["availability"] === "demand" },
+              { name: "idleDelay", label: "Idle Delay", initial: "1", hint: "minutes", visible: (v) => v["availability"] === "demand" },
+            ]}
+            onResult={resolve}
+          />
+        ),
+      });
     if (!result || !result.name || !result.remoteDir) return;
     try {
       const client = await ctx.getClient({ useController: true });
@@ -206,6 +206,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       });
       trackResource("node", result.name, ctx.profile, client.baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Created node: ${result.name}`, "success");
+      ctx.logCommand(`bee node create ${result.name} --remote-dir "${result.remoteDir}"`);
       void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -229,6 +230,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         await deleteNode(client, name);
         untrackResource("node", name, ctx.profile, client.baseUrl, ctx.dbPath);
         ctx.notify(`${SYM.ok} Deleted: ${name}`, "success");
+        ctx.logCommand(`bee node delete ${name} --yes`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -254,6 +256,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         const client = await ctx.getClient({ useController: true });
         await toggleOffline(client, node.name);
         ctx.notify(`${SYM.ok} Marked ${action}: ${node.name}`, "success");
+        ctx.logCommand(`bee node ${action} ${node.name}`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -293,17 +296,17 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           <FormModal
             title={`${SYM.gear} Edit Node: ${node.name}`}
             fields={[
-              { name: "remoteDir", label: "Remote Dir", initial: detail.remoteDir ?? "", path: true, hint: "Tab completes local FS" },
+              { name: "remoteDir", label: "Remote Dir", initial: cfg.remoteDir || detail.remoteDir || "", path: true, hint: "Tab completes local FS" },
               { name: "numExecutors", label: "Executors", initial: String(detail.numExecutors ?? 1), hint: "e.g. 1" },
               { name: "labels", label: "Labels", initial: detail.labels ?? "", hint: "space-separated" },
               { name: "desc", label: "Description", initial: detail.description ?? "", hint: "optional" },
               { name: "launcher", label: "Launch method", options: ["ssh", "jnlp"], initial: cfg.launcherType },
-              { name: "host", label: "SSH Host", initial: cfg.host, hint: "ssh host/IP" },
-              { name: "port", label: "SSH Port", initial: String(cfg.port), hint: "default 22" },
-              { name: "credentialsId", label: "SSH Credential", options: credChoices, initial: credInitial },
+              { name: "host", label: "SSH Host", initial: cfg.host, hint: "hostname or IP", visible: (v) => v["launcher"] !== "jnlp" },
+              { name: "port", label: "SSH Port", initial: String(cfg.port), hint: "default 22", visible: (v) => v["launcher"] !== "jnlp" },
+              { name: "credentialsId", label: "SSH Credential", options: credChoices, initial: credInitial, visible: (v) => v["launcher"] !== "jnlp" },
               { name: "availability", label: "Availability", options: ["always", "demand"], initial: cfg.availability },
-              { name: "inDemandDelay", label: "In-demand Delay", initial: String(cfg.inDemandDelay), hint: "minutes" },
-              { name: "idleDelay", label: "Idle Delay", initial: String(cfg.idleDelay), hint: "minutes" },
+              { name: "inDemandDelay", label: "In-demand Delay", initial: String(cfg.inDemandDelay), hint: "minutes", visible: (v) => v["availability"] === "demand" },
+              { name: "idleDelay", label: "Idle Delay", initial: String(cfg.idleDelay), hint: "minutes", visible: (v) => v["availability"] === "demand" },
             ]}
             onResult={resolve}
           />
@@ -327,6 +330,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           idleDelay: result.idleDelay ? parseInt(result.idleDelay, 10) : undefined,
         });
         ctx.notify(`${SYM.ok} Updated node: ${node.name}`, "success");
+        ctx.logCommand(`bee node update ${node.name}`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -341,6 +345,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       if (!baseUrl) return;
       trackResource("node", name, ctx.profile, baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Imported '${name}' into Mine`, "success");
+      ctx.logCommand(`bee node import ${name}`);
       void refetch();
     },
     [baseUrl, ctx, refetch],

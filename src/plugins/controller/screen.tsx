@@ -89,6 +89,7 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         selectController(ctrl.name, resolvedUrl, ctx.dbPath);
         ctx.refreshController();
         ctx.notify(`${SYM.ok} Active controller: ${ctrl.name}`, "success");
+        ctx.logCommand(`bee controller use ${ctrl.name}`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
