@@ -2,7 +2,7 @@
 
 SHELL        := /bin/bash
 WRAPPER_CSH  := $(CURDIR)/bee.csh
-WRAPPER_LINK := $(CURDIR)/bee
+WRAPPER_LINK := $(HOME)/.local/bin/bee
 
 # --- Local bun toolchain (self-contained, no system bun) -------------------
 # bun is installed into ./.bun inside the repo so builds don't depend on a
@@ -56,6 +56,7 @@ install: deps
 	@$(MAKE) build
 	@printf '#!/usr/bin/env csh\nexec "%s/dist/bee" $$*\n' "$(CURDIR)" > "$(WRAPPER_CSH)"
 	@chmod +x "$(WRAPPER_CSH)"
+	@mkdir -p "$(HOME)/.local/bin"
 	@ln -sf "$(WRAPPER_CSH)" "$(WRAPPER_LINK)"
 	@echo "  [OK] wrapper: $(WRAPPER_CSH)"
 	@echo "  [OK] symlink: $(WRAPPER_LINK) -> $(WRAPPER_CSH)"
