@@ -214,7 +214,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       if (isSsh) {
         if (result.host) ncp.push(`--host "${result.host}"`);
         if (result.port && result.port !== "22") ncp.push(`--port ${result.port}`);
-        if (credId) ncp.push(`--credential "${credId}"`);
+        if (credId) ncp.push(`--cred-id "${credId}"`);
       }
       if (result.availability === "demand") {
         ncp.push(`--availability demand`);
@@ -269,7 +269,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       if (!ok) return;
       try {
         const client = await ctx.getClient({ useController: true });
-        await toggleOffline(client, node.name);
+        await toggleOffline(client, node.name, "");
         ctx.notify(`${SYM.ok} Marked ${action}: ${node.name}`, "success");
         ctx.logCommand(`bee node ${action} ${node.name}`);
         void refetch();
@@ -354,7 +354,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         if (result.launcher !== "jnlp") {
           if (result.host !== cfg.host) np.push(`--host "${result.host}"`);
           if (result.port !== String(cfg.port)) np.push(`--port ${result.port}`);
-          if (result.credentialsId !== credInitial && result.credentialsId !== NONE_OPTION) np.push(`--credential "${result.credentialsId}"`);
+          if (result.credentialsId !== credInitial && result.credentialsId !== NONE_OPTION) np.push(`--cred-id "${result.credentialsId}"`);
         }
         if (result.availability !== cfg.availability) np.push(`--availability ${result.availability}`);
         if (result.availability === "demand") {

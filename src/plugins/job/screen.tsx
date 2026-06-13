@@ -617,7 +617,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       ctx.notify(`${SYM.ok} Created ${jobType}: ${result.name}`, "success");
       ctx.logCommand(jobType === "folder"
         ? `bee job create folder ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}`
-        : `bee job create freestyle ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== "None" ? ` --node ${result.node}` : ""}`);
+        : `bee job create freestyle ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node ${result.node}` : ""}`);
       void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -674,7 +674,10 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         if (result.shell_cmd !== initShell || result.chdir !== initChdir) {
           if (finalShell) parts.push(`--shell "${finalShell}"`);
         }
-        if (result.node !== initNode && result.node !== NONE_OPTION) parts.push(`--node "${result.node}"`);
+        if (result.node !== initNode) {
+          // Log --node whether setting a value OR clearing it (empty string = roam anywhere).
+          parts.push(result.node !== NONE_OPTION ? `--node "${result.node}"` : `--node ""`);
+        }
         ctx.logCommand(parts.join(" "));
         void refetch();
       } catch (err) {

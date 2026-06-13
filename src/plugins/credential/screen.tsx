@@ -271,10 +271,11 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           store,
         );
         ctx.notify(`${SYM.ok} Updated credential: ${cred.id}`, "success");
-        const cp = [`bee credential update ${cred.id}`];
-        if (result.username !== prefill.username) cp.push(`--username "${result.username}"`);
+        const cp = [`bee cred update ${cred.id}`];
+        if (result.username !== prefill.username) cp.push(`--username-cred "${result.username}"`);
         if (result.password) cp.push(`--password "***"`);
         if (result.desc !== prefill.description) cp.push(`--description "${result.desc}"`);
+        if (store !== "system") cp.push(`--store ${store}`);
         ctx.logCommand(cp.join(" "));
         void refetch();
       } catch (err) {
@@ -307,7 +308,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           ctx.dbPath,
         );
         ctx.notify(`${SYM.ok} Deleted: ${id}`, "success");
-        ctx.logCommand(`bee credential delete ${id} --yes`);
+        ctx.logCommand(`bee cred delete ${id} --yes${store !== "system" ? ` --store ${store}` : ""}`);
         void refetch();
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -322,7 +323,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       if (!baseUrl) return;
       trackResource("credential", id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath);
       ctx.notify(`${SYM.ok} Imported '${id}' into Mine`, "success");
-      ctx.logCommand(`bee credential import ${id}`);
+      ctx.logCommand(`bee cred import ${id}${store !== "system" ? ` --store ${store}` : ""}`);
       void refetch();
     },
     [baseUrl, store, ctx, refetch],
