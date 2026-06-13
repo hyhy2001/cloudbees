@@ -6,6 +6,7 @@
 import type { PluginContext } from "../../registry/types";
 import { printSuccess, printError, printInfo, printWarning, tableFormatter } from "../../core/cli/output";
 import { confirm } from "../../core/cli/utils";
+import { NotFoundError } from "../../core/api/errors";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
 import { getActiveProfileName } from "../../core/session/index";
 import {
@@ -292,10 +293,10 @@ export function registerJobCommands(ctx: PluginContext): void {
           await deleteJob(client, name);
           printSuccess(`OK Job '${name}' deleted from server.`);
         } catch (e) {
-          const msg = String(e instanceof Error ? e.message : e);
-          if (msg.includes("404")) {
+          if (e instanceof NotFoundError) {
             printInfo(`INFO Job '${name}' not found on server, removing from local tracking only.`);
           } else {
+            const msg = e instanceof Error ? e.message : String(e);
             printWarning(`WARN Could not delete job on server: ${msg}`);
             console.log("Proceeding with local removal anyway.");
           }

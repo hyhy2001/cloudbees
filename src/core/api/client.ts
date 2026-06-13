@@ -120,10 +120,10 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
       }
 
       if (resp.status === 401) {
-        throw new AuthError("Invalid or expired token. Run: cb login");
+        throw new AuthError(401, "Invalid or expired token. Run: cb login");
       }
       if (resp.status === 403) {
-        throw new AuthError("Access denied (403). Check permissions or CSRF crumb.");
+        throw new AuthError(403, "Access denied (403). Check permissions or CSRF crumb.");
       }
       if (resp.status === 404) {
         throw new NotFoundError(`Resource not found: ${path}`);
@@ -177,7 +177,7 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
       return await this._request(method, path, { ...opts, headers: mergedHeaders });
     } catch (err: unknown) {
       // 403 may mean stale crumb — invalidate and retry once
-      if (err instanceof AuthError && err.message.includes("403")) {
+      if (err instanceof AuthError && err.statusCode === 403) {
         invalidateCrumb(this.baseUrl);
         const freshCrumb = await getCrumb(this);
         const freshHeaders: Record<string, string> = {

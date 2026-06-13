@@ -5,6 +5,7 @@
 import type { PluginContext } from "../../registry/types";
 import { printError, printInfo, printSuccess, tableFormatter } from "../../core/cli/output";
 import { confirm } from "../../core/cli/utils";
+import { NotFoundError } from "../../core/api/errors";
 import { getActiveProfileName } from "../../core/session/index";
 import {
   getTrackedResources,
@@ -142,7 +143,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
             return;
           } catch (e) {
             const msg = String(e instanceof Error ? e.message : e).toLowerCase();
-            if (!msg.includes("404") && !msg.includes("not found")) throw e;
+            if (!(e instanceof NotFoundError) && !msg.includes("not found")) throw e;
           }
 
           await createPermanentNode(client, {
@@ -208,8 +209,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
         try {
           await getNode(client, name);
         } catch (e) {
-          const msg = String(e instanceof Error ? e.message : e);
-          if (msg.includes("404")) {
+          if (e instanceof NotFoundError) {
             printError(`Node '${name}' not found on server. Nothing to import.`);
             process.exit(1);
           }

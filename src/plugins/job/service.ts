@@ -4,6 +4,7 @@
  */
 
 import type { CloudBeesClient } from "../../core/api/types";
+import { NotFoundError } from "../../core/api/errors";
 import { jobFromDict, buildFromDict } from "../../core/dtos/index";
 import type { JobDTO, BuildDTO } from "../../core/dtos/index";
 import {
@@ -148,7 +149,7 @@ export async function getJob(client: CloudBeesClient, name: string): Promise<Job
       );
       if (directData) return jobFromDict(directData);
     } catch (e) {
-      if (String(e).includes("404")) return null;
+      if (e instanceof NotFoundError) return null;
       // fall through to list approach on other errors
     }
 
@@ -161,7 +162,7 @@ export async function getJob(client: CloudBeesClient, name: string): Promise<Job
 
     return null;
   } catch (e) {
-    if (String(e).includes("404")) return null;
+    if (e instanceof NotFoundError) return null;
     throw e;
   }
 }
@@ -238,9 +239,8 @@ export async function getLastBuildNumber(
     if (lb && lb["number"] != null) return Number(lb["number"]);
     return null;
   } catch (e) {
-    const msg = String(e);
-    if (msg.includes("404")) throw e;
-    if (msg.includes("400")) {
+    if (e instanceof NotFoundError) throw e;
+    if (e instanceof Error && e.message.includes("HTTP 400")) {
       // Fallback: check builds array
       try {
         const buildsData = await client.get<Record<string, unknown>>(
@@ -425,7 +425,7 @@ export async function deleteJob(client: CloudBeesClient, name: string): Promise<
   try {
     await client.post(`/job/${jobSeg(name)}/doDelete`);
   } catch (e) {
-    if (String(e).includes("404")) return;
+    if (e instanceof NotFoundError) return;
     throw e;
   }
 }

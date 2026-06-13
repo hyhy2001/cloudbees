@@ -25,9 +25,13 @@ export class APIError extends CBError {
 
 /** Raised when credentials are missing or invalid (401/403). */
 export class AuthError extends CBError {
-  constructor(message?: string) {
-    super(message);
+  readonly statusCode: number;
+
+  constructor(statusCodeOrMessage?: number | string, message?: string) {
+    const isNumeric = typeof statusCodeOrMessage === "number";
+    super(isNumeric ? message : statusCodeOrMessage);
     this.name = "AuthError";
+    this.statusCode = isNumeric ? statusCodeOrMessage : 0;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }

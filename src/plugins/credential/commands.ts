@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import type { PluginContext } from "../../registry/types";
 import { printError, printSuccess, printInfo, printWarning, readHidden, tableFormatter } from "../../core/cli/output";
 import { confirm } from "../../core/cli/utils";
+import { NotFoundError } from "../../core/api/errors";
 import { loadSession, getActiveProfileName } from "../../core/session/index";
 import {
   getTrackedResources,
@@ -260,10 +261,10 @@ export function registerCredentialCommands(ctx: PluginContext): void {
         try {
           await getCredential(client, credId, sessionUsername(dbPath), opts.store);
         } catch (e) {
-          const msg = String(e instanceof Error ? e.message : e);
-          if (msg.includes("404")) {
+          if (e instanceof NotFoundError) {
             printError(`Credential '${credId}' not found in ${opts.store} store.`, e);
           } else {
+            const msg = e instanceof Error ? e.message : String(e);
             printError(`Could not verify credential '${credId}': ${msg}`, e);
           }
           process.exit(1);
