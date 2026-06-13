@@ -7,7 +7,7 @@
  * owns the state and the imperative API.
  */
 
-import React, { createContext, useContext, useCallback, useMemo, useRef, useState } from "react";
+import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { TuiContext as ITuiContext, ModalSpec, NotifyLevel, GetClientOptions } from "../../registry/types";
 import type { CloudBeesClient } from "../api/types";
@@ -79,6 +79,10 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 4000);
   }, []);
+
+  // Clear any pending toast timer when the provider unmounts to prevent
+  // setState-after-unmount warnings and the associated memory leak.
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
   const openModal = useCallback(<T,>(spec: ModalSpec<T>): Promise<T | null> => {
     return new Promise<T | null>((resolve) => {

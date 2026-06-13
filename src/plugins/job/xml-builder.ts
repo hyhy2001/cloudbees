@@ -81,7 +81,8 @@ export function buildFreestyleXml(opts: {
     params = null,
   } = opts;
 
-  const finalCmd = chdir ? `cd ${chdir} && ${shellCmd}` : shellCmd;
+  // Quote chdir so paths with spaces survive the shell (e.g. "cd /my dir && cmd").
+  const finalCmd = chdir ? `cd "${chdir}" && ${shellCmd}` : shellCmd;
   const canRoam = node ? "false" : "true";
 
   const lines: string[] = [

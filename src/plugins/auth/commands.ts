@@ -9,6 +9,21 @@ import { login, logout, deleteProfile, listProfiles } from "./service";
 import { switchProfile, getActiveProfileName, clearSession, loadSessionFor } from "../../core/session/index";
 
 /**
+ * Read a visible line from stdin (for non-sensitive prompts like URL/username).
+ * Uses the same stty-based approach as readHidden but keeps echo enabled.
+ */
+async function readVisible(promptText: string): Promise<string> {
+  process.stderr.write(promptText);
+  const proc = Bun.spawn(["bash", "-c", "read line; echo \"$line\""], {
+    stdin: "inherit",
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  const output = await new Response(proc.stdout).text();
+  return output.trimEnd();
+}
+
+/**
  * Read a line from stdin with echo disabled (hidden input for token).
  * Falls back to a visible prompt if raw-mode is unavailable.
  */
@@ -47,12 +62,10 @@ export function registerAuthCommands(ctx: PluginContext): void {
         let token = opts.token;
 
         if (!url) {
-          process.stdout.write("Server URL: ");
-          url = prompt("") ?? "";
+          url = await readVisible("Server URL: ");
         }
         if (!username) {
-          process.stdout.write("Username: ");
-          username = prompt("") ?? "";
+          username = await readVisible("Username: ");
         }
         if (!token) {
           token = await readHidden("API Token: ");

@@ -9,7 +9,6 @@ import { describe, test, expect } from "bun:test";
 import {
   buildLauncherXml,
   buildRetentionXml,
-  buildPermanentNodeXml,
 } from "../src/plugins/node/xml-builder";
 import { parseNodeConfig, updateNode } from "../src/plugins/node/service";
 import type { CloudBeesClient } from "../src/core/api/types";
@@ -90,7 +89,21 @@ describe("parseNodeConfig", () => {
   });
 
   test("jnlp + always config parses with defaults", () => {
-    const xml = buildPermanentNodeXml("n2", "/home/j", 1, "lbl", "desc");
+    // Build a minimal slave XML using the same builders the service uses.
+    const xml = [
+      "<?xml version='1.1' encoding='UTF-8'?>",
+      "<slave>",
+      "  <name>n2</name>",
+      "  <description>desc</description>",
+      "  <remoteFS>/home/j</remoteFS>",
+      "  <numExecutors>1</numExecutors>",
+      "  <mode>NORMAL</mode>",
+      buildRetentionXml({ availability: "always" }),
+      buildLauncherXml({ type: "jnlp" }),
+      "  <label>lbl</label>",
+      "  <nodeProperties/>",
+      "</slave>",
+    ].join("\n");
     const cfg = parseNodeConfig(xml);
     expect(cfg.launcherType).toBe("jnlp");
     expect(cfg.availability).toBe("always");

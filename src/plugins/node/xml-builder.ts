@@ -5,16 +5,12 @@
  * can swap them in a fetched config.xml.
  */
 
-function escape(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
+import { escapeXml } from "../../domain/xml";
 
-/** Default Java path for SSH launchers (mirrors service DEFAULT_JAVA_PATH). */
+/**
+ * Default Java path for SSH launchers. Single source of truth — service.ts
+ * imports this rather than re-declaring its own copy.
+ */
 export const DEFAULT_JAVA_PATH = "/usr/local/java/openjdk-19.0.2-7/bin/java";
 
 export type LauncherType = "ssh" | "jnlp";
@@ -47,10 +43,10 @@ export function buildLauncherXml(opts: LauncherOpts, indent = "  "): string {
     const { host = "", port = 22, credentialsId = "", javaPath = DEFAULT_JAVA_PATH } = opts;
     return [
       `${indent}<launcher class="hudson.plugins.sshslaves.SSHLauncher" plugin="ssh-slaves">`,
-      `${c}<host>${escape(host)}</host>`,
+      `${c}<host>${escapeXml(host)}</host>`,
       `${c}<port>${port}</port>`,
-      `${c}<credentialsId>${escape(credentialsId)}</credentialsId>`,
-      `${c}<javaPath>${escape(javaPath)}</javaPath>`,
+      `${c}<credentialsId>${escapeXml(credentialsId)}</credentialsId>`,
+      `${c}<javaPath>${escapeXml(javaPath)}</javaPath>`,
       `${c}<sshHostKeyVerificationStrategy class="hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy"/>`,
       `${indent}</launcher>`,
     ].join("\n");
@@ -83,38 +79,4 @@ export function buildRetentionXml(opts: RetentionOpts, indent = "  "): string {
     ].join("\n");
   }
   return `${indent}<retentionStrategy class="hudson.slaves.RetentionStrategy$Always"/>`;
-}
-
-/**
- * Build a Permanent Agent (<slave>) config.xml.
- * SSHLauncher when `host` is given, otherwise JNLPLauncher.
- */
-export function buildPermanentNodeXml(
-  name: string,
-  remoteDir: string,
-  numExecutors = 1,
-  labels = "",
-  desc = "",
-  host = "",
-  port = 22,
-  credentialsId = "",
-): string {
-  const launcher = host
-    ? buildLauncherXml({ type: "ssh", host, port, credentialsId })
-    : buildLauncherXml({ type: "jnlp" });
-
-  return [
-    "<?xml version='1.1' encoding='UTF-8'?>",
-    "<slave>",
-    `  <name>${escape(name)}</name>`,
-    `  <description>${escape(desc)}</description>`,
-    `  <remoteFS>${escape(remoteDir)}</remoteFS>`,
-    `  <numExecutors>${numExecutors}</numExecutors>`,
-    "  <mode>NORMAL</mode>",
-    buildRetentionXml({ availability: "always" }),
-    launcher,
-    `  <label>${escape(labels)}</label>`,
-    "  <nodeProperties/>",
-    "</slave>",
-  ].join("\n");
 }

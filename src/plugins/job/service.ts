@@ -523,7 +523,10 @@ export async function getJobConfigSummary(
       if (Array.isArray(shell)) shell = shell[0] as Record<string, unknown> | undefined;
       const cmd = shell?.["command"];
       if (typeof cmd === "string" && cmd.length > 0) {
-        const m = cmd.match(/^cd\s+(.+?)\s+&&\s+([\s\S]*)$/);
+        // Match both the new quoted form `cd "..." && cmd` and the legacy
+        // unquoted form `cd /path && cmd`. Quotes (if present) are stripped.
+        const m = cmd.match(/^cd\s+"(.+?)"\s+&&\s+([\s\S]*)$/) ??
+          cmd.match(/^cd\s+(\S+)\s+&&\s+([\s\S]*)$/);
         if (m) {
           summary.chdir = m[1]!.trim();
           summary.shell_cmd = m[2]!;

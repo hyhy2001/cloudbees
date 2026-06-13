@@ -202,33 +202,10 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
     path: string,
     opts?: { headers?: Record<string, string> },
   ): Promise<string> {
-    const url =
-      path.startsWith("http://") || path.startsWith("https://")
-        ? path
-        : `${this.baseUrl}${path}`;
-
-    const mergedHeaders: Record<string, string> = {
-      ...this._headers(),
-      ...(opts?.headers ?? {}),
-    };
-
-    let resp: Response;
-    try {
-      resp = await fetch(url, {
-        method: "GET",
-        headers: mergedHeaders,
-        signal: AbortSignal.timeout(this._timeout * 1000),
-      });
-    } catch (err: unknown) {
-      throw new CBConnectionError(err instanceof Error ? err.message : String(err));
-    }
-
-    if (!resp.ok) {
-      const body = await resp.text();
-      throw new APIError(resp.status, body.slice(0, 200));
-    }
-
-    return resp.text();
+    // Delegate to _request() so getText benefits from the same 4-attempt
+    // exponential backoff, 401/403/404 classification, and 5xx retry logic.
+    const result = await this._request("GET", path, { headers: opts?.headers });
+    return result == null ? "" : String(result);
   }
 
   async getProgressiveText(path: string, start = 0): Promise<ProgressiveText> {

@@ -8,6 +8,7 @@ import { NodeDTO, NodeDetailDTO, nodeFromDict, nodeDetailFromDict } from "../../
 import {
   buildLauncherXml,
   buildRetentionXml,
+  DEFAULT_JAVA_PATH,
   type LauncherType,
   type Availability,
 } from "./xml-builder";
@@ -15,7 +16,7 @@ import {
 const _NODE_TREE =
   "computer[displayName,offline,numExecutors,assignedLabels[name],description]";
 
-export const DEFAULT_JAVA_PATH = "/usr/local/java/openjdk-19.0.2-7/bin/java";
+export { DEFAULT_JAVA_PATH };
 
 /** URL-encode a node name for use in path segments. */
 const nodeSeg = (name: string) => encodeURIComponent(name);
