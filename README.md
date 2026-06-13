@@ -22,29 +22,35 @@ To **use the pre-built binary** — nothing. Copy `dist/bee` to the target host 
 
 To **build from source**:
 
-- [Bun](https://bun.sh) ≥ 1.x
-- `make`
+- `make` (GNU make)
+- Internet access on first build (to download Bun locally into `./.bun`)
 
 ## Build & Install
 
 ```bash
 git clone https://github.com/hyhy2001/cloudbees.git
 cd cloudbees
-make init          # bun install + compile → dist/bee
+make init          # download bun locally + install deps + compile → dist/bee
 ```
 
-The binary is written to `./dist/bee`. Copy it anywhere on your `PATH`.
+The binary is written to `./dist/bee`. Copy it anywhere on your `PATH`, or run `make install` to create a `bee.csh` wrapper and symlink it to `~/.local/bin/bee`.
 
 Other useful targets:
 
 ```bash
-make build         # compile dist/bee (alias used by init)
+make bun           # install bun locally into ./.bun (auto-runs as needed)
+make install       # deps + build + create bee.csh wrapper + ~/.local/bin/bee symlink
+make build         # compile dist/bee
+make deps          # install dependencies only (bun install)
 make dev ARGS='job list'   # run from source without compiling
 make run ARGS='job list'   # run the compiled binary
 make test          # run tests (bun test)
 make typecheck     # type-check with tsc --noEmit
 make clean         # remove dist/ and node_modules/
+make distclean     # clean + remove the local ./.bun toolchain
 ```
+
+Bun is installed **locally into `./.bun`** (repo-contained, not system-wide). `make install` also creates a `bee.csh` csh-wrapper in the project root and symlinks it to `~/.local/bin/bee`.
 
 ## Where Data Lives
 
@@ -375,17 +381,18 @@ This is a developer-tool threat model: the OS file permission on `.bee_secret` i
 cloudbees/
 ├── Makefile
 ├── build.ts              # Bun compile script → dist/bee
+├── bee.csh               # csh wrapper (created by make install)
 ├── src/
 │   ├── main.ts           # Entry: initDb → initPlugins → parse; --ui → launchTui()
 │   ├── core/             # Stable engine (never imports plugins/)
 │   │   ├── api/          # HTTP client, CSRF crumb, retry, typed errors
-│   │   ├── db/           # SQLite connection, schema, repositories
+│   │   ├── db/           # SQLite connection, schema, repositories/
 │   │   ├── cache/        # TTL cache + policy
 │   │   ├── session/      # AES-256-GCM session crypto + per-profile session
 │   │   ├── dtos/         # DTO interfaces + fromDict factories
 │   │   ├── cli/          # output theme/formatters
 │   │   ├── client-factory.ts  # getClient() / getActiveController()
-│   │   └── tui/          # Ink TUI framework (app, context, components, data hooks)
+│   │   └── tui/          # Ink TUI framework (app, context, keymap, components/, data/)
 │   ├── domain/           # Shared leaf logic (never imports core/ or plugins/)
 │   │   ├── xml.ts        # escapeXml
 │   │   ├── email.ts      # email-ext publisher + anti-spam presend filter
