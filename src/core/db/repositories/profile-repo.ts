@@ -4,6 +4,7 @@
  */
 
 import { getConnection } from "../connection";
+import { NotFoundError } from "../../api/errors";
 
 export interface Profile {
   id: number;
@@ -88,7 +89,7 @@ export function getProfile(name: string, dbPath?: string): Profile {
       "SELECT * FROM profiles WHERE name = ?"
     ).get(name);
     if (row === null) {
-      throw new Error(`Profile '${name}' not found.`);
+      throw new NotFoundError(`Profile '${name}' not found.`);
     }
     return rowToProfile(row);
   } finally {

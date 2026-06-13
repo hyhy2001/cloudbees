@@ -20,6 +20,7 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getDbPath } from "../db/connection";
+import { CBError } from "../api/errors";
 
 const SECRET_FILENAME = ".bee_secret";
 const IV_LEN = 12; // GCM standard nonce length
@@ -99,7 +100,7 @@ export function encryptToken(plaintext: string, key: Buffer): string {
 export function decryptToken(encoded: string, key: Buffer): string {
   const buf = Buffer.from(encoded, "base64");
   if (buf.length < IV_LEN + TAG_LEN) {
-    throw new Error("ciphertext too short");
+    throw new CBError("ciphertext too short");
   }
   const iv = buf.subarray(0, IV_LEN);
   const tag = buf.subarray(IV_LEN, IV_LEN + TAG_LEN);

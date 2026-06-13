@@ -56,3 +56,29 @@ export class CBConnectionError extends CBError {
 
 /** Alias that matches Python's `ConnectionError` name without clashing with the global. */
 export { CBConnectionError as ConnectionError };
+
+/**
+ * Raised when user-supplied input fails validation before hitting the server
+ * (e.g. invalid store name, mutually-exclusive flags, missing required option).
+ * Lets callers distinguish "bad user input" from server/network errors.
+ */
+export class ValidationError extends CBError {
+  constructor(message?: string) {
+    super(message);
+    this.name = "ValidationError";
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Raised when the local environment/configuration is broken
+ * (e.g. cannot detect bee root directory, missing secret file).
+ * Distinct from ValidationError (user input) and CBConnectionError (network).
+ */
+export class ConfigError extends CBError {
+  constructor(message?: string) {
+    super(message);
+    this.name = "ConfigError";
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}

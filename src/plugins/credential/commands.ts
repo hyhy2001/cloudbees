@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import type { PluginContext } from "../../registry/types";
 import { printError, printSuccess, printInfo, printWarning, readHidden, tableFormatter } from "../../core/cli/output";
 import { confirm } from "../../core/cli/utils";
-import { NotFoundError } from "../../core/api/errors";
+import { NotFoundError, ValidationError } from "../../core/api/errors";
 import { loadSession, getActiveProfileName } from "../../core/session/index";
 import {
   getTrackedResources,
@@ -35,7 +35,7 @@ function sessionUsername(dbPath?: string): string {
 
 function validateStore(store: string): void {
   if (!CREDENTIAL_STORES.includes(store as (typeof CREDENTIAL_STORES)[number])) {
-    throw new Error(`Invalid store '${store}'. Choose from: ${CREDENTIAL_STORES.join(", ")}`);
+    throw new ValidationError(`Invalid store '${store}'. Choose from: ${CREDENTIAL_STORES.join(", ")}`);
   }
 }
 
@@ -43,7 +43,7 @@ const CREDENTIAL_SCOPES = ["GLOBAL", "SYSTEM"] as const;
 
 function validateScope(scope: string): void {
   if (!CREDENTIAL_SCOPES.includes(scope as (typeof CREDENTIAL_SCOPES)[number])) {
-    throw new Error(`Invalid scope '${scope}'. Choose from: ${CREDENTIAL_SCOPES.join(", ")}`);
+    throw new ValidationError(`Invalid scope '${scope}'. Choose from: ${CREDENTIAL_SCOPES.join(", ")}`);
   }
 }
 
@@ -170,7 +170,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
           const credId = opts.id || randomUUID();
 
           if (opts.secretText !== undefined && opts.username !== undefined) {
-            throw new Error("--secret-text and --username are mutually exclusive.");
+            throw new ValidationError("--secret-text and --username are mutually exclusive.");
           }
 
           const client = await ctx.getClient({ useController: true });
@@ -188,7 +188,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
             );
           } else {
             if (!opts.username) {
-              throw new Error("--username is required for Username+Password credentials (or use --secret-text for SecretText).");
+              throw new ValidationError("--username is required for Username+Password credentials (or use --secret-text for SecretText).");
             }
             const password = opts.password ?? (await readHidden(`Password for '${opts.username}': `));
             await createUsernamePassword(

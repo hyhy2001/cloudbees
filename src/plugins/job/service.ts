@@ -4,7 +4,7 @@
  */
 
 import type { CloudBeesClient } from "../../core/api/types";
-import { NotFoundError } from "../../core/api/errors";
+import { NotFoundError, APIError, ValidationError } from "../../core/api/errors";
 import { jobFromDict, buildFromDict } from "../../core/dtos/index";
 import type { JobDTO, BuildDTO } from "../../core/dtos/index";
 import {
@@ -240,7 +240,7 @@ export async function getLastBuildNumber(
     return null;
   } catch (e) {
     if (e instanceof NotFoundError) throw e;
-    if (e instanceof Error && e.message.includes("HTTP 400")) {
+    if (e instanceof APIError && e.statusCode === 400) {
       // Fallback: check builds array
       try {
         const buildsData = await client.get<Record<string, unknown>>(
@@ -378,7 +378,7 @@ export async function createFreestyleJob(
   const regex = normalizeRegex(emailRegex);
   validateRegex(regex);
   if ((keywords.length > 0 || regex) && !(email && email.trim())) {
-    throw new Error("Email filters require recipient email. Provide --email.");
+    throw new ValidationError("Email filters require recipient email. Provide --email.");
   }
   const xml = buildFreestyleXml({
     desc,
@@ -801,7 +801,7 @@ export async function updateJobFreestyle(
     if (email != null && targetEmail === "") {
       // Removing email
       if (hasNewFilterValues) {
-        throw new Error("Cannot set email filters when removing recipient email.");
+        throw new ValidationError("Cannot set email filters when removing recipient email.");
       }
       // Publisher already removed above
     } else if (targetEmail) {
@@ -818,7 +818,7 @@ export async function updateJobFreestyle(
       validateRegex(targetRegex);
 
       if ((targetKeywords.length > 0 || targetRegex) && !targetEmail) {
-        throw new Error("Email filters require recipient email. Provide --email.");
+        throw new ValidationError("Email filters require recipient email. Provide --email.");
       }
 
       const publisherBlock = buildEmailPublisherBlock(
@@ -838,10 +838,10 @@ export async function updateJobFreestyle(
     } else {
       // No target email and no existing email
       if (hasNewFilterValues) {
-        throw new Error("Email filters require recipient email. Provide --email.");
+        throw new ValidationError("Email filters require recipient email. Provide --email.");
       }
       if (emailCond != null) {
-        throw new Error("Email condition requires recipient email. Provide --email.");
+        throw new ValidationError("Email condition requires recipient email. Provide --email.");
       }
     }
   }

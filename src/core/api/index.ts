@@ -11,6 +11,8 @@ export {
   NotFoundError,
   CBConnectionError,
   ConnectionError,
+  ValidationError,
+  ConfigError,
 } from "./errors";
 export { getCrumb, invalidateCrumb } from "./crumb";
 export type { CrumbData, CrumbClient } from "./crumb";

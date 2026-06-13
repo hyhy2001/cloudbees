@@ -5,6 +5,7 @@
 import chalk from "chalk";
 import Table from "cli-table3";
 import type { OutputFormatter } from "../../registry/types";
+import { AuthError } from "../api/errors";
 
 // --- Color theme (mirrors Rich custom_theme) ---
 export const theme = {
@@ -24,8 +25,7 @@ function debugTracebackEnabled(): boolean {
 export function printError(msg: string, err?: unknown): void {
   if (err !== undefined && err !== null) {
     const errText = (err instanceof Error ? err.message : String(err)) || msg;
-    const errName = err instanceof Error ? err.constructor.name : "";
-    if (errName === "AuthError" || errText.includes("Not logged in")) {
+    if (err instanceof AuthError || errText.includes("Not logged in")) {
       console.error(theme.error("AUTH ERROR:") + " " + errText);
       return;
     }

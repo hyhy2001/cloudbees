@@ -10,6 +10,7 @@ import { join, dirname } from "path";
 // runtime via import.meta.dir breaks in the compiled binary, where the path
 // resolves into Bun's virtual "/$bunfs" filesystem (file not on disk).
 import schemaSql from "./schema.sql" with { type: "text" };
+import { ConfigError } from "../api/errors";
 
 // Module-level cache — mirrors _DB_PATH global in Python
 let _DB_PATH: string | null = null;
@@ -132,7 +133,7 @@ export function getDbPath(): string {
   } else {
     const beeRoot = detectBeeRoot();
     if (!beeRoot) {
-      throw new Error(
+      throw new ConfigError(
         "Cannot determine bee database location. Set BEE_DIR or CB_DB_PATH explicitly."
       );
     }

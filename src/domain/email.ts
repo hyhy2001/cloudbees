@@ -14,6 +14,7 @@
  */
 
 import { escapeXml } from "./xml";
+import { ValidationError } from "../core/api/errors";
 
 const EMAIL_FILTER_META_PREFIX = "BEE_EMAIL_FILTER_META:";
 const EMAIL_FILTER_VERSION = 1;
@@ -73,7 +74,7 @@ export function validateRegex(emailRegex: string | null | undefined): void {
   try {
     new RegExp(emailRegex);
   } catch (e) {
-    throw new Error(`Invalid --email-regex: ${e instanceof Error ? e.message : String(e)}`);
+    throw new ValidationError(`Invalid --email-regex: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 

@@ -142,8 +142,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
             printInfo(`INFO Node '${opts.name}' already exists.`);
             return;
           } catch (e) {
-            const msg = String(e instanceof Error ? e.message : e).toLowerCase();
-            if (!(e instanceof NotFoundError) && !msg.includes("not found")) throw e;
+            if (!(e instanceof NotFoundError)) throw e;
           }
 
           await createPermanentNode(client, {
