@@ -3,7 +3,7 @@
  * Ports legacy/cb/cli/commands/nodes.py with 1:1 behavior and strings.
  */
 import type { PluginContext } from "../../registry/types";
-import { printError, printInfo, printSuccess, printMessage, tableFormatter } from "../../core/cli/output";
+import { printError, printInfo, printSuccess, printWarning, printMessage, tableFormatter } from "../../core/cli/output";
 import { confirm } from "../../core/cli/utils";
 import { NotFoundError } from "../../core/api/errors";
 import { getActiveProfileName } from "../../core/session/index";
@@ -165,6 +165,9 @@ export function registerNodeCommands(ctx: PluginContext): void {
           printMessage(`  Link: ${client.baseUrl.replace(/\/+$/, "")}/computer/${opts.name}/`);
           if (opts.host) {
             printMessage(`  SSH Node will auto-connect to ${opts.host}:${opts.port} using cred: '${opts.credId || "None"}'`);
+            if (!opts.credId) {
+              printWarning(`WARN No SSH credential set — ensure key-based auth is configured on the agent.`);
+            }
           } else {
             printMessage(`  Connect it via: Manage Jenkins -> Nodes -> ${opts.name} -> Agent command`);
           }
@@ -346,6 +349,9 @@ export function registerNodeCommands(ctx: PluginContext): void {
             idleDelay: opts.idleDelay !== undefined ? Number(opts.idleDelay) : undefined,
           });
           printSuccess(`OK Node '${name}' updated.`);
+          if (launcherType === "ssh" && opts.credId === "") {
+            printWarning(`WARN SSH launcher with no credential set — ensure key-based auth is configured.`);
+          }
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
           process.exit(1);

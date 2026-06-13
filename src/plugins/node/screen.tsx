@@ -176,7 +176,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               { name: "launcher", label: "Launch method", options: ["ssh", "jnlp"], initial: "ssh" },
               { name: "host", label: "SSH Host", hint: "hostname or IP", visible: (v) => v["launcher"] !== "jnlp" },
               { name: "port", label: "SSH Port", placeholder: "22", hint: "default 22", visible: (v) => v["launcher"] !== "jnlp" },
-              { name: "credentialsId", label: "SSH Credential", options: credentialOptions.length > 0 ? credentialOptions : [NONE_OPTION], visible: (v) => v["launcher"] !== "jnlp" },
+              { name: "credentialsId", label: "SSH Credential", options: credentialOptions.length > 0 ? credentialOptions : [NONE_OPTION], searchable: true, visible: (v) => v["launcher"] !== "jnlp" },
               { name: "availability", label: "Availability", options: ["always", "demand"], initial: "always" },
               { name: "inDemandDelay", label: "In-demand Delay", initial: "0", hint: "minutes", visible: (v) => v["availability"] === "demand" },
               { name: "idleDelay", label: "Idle Delay", initial: "1", hint: "minutes", visible: (v) => v["availability"] === "demand" },
@@ -205,7 +205,11 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         idleDelay: result.idleDelay ? parseInt(result.idleDelay, 10) : undefined,
       });
       trackResource("node", result.name, ctx.profile, client.baseUrl, ctx.dbPath);
-      ctx.notify(`${SYM.ok} Created node: ${result.name}`, "success");
+      if (isSsh && !credId) {
+        ctx.notify(`${SYM.warn} Node created with no SSH credential — ensure key-based auth is configured`, "warning");
+      } else {
+        ctx.notify(`${SYM.ok} Created node: ${result.name}`, "success");
+      }
       const ncp = [`bee node create --name "${result.name}"`, `--remote-dir "${result.remoteDir}"`];
       if (result.numExecutors && result.numExecutors !== "1") ncp.push(`--executors ${result.numExecutors}`);
       if (result.labels) ncp.push(`--labels "${result.labels}"`);
@@ -318,7 +322,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               { name: "launcher", label: "Launch method", options: ["ssh", "jnlp"], initial: cfg.launcherType },
               { name: "host", label: "SSH Host", initial: cfg.host, hint: "hostname or IP", visible: (v) => v["launcher"] !== "jnlp" },
               { name: "port", label: "SSH Port", initial: String(cfg.port), hint: "default 22", visible: (v) => v["launcher"] !== "jnlp" },
-              { name: "credentialsId", label: "SSH Credential", options: credChoices, initial: credInitial, visible: (v) => v["launcher"] !== "jnlp" },
+              { name: "credentialsId", label: "SSH Credential", options: credChoices, searchable: true, initial: credInitial, visible: (v) => v["launcher"] !== "jnlp" },
               { name: "availability", label: "Availability", options: ["always", "demand"], initial: cfg.availability },
               { name: "inDemandDelay", label: "In-demand Delay", initial: String(cfg.inDemandDelay), hint: "minutes", visible: (v) => v["availability"] === "demand" },
               { name: "idleDelay", label: "Idle Delay", initial: String(cfg.idleDelay), hint: "minutes", visible: (v) => v["availability"] === "demand" },
@@ -345,6 +349,9 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           idleDelay: result.idleDelay ? parseInt(result.idleDelay, 10) : undefined,
         });
         ctx.notify(`${SYM.ok} Updated node: ${node.name}`, "success");
+        if (launcherType === "ssh" && credId === "") {
+          ctx.notify(`${SYM.warn} Node has no SSH credential — ensure key-based auth is configured`, "warning");
+        }
         const np = [`bee node update ${node.name}`];
         if (result.remoteDir !== (cfg.remoteDir || detail.remoteDir || "")) np.push(`--remote-dir "${result.remoteDir}"`);
         if (result.numExecutors !== String(detail.numExecutors ?? 1)) np.push(`--executors ${result.numExecutors}`);
