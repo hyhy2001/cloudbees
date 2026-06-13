@@ -206,7 +206,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       });
       trackResource("node", result.name, ctx.profile, client.baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Created node: ${result.name}`, "success");
-      const ncp = [`bee node create ${result.name}`, `--remote-dir "${result.remoteDir}"`];
+      const ncp = [`bee node create --name "${result.name}"`, `--remote-dir "${result.remoteDir}"`];
       if (result.numExecutors && result.numExecutors !== "1") ncp.push(`--executors ${result.numExecutors}`);
       if (result.labels) ncp.push(`--labels "${result.labels}"`);
       if (result.desc) ncp.push(`--description "${result.desc}"`);

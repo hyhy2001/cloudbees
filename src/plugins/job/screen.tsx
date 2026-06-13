@@ -617,7 +617,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       ctx.notify(`${SYM.ok} Created ${jobType}: ${result.name}`, "success");
       ctx.logCommand(jobType === "folder"
         ? `bee job create folder ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}`
-        : `bee job create freestyle ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node ${result.node}` : ""}`);
+        : `bee job create freestyle ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node "${result.node}"` : ""}`);
       void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -874,7 +874,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 const ep = [`bee job update ${name}`];
                 if (spec.email) ep.push(`--email "${spec.email}"`);
                 if (spec.emailCond) ep.push(`--email-cond "${spec.emailCond}"`);
-                if (spec.emailKeywords) ep.push(`--email-keywords "${spec.emailKeywords}"`);
+                // --email-keyword is repeatable (one flag per keyword), matching CLI behaviour.
+                if (spec.emailKeywords) {
+                  for (const kw of spec.emailKeywords.split(",").map((k) => k.trim()).filter(Boolean)) {
+                    ep.push(`--email-keyword "${kw}"`);
+                  }
+                }
                 if (spec.emailRegex) ep.push(`--email-regex "${spec.emailRegex}"`);
                 ctx.logCommand(ep.join(" "));
               }

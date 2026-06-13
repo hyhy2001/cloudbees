@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { randomUUID } from "node:crypto";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps } from "../../registry/types";
@@ -206,7 +207,10 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
     try {
       const client = await ctx.getClient({ useController: true });
-      const credId = result.id?.trim() || "";
+      // Auto-generate UUID when user leaves ID blank — mirrors CLI behaviour
+      // (CLI: `const credId = opts.id || randomUUID()`). An empty <id> in the
+      // XML lets Jenkins generate one server-side, but we can't track it locally.
+      const credId = result.id?.trim() || randomUUID();
       const desc = result.desc ?? "";
 
       if (isSecret) {
@@ -223,7 +227,8 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       const displayId = credId || "(auto-generated)";
       ctx.notify(`${SYM.ok} Created credential: ${displayId}`, "success");
       const typeFlag = isSecret ? `--secret-text "***"` : `--username ${result.username}`;
-      ctx.logCommand(`bee cred create ${credId} ${typeFlag}${desc ? ` --description "${desc}"` : ""}`);
+      const storeFlag = store !== "system" ? ` --store ${store}` : "";
+      ctx.logCommand(`bee cred create --id ${credId} ${typeFlag}${desc ? ` --description "${desc}"` : ""}${storeFlag}`);
       void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
