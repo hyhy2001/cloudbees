@@ -4,8 +4,10 @@
  *
  * Fields are filled top to bottom. Tab / Enter moves to the next field;
  * on the last field, Enter submits. Esc cancels. A field marked `password`
- * renders its value masked. A field with `options` cycles with ←/→.
+ * renders its value masked. A field with `options` cycles with ←/→; if
+ * `searchable` is also set, Enter/typing opens an inline filtered dropdown.
  * Free-text fields support Home/End to jump cursor to start/end.
+ * Path fields show a vertical candidate list on Tab; ↑/↓ navigate and fill.
  * Fields with `visible` returning false are skipped in nav and not rendered.
  *
  * Hints are displayed at a fixed column (col 3) so they form a clean right
@@ -25,6 +27,8 @@ export interface FormField {
   placeholder?: string;
   password?: boolean;
   options?: string[];
+  /** When true, Enter/typing opens a filtered inline dropdown instead of ←/→ cycling. */
+  searchable?: boolean;
   initial?: string;
   required?: boolean;
   hint?: string;
@@ -39,9 +43,6 @@ export interface FormModalProps {
   onResult: (values: Record<string, string> | null) => void;
 }
 
-/** Column at which hints start (relative to label+value area). */
-const HINT_COL = 42;
-
 export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult }) => {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
@@ -55,6 +56,12 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
   const [candidates, setCandidates] = useState<string[]>([]);
   // Cursor position within the current text field (in characters from start).
   const [textPos, setTextPos] = useState(0);
+  // Cursor within the path candidate list (↑/↓ fills candidate into field).
+  const [candidateCursor, setCandidateCursor] = useState(0);
+  // Searchable dropdown state for options fields with searchable:true.
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dropdownQuery, setDropdownQuery] = useState("");
+  const [dropdownCursor, setDropdownCursor] = useState(0);
 
   // Only fields currently visible participate in navigation.
   const visibleFields = fields.filter((f) => !f.visible || f.visible(values));
@@ -78,6 +85,10 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
       setTextPos(val.length); // cursor at end on entry
     }
     setCandidates([]);
+    setCandidateCursor(0);
+    setDropdownOpen(false);
+    setDropdownQuery("");
+    setDropdownCursor(0);
   }
 
   function submit(): void {
@@ -93,23 +104,111 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
   }
 
   useInput((input, key) => {
-    if (key.escape) { onResult(null); return; }
+    if (key.escape) {
+      if (dropdownOpen) { setDropdownOpen(false); setDropdownQuery(""); setDropdownCursor(0); return; }
+      onResult(null); return;
+    }
     if (!field) return;
 
-    if (field.options) {
+    // ── Searchable dropdown mode ────────────────────────────────────────────
+    if (field.options && field.searchable) {
+      const opts = field.options;
+      const filtered = opts.filter((o) => o.toLowerCase().includes(dropdownQuery.toLowerCase()));
+      const clampedDDCursor = Math.min(dropdownCursor, Math.max(0, filtered.length - 1));
+
+      if (dropdownOpen) {
+        if (key.backspace || key.delete) {
+          setDropdownQuery((q) => q.slice(0, -1));
+          setDropdownCursor(0);
+          return;
+        }
+        if (key.upArrow) {
+          setDropdownCursor((c) => Math.max(0, c - 1));
+          return;
+        }
+        if (key.downArrow) {
+          setDropdownCursor((c) => Math.min(filtered.length - 1, c + 1));
+          return;
+        }
+        if (key.tab) {
+          // Tab closes dropdown and moves field
+          setDropdownOpen(false); setDropdownQuery(""); setDropdownCursor(0);
+          moveTo(Math.min(cursor + 1, visibleFields.length - 1));
+          return;
+        }
+        if (key.return) {
+          const selected = filtered[clampedDDCursor];
+          if (selected !== undefined) {
+            setFieldValue(field.name, selected);
+            setDropdownOpen(false); setDropdownQuery(""); setDropdownCursor(0);
+          }
+          return;
+        }
+        if (input && !key.ctrl && !key.meta) {
+          setDropdownQuery((q) => q + input);
+          setDropdownCursor(0);
+          return;
+        }
+        return;
+      }
+
+      // Dropdown closed: Enter or printable char opens it; ←/→ still cycle.
+      if (key.return || (input && !key.ctrl && !key.meta && !key.leftArrow && !key.rightArrow)) {
+        if (opts.length > 0) {
+          setDropdownOpen(true);
+          setDropdownQuery(input && !key.return ? input : "");
+          setDropdownCursor(0);
+        }
+        return;
+      }
+      // ←/→ cycle (unchanged for searchable fields when dropdown is closed)
+      const idx = opts.indexOf(values[field.name] ?? opts[0]!);
+      if (key.leftArrow) { setFieldValue(field.name, opts[(idx - 1 + opts.length) % opts.length]!); return; }
+      if (key.rightArrow) { setFieldValue(field.name, opts[(idx + 1) % opts.length]!); return; }
+    }
+
+    // ── Non-searchable options: ←/→ cycle ──────────────────────────────────
+    if (field.options && !field.searchable) {
       const opts = field.options;
       const idx = opts.indexOf(values[field.name] ?? opts[0]!);
       if (key.leftArrow) { setFieldValue(field.name, opts[(idx - 1 + opts.length) % opts.length]!); return; }
       if (key.rightArrow) { setFieldValue(field.name, opts[(idx + 1) % opts.length]!); return; }
     }
 
+    // ── Path Tab completion ────────────────────────────────────────────────
     if (key.tab && field.path && !field.options) {
       const { completed, candidates: cands } = completePath(values[field.name] ?? "");
       setFieldValue(field.name, completed, completed.length);
-      setCandidates(cands.slice(0, 12));
+      const sliced = cands.slice(0, 12);
+      setCandidates(sliced);
+      setCandidateCursor(0);
       return;
     }
 
+    // ── ↑/↓ navigate path candidates (when visible) ────────────────────────
+    if (candidates.length > 0 && field.path && !field.options) {
+      if (key.upArrow) {
+        const next = Math.max(0, candidateCursor - 1);
+        setCandidateCursor(next);
+        // Fill field: reconstruct dir prefix from current value then append candidate
+        const val = values[field.name] ?? "";
+        const sep = val.includes("/") ? val.slice(0, val.lastIndexOf("/") + 1) : "";
+        const cand = candidates[next] ?? "";
+        setFieldValue(field.name, sep + cand, (sep + cand).length);
+        return;
+      }
+      if (key.downArrow) {
+        const next = Math.min(candidates.length - 1, candidateCursor + 1);
+        setCandidateCursor(next);
+        const val = values[field.name] ?? "";
+        const sep = val.includes("/") ? val.slice(0, val.lastIndexOf("/") + 1) : "";
+        const cand = candidates[next] ?? "";
+        setFieldValue(field.name, sep + cand, (sep + cand).length);
+        return;
+      }
+    }
+
+    // ── Field navigation ───────────────────────────────────────────────────
     if (key.tab || key.downArrow) {
       moveTo(Math.min(cursor + 1, visibleFields.length - 1));
       return;
@@ -124,6 +223,7 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
       return;
     }
 
+    // ── Free-text editing ─────────────────────────────────────────────────
     if (!field.options) {
       const val = values[field.name] ?? "";
 
@@ -141,19 +241,34 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
         if (textPos > 0) {
           const next = val.slice(0, textPos - 1) + val.slice(textPos);
           setFieldValue(field.name, next, textPos - 1);
+          // Any manual edit clears path candidates
+          if (field.path) { setCandidates([]); setCandidateCursor(0); }
         }
         return;
       }
       if (input && !key.ctrl && !key.meta) {
         const next = val.slice(0, textPos) + input + val.slice(textPos);
         setFieldValue(field.name, next, textPos + input.length);
+        if (field.path) { setCandidates([]); setCandidateCursor(0); }
       }
     }
   });
 
-  // The hint column: pad the label+value area to HINT_COL characters.
-  // label.padEnd(16) + " " + value area = roughly 17+value chars; clamp to avoid wrapping.
+  // Compute the hint column dynamically: align to the widest label+value row
+  // across all visible fields so hints form a clean vertical column.
   const LABEL_W = 16;
+  const hintCol = (() => {
+    let max = 0;
+    for (const f of visibleFields) {
+      const val = values[f.name] ?? "";
+      const masked = f.password ? "*".repeat(val.length) : val;
+      const disp = masked || (f.placeholder ?? "");
+      // "▸ " prefix (2) + label (LABEL_W) + " " (1) + value/arrows
+      const valueLen = (f.options && !f.searchable) ? disp.length + 4 : Math.max(disp.length, 1);
+      max = Math.max(max, 2 + LABEL_W + 1 + valueLen);
+    }
+    return max + 2; // 2-space gap before hint
+  })();
 
   return (
     <Modal title={title}>
@@ -170,12 +285,11 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
         // Build display with block cursor for active text fields.
         const cursorPos = isActive && !f.options ? Math.min(textPos, maskedRaw.length) : -1;
 
-        // Compute padding so hint starts at fixed column (HINT_COL).
-        // Use display length (not maskedRaw) so placeholder text is counted too.
-        // Options row adds "← " prefix and " →" suffix (+4).
-        const labelPart = ` ${f.label.padEnd(LABEL_W)} `;
-        const valueDisplayLen = f.options ? display.length + 4 : Math.max(display.length, cursorPos >= 0 ? 1 : 0);
-        const pad = Math.max(1, HINT_COL - labelPart.length - valueDisplayLen);
+        // Compute padding so hint starts at the dynamic hint column.
+        // "▸ " (2) + label (LABEL_W) + " " (1) = 19 chars prefix before value.
+        const prefixLen = 2 + LABEL_W + 1;
+        const valueDisplayLen = (f.options && !f.searchable) ? display.length + 4 : Math.max(display.length, cursorPos >= 0 ? 1 : 0);
+        const pad = Math.max(1, hintCol - prefixLen - valueDisplayLen);
         const paddingStr = " ".repeat(pad);
 
         const before = cursorPos >= 0 ? maskedRaw.slice(0, cursorPos) : "";
@@ -187,9 +301,14 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
             <Text color={isActive ? THEME.active : THEME.dim}>
               {isActive ? SYM.arrow : " "} {f.label.padEnd(LABEL_W)}
             </Text>
-            {f.options ? (
+            {f.options && !f.searchable ? (
               <Text color={THEME.normal}>
                 {SYM.arrow} {maskedRaw} {SYM.arrow}
+              </Text>
+            ) : f.options && f.searchable ? (
+              <Text color={isActive ? THEME.normal : THEME.dim}>
+                {maskedRaw || "(none)"}
+                {isActive ? <Text color={THEME.dim}> ↵search</Text> : null}
               </Text>
             ) : cursorPos >= 0 ? (
               <Text color={isPlaceholder ? THEME.dim : THEME.normal}>
@@ -207,10 +326,45 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
         );
       })}
       {candidates.length > 0 && field?.path ? (
-        <Box marginTop={1}>
-          <Text color={THEME.dim} wrap="truncate-end">
-            {candidates.join("  ")}
-          </Text>
+        <Box flexDirection="column" marginTop={1}>
+          {candidates.slice(0, 8).map((c, i) => {
+            const isLastVisible = i === Math.min(candidates.length, 8) - 1;
+            const prefix = isLastVisible ? "└─" : "├─";
+            return (
+              <Text key={c} color={i === candidateCursor ? THEME.active : THEME.dim}>
+                {prefix} {c}
+              </Text>
+            );
+          })}
+          {candidates.length > 8 && (
+            <Text color={THEME.dim}>   …{candidates.length - 8} more</Text>
+          )}
+        </Box>
+      ) : null}
+      {dropdownOpen && field?.options && field.searchable ? (
+        <Box flexDirection="column" borderStyle="round" marginTop={1} paddingX={1}>
+          <Text color={THEME.dim}>{"> "}{dropdownQuery}<Text inverse>{" "}</Text></Text>
+          {(() => {
+            const filtered = field.options.filter((o) =>
+              o.toLowerCase().includes(dropdownQuery.toLowerCase())
+            );
+            if (filtered.length === 0) {
+              return <Text color={THEME.dim}>(no matches)</Text>;
+            }
+            const visible = filtered.slice(0, 8);
+            return (
+              <>
+                {visible.map((opt, i) => (
+                  <Text key={opt} color={i === Math.min(dropdownCursor, filtered.length - 1) ? THEME.active : THEME.normal}>
+                    {i === Math.min(dropdownCursor, filtered.length - 1) ? SYM.arrow : " "} {opt}
+                  </Text>
+                ))}
+                {filtered.length > 8 && (
+                  <Text color={THEME.dim}>  …{filtered.length - 8} more</Text>
+                )}
+              </>
+            );
+          })()}
         </Box>
       ) : null}
       {error ? (
@@ -220,7 +374,16 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
       ) : null}
       <Box marginTop={1}>
         <Text color={THEME.dim}>
-          {field?.path ? "Tab complete · ↑↓ move" : "↑↓/Tab move"} · ←→{field?.options ? " cycle" : " cursor"} · Home/End · Enter next/submit · Esc cancel
+          {dropdownOpen
+            ? "type filter · ↑↓ move · Enter select · Esc close"
+            : candidates.length > 0 && field?.path
+            ? "↑↓ select candidate · Tab complete again · Enter next/submit · Esc cancel"
+            : field?.path
+            ? "Tab complete · ↑↓ move"
+            : field?.options && field.searchable
+            ? "Enter/type to search · ←→ cycle · ↑↓ move"
+            : "↑↓/Tab move"}{" "}
+          {dropdownOpen ? "" : `· ←→${field?.options ? " cycle" : " cursor"} · Home/End · Enter next/submit · Esc cancel`}
         </Text>
       </Box>
     </Modal>

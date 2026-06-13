@@ -621,7 +621,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             { name: "desc", label: "Description" },
             { name: "shell_cmd", label: "Shell Command", placeholder: "freestyle only", hint: "shell to run" },
             { name: "chdir", label: "Working Dir", placeholder: "cd <dir> && before command", path: true, hint: "Tab completes local FS" },
-            { name: "node", label: "Node/Label", options: nodeOptions, initial: NONE_OPTION, hint: "where it runs" },
+            { name: "node", label: "Node/Label", options: nodeOptions, searchable: true, initial: NONE_OPTION, hint: "where it runs" },
           ]}
           onResult={resolve}
         />
@@ -642,7 +642,11 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           });
       }
       trackResource("job", result.name, ctx.profile, client.baseUrl, ctx.dbPath);
-      ctx.notify(`${SYM.ok} Created ${jobType}: ${result.name}`, "success");
+      if (jobType === "freestyle" && (!result.node || result.node === NONE_OPTION)) {
+        ctx.notify(`${SYM.warn} Job created with no node assigned — will run on any available agent`, "warning");
+      } else {
+        ctx.notify(`${SYM.ok} Created ${jobType}: ${result.name}`, "success");
+      }
       ctx.logCommand(jobType === "folder"
         ? `bee job create folder ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}`
         : `bee job create freestyle ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node "${result.node}"` : ""}`);
@@ -668,7 +672,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               { name: "desc", label: "Description", initial: s?.description || job.description || "", hint: "free text" },
               { name: "shell_cmd", label: "Shell Command", initial: s?.shell_cmd || "", hint: "shell to run" },
               { name: "chdir", label: "Working Dir", initial: s?.chdir || "", path: true, hint: "Tab completes local FS" },
-              { name: "node", label: "Node/Label", options: nodeOptions, initial: s?.node && s.node !== "-" ? s.node : NONE_OPTION, hint: "where it runs" },
+              { name: "node", label: "Node/Label", options: nodeOptions, searchable: true, initial: s?.node && s.node !== "-" ? s.node : NONE_OPTION, hint: "where it runs" },
             ]}
             onResult={resolve}
           />
@@ -692,6 +696,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           },
         );
         ctx.notify(`${SYM.ok} Updated: ${job.name}`, "success");
+        if (result.node === NONE_OPTION) {
+          ctx.notify(`${SYM.warn} Job has no node assigned — will run on any available agent`, "warning");
+        }
         invalidateSummary(job.name);
         const initDesc = s?.description || job.description || "";
         const initShell = s?.shell_cmd || "";

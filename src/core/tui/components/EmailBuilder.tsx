@@ -40,12 +40,9 @@ const COND_LABEL: Record<Cond, string> = {
   always: "Always",
 };
 
-/** All rows — non-enabled rows hidden when email is disabled. */
-const ALL_ROWS: RowKind[] = ["enabled", "email", "cond", "keywords", "regex"];
-
 function activeRows(spec: EmailSpec): RowKind[] {
   if (!spec.enabled) return ["enabled"];
-  return ALL_ROWS;
+  return ["enabled", "email", "cond", "keywords", "regex"];
 }
 
 const ROW_LABEL: Record<RowKind, string> = {
@@ -59,7 +56,7 @@ const ROW_LABEL: Record<RowKind, string> = {
 const ROW_HINT: Record<RowKind, string> = {
   enabled: "toggle with ←/→",
   email: "Enter to edit",
-  cond: "←/→ cycle",
+  cond: "←/→ cycle · keywords/regex filter log content before sending",
   keywords: "Enter to edit · comma-separated",
   regex: "Enter to edit · Java regex",
 };

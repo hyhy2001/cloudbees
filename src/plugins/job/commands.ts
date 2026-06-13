@@ -243,6 +243,9 @@ export function registerJobCommands(ctx: PluginContext): void {
           trackResource("job", name, profile, client.baseUrl, dbPath);
           const nodeMsg = opts.node ? ` on node '${opts.node}'` : "";
           printSuccess(`OK Freestyle job '${name}' created.${nodeMsg}`);
+          if (!opts.node) {
+            printWarning(`WARN No node assigned — job will run on any available agent.`);
+          }
           const url = `${client.baseUrl.replace(/\/$/, "")}/job/${name}/`;
           printMessage(`  Link: ${url}`);
         } catch (err) {
@@ -671,6 +674,9 @@ export function registerJobCommands(ctx: PluginContext): void {
           );
 
           printSuccess(`OK Freestyle job '${name}' updated.`);
+          if (opts.node === "") {
+            printWarning(`WARN Node cleared — job will run on any available agent.`);
+          }
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
           process.exit(1);
