@@ -224,23 +224,20 @@ export function registerJobCommands(ctx: PluginContext): void {
         },
       ) => {
         try {
-          const shell = opts.shell ?? "echo hello";
           const client = await ctx.getClient({ useController: true });
 
-          await createFreestyleJob(
-            client,
-            name,
-            opts.description,
-            shell,
-            opts.chdir ?? null,
-            opts.node ?? null,
-            opts.schedule ?? null,
-            opts.email ?? null,
-            opts.emailCond,
-            opts.emailKeyword.length > 0 ? opts.emailKeyword : null,
-            opts.emailRegex ?? null,
-            parseParamDefs(opts.paramDef),
-          );
+          await createFreestyleJob(client, name, {
+            desc: opts.description,
+            shellCmd: opts.shell ?? "echo hello",
+            chdir: opts.chdir ?? null,
+            node: opts.node ?? null,
+            schedule: opts.schedule ?? null,
+            email: opts.email ?? null,
+            emailCond: opts.emailCond,
+            emailKeywords: opts.emailKeyword.length > 0 ? opts.emailKeyword : null,
+            emailRegex: opts.emailRegex ?? null,
+            params: parseParamDefs(opts.paramDef),
+          });
 
           trackResource("job", name, profile, client.baseUrl, dbPath);
           const nodeMsg = opts.node ? ` on node '${opts.node}'` : "";

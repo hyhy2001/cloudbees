@@ -31,6 +31,7 @@ import type { CredentialDTO } from "../../core/dtos/credential";
 import {
   listCredentials,
   createUsernamePassword,
+  createSecretText,
   updateCredential,
   deleteCredential,
   getCredentialConfig,
@@ -149,46 +150,80 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   const createCred = useCallback(async () => {
-    const result = await ctx.openModal<Record<string, string>>({
-      id: "create-credential",
+    // Step 1: pick credential type
+    const typeResult = await ctx.openModal<Record<string, string>>({
+      id: "create-credential-type",
       render: (resolve) => (
         <FormModal
-          title={`${SYM.gear} Create Credential`}
+          title={`${SYM.gear} Create Credential — Type`}
           fields={[
-            { name: "id", label: "ID", hint: "blank = auto-generate" },
-            { name: "username", label: "Username", required: true, hint: "login user" },
-            { name: "password", label: "Password", required: true, password: true, hint: "secret token" },
-            { name: "desc", label: "Description", hint: "optional" },
+            {
+              name: "type",
+              label: "Type",
+              required: true,
+              options: ["Username+Password", "SecretText"],
+              hint: "credential type",
+            },
           ]}
           onResult={resolve}
         />
       ),
     });
-    if (!result || !result.username || !result.password) return;
+    if (!typeResult) return;
+
+    const isSecret = typeResult.type === "SecretText";
+
+    // Step 2: fill fields based on type
+    const result = await ctx.openModal<Record<string, string>>({
+      id: "create-credential",
+      render: (resolve) =>
+        isSecret ? (
+          <FormModal
+            title={`${SYM.gear} Create SecretText Credential`}
+            fields={[
+              { name: "id", label: "ID", hint: "blank = auto-generate" },
+              { name: "secret", label: "Secret", required: true, password: true, hint: "plain-text secret" },
+              { name: "desc", label: "Description", hint: "optional" },
+            ]}
+            onResult={resolve}
+          />
+        ) : (
+          <FormModal
+            title={`${SYM.gear} Create Username+Password Credential`}
+            fields={[
+              { name: "id", label: "ID", hint: "blank = auto-generate" },
+              { name: "username", label: "Username", required: true, hint: "login user" },
+              { name: "password", label: "Password", required: true, password: true, hint: "secret token" },
+              { name: "desc", label: "Description", hint: "optional" },
+            ]}
+            onResult={resolve}
+          />
+        ),
+    });
+    if (!result) return;
+    if (isSecret && !result.secret) return;
+    if (!isSecret && (!result.username || !result.password)) return;
+
     try {
       const client = await ctx.getClient({ useController: true });
-      await createUsernamePassword(
-        client,
-        result.id,
-        result.username,
-        result.password,
-        result.desc ?? "",
-        "GLOBAL",
-        ctx.username,
-        store,
-      );
-      if (result.id?.trim()) {
-        trackResource(
-          "credential",
-          result.id,
-          ctx.profile,
-          `${client.baseUrl}.${store}`,
-          ctx.dbPath,
+      const credId = result.id?.trim() || "";
+      const desc = result.desc ?? "";
+
+      if (isSecret) {
+        await createSecretText(client, credId, result.secret, desc, "GLOBAL", ctx.username, store);
+      } else {
+        await createUsernamePassword(
+          client, credId, result.username, result.password, desc, "GLOBAL", ctx.username, store,
         );
       }
-      const displayId = result.id?.trim() || "(auto-generated)";
+
+      if (credId) {
+        trackResource("credential", credId, ctx.profile, `${client.baseUrl}.${store}`, ctx.dbPath);
+      }
+      const displayId = credId || "(auto-generated)";
       ctx.notify(`${SYM.ok} Created credential: ${displayId}`, "success");
-      ctx.logCommand(`bee credential create ${result.id || ""} --username ${result.username}${result.desc ? ` --description "${result.desc}"` : ""}`);
+      const typeFlag = isSecret ? `--secret-text "***"` : `--username ${result.username}`;
+      ctx.logCommand(`bee cred create ${credId} ${typeFlag}${desc ? ` --description "${desc}"` : ""}`);
       void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");

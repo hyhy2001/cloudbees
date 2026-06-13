@@ -32,6 +32,7 @@ import { getTtl } from "../../core/cache/policy";
 import type { JobDTO } from "../../core/dtos/job";
 import {
   listJobs,
+  listJobsRecursive,
   getJobConfigSummary,
   triggerJob,
   triggerJobWithParams,
@@ -304,6 +305,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Mine/All is now a pure client-side filter — no refetch on toggle (P6).
   // Initial scope is persisted per resource-type (Q10).
   const [showAll, setShowAll] = useState(() => getScopeShowAll("job", ctx.dbPath));
+  // Recursive folder traversal — off by default, toggled with `f` in TUI.
+  const [recursive, setRecursive] = useState(false);
   // Live terminal width for auto-scaling the table (Q4).
   const { columns: termCols } = useDimensions();
   // Opt-in auto-refresh (legacy P13): OFF by default, toggled with `f`.
@@ -344,7 +347,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   }, [ctx]);
 
   // ── Read pipeline: list jobs via the ResourceStore (TTL, dedup, stale) ──
-  const cacheKey = `jobs.list.${baseUrl ?? "?"}`;
+  const cacheKey = `jobs.list.${baseUrl ?? "?"}.${recursive ? "recursive" : "flat"}`;
   const {
     data: allJobs,
     status,
@@ -355,7 +358,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     cacheKey,
     async () => {
       const client = await ctx.getClient({ useController: true });
-      return listJobs(client);
+      return recursive ? listJobsRecursive(client) : listJobs(client);
     },
     { ttlMs: getTtl("jobs.list") * 1000, enabled: ctx.loggedIn && baseUrl !== null },
   );
@@ -437,6 +440,14 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Detail panel (config summary for the highlighted job).
   const [summary, setSummary] = useState<JobConfigSummary | null>(null);
 
+  // In-memory cache of config summaries: avoids re-fetching config.xml every
+  // time the cursor moves back to a previously-visited job within the session.
+  // Invalidated per-job after any update/create via invalidateSummary().
+  const summaryCache = useRef<Map<string, JobConfigSummary>>(new Map());
+  const invalidateSummary = useCallback((name: string) => {
+    summaryCache.current.delete(name);
+  }, []);
+
   // Fetch config summary for the highlighted job (detail panel).
   useEffect(() => {
     let cancelled = false;
@@ -444,10 +455,17 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       setSummary(null);
       return;
     }
+    // Serve from cache if available.
+    const cached = summaryCache.current.get(current.name);
+    if (cached) {
+      setSummary(cached);
+      return;
+    }
     void (async () => {
       try {
         const client = await ctx.getClient({ useController: true });
         const s = await getJobConfigSummary(client, current.name);
+        summaryCache.current.set(current.name, s);
         if (!cancelled) setSummary(s);
       } catch {
         if (!cancelled) setSummary(null);
@@ -582,19 +600,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       if (jobType === "folder") {
         await createFolder(client, result.name, result.desc ?? "");
       } else {
-        await createFreestyleJob(
-          client,
-          result.name,
-          result.desc ?? "",
-          result.shell_cmd || "echo hello",
-          result.chdir || null,
-          result.node && result.node !== NONE_OPTION ? result.node : null,
-          null, // schedule owned by `t` key
-          null, // email owned by `m` key
-          "failed",
-          null,
-          null,
-        );
+        await createFreestyleJob(client, result.name, {
+            desc: result.desc ?? "",
+            shellCmd: result.shell_cmd || "echo hello",
+            chdir: result.chdir || null,
+            node: result.node && result.node !== NONE_OPTION ? result.node : null,
+          });
       }
       trackResource("job", result.name, ctx.profile, client.baseUrl, ctx.dbPath);
       ctx.notify(`${SYM.ok} Created ${jobType}: ${result.name}`, "success");
@@ -647,6 +658,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           },
         );
         ctx.notify(`${SYM.ok} Updated: ${job.name}`, "success");
+        invalidateSummary(job.name);
         const initDesc = s?.description || job.description || "";
         const initShell = s?.shell_cmd || "";
         const initChdir = s?.chdir || "";
@@ -663,7 +675,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
       }
     },
-    [ctx, refetch, summary],
+    [ctx, refetch, summary, invalidateSummary],
   );
 
   // Import = track an existing server job into Mine (for jobs created outside bee).
@@ -715,13 +727,14 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "u", label: "unimport", when: () => canUntrack, run: () => { if (current) { untrackResource("job", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
       { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeJob(current.name); } },
       { key: "a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("job", nv, ctx.dbPath); return nv; }) },
+      { key: "f", label: recursive ? "flat" : "recursive", run: () => setRecursive((v) => !v) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
       // Esc clears an active query (only shown/handled when one is set).
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, canImport, canUntrack, baseUrl, summary, runJob, stopJob, newJob, editJob, doImport, removeJob, refetch, search],
+    [current, hasRow, canImport, canUntrack, baseUrl, summary, recursive, runJob, stopJob, newJob, editJob, doImport, removeJob, refetch, search],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
@@ -759,6 +772,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 },
               );
               ctx.notify(`${SYM.ok} Updated parameters: ${name}`, "success");
+              invalidateSummary(name);
               if (params.length === 0) {
                 ctx.logCommand(`bee job update ${name} --clear-params`);
               } else {
@@ -794,6 +808,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               // schedule arg as: null = unchanged, "" = clear, value = set.
               await updateJobFreestyle(client, name, { schedule: cron });
               ctx.notify(`${SYM.ok} Updated schedule: ${name}`, "success");
+              invalidateSummary(name);
               ctx.logCommand(cron
                 ? `bee job update ${name} --schedule "${cron}"`
                 : `bee job update ${name} --schedule ""`
@@ -843,6 +858,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 );
               }
               ctx.notify(`${SYM.ok} Updated email: ${name}`, "success");
+              invalidateSummary(name);
               if (!spec.enabled) {
                 ctx.logCommand(`bee job update ${name} --email ""`);
               } else {
@@ -884,6 +900,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       <Text>
         {" "}
         {SYM.arrow} Scope: {scope}
+        {recursive ? <Text color={THEME.yellow}> · recursive</Text> : null}
         {autoRefresh ? <Text color={THEME.success}> · auto ⟳</Text> : null}
         {status === "stale" ? <Text color={THEME.dim}> · refreshing…</Text> : null}
       </Text>

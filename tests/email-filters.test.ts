@@ -156,12 +156,13 @@ describe("email filters", () => {
       await createFreestyleJob(
         asClient(createClient),
         "n1",
-        "", // desc
-        "echo hi", // shellCmd
-        null, null, null,
-        null, // email
-        "failed",
-        ["CRITICAL"], // emailKeywords
+        {
+          desc: "",
+          shellCmd: "echo hi",
+          email: null,
+          emailCond: "failed",
+          emailKeywords: ["CRITICAL"],
+        },
       );
     } catch {
       createThrew = true;

@@ -21,7 +21,7 @@ import {
 } from "../../domain/email";
 import { escapeXml } from "../../domain/xml";
 import { buildTimerTriggerBlock } from "../../domain/schedule";
-import type { JobConfigSummary, StringParamDef, UpdateFreestyleOpts } from "./types";
+import type { JobConfigSummary, UpdateFreestyleOpts, CreateFreestyleOpts } from "./types";
 import { XMLParser } from "fast-xml-parser";
 
 const _JOB_TREE = "jobs[_class,name,url,color,description,buildable,lastBuild[number,result,url]]";
@@ -328,17 +328,20 @@ export async function waitForBuild(
 export async function createFreestyleJob(
   client: CloudBeesClient,
   name: string,
-  desc = "",
-  shellCmd = "echo hello",
-  chdir: string | null = null,
-  node: string | null = null,
-  schedule: string | null = null,
-  email: string | null = null,
-  emailCond = "failed",
-  emailKeywords: string[] | null = null,
-  emailRegex: string | null = null,
-  params: StringParamDef[] | null = null,
+  opts: CreateFreestyleOpts = {},
 ): Promise<void> {
+  const {
+    desc = "",
+    shellCmd = "echo hello",
+    chdir = null,
+    node = null,
+    schedule = null,
+    email = null,
+    emailCond = "failed",
+    emailKeywords = null,
+    emailRegex = null,
+    params = null,
+  } = opts;
   const keywords = normalizeKeywords(emailKeywords);
   const regex = normalizeRegex(emailRegex);
   validateRegex(regex);

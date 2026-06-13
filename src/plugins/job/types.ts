@@ -32,6 +32,20 @@ export interface StringParamDef {
   description?: string;
 }
 
+/** Options for createFreestyleJob. */
+export interface CreateFreestyleOpts {
+  desc?: string;
+  shellCmd?: string;
+  chdir?: string | null;
+  node?: string | null;
+  schedule?: string | null;
+  email?: string | null;
+  emailCond?: string;
+  emailKeywords?: string[] | null;
+  emailRegex?: string | null;
+  params?: StringParamDef[] | null;
+}
+
 /** Options for updateJobFreestyle — all fields optional; omit = leave unchanged. */
 export interface UpdateFreestyleOpts {
   desc?: string | null;
