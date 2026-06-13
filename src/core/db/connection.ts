@@ -174,9 +174,12 @@ export function getConnection(dbPath?: string): Database {
 export function initDb(dbPath?: string): void {
   const db = getConnection(dbPath);
   try {
-    // db.exec() is deprecated in newer Bun versions — use db.run() per statement.
-    for (const stmt of schemaSql.split(";").map((s) => s.trim()).filter(Boolean)) {
-      db.run(stmt);
+    // Strip all -- line comments first (before splitting on ";"), so semicolons
+    // inside comment text don't accidentally split statements.
+    const stripped = schemaSql.replace(/--[^\n]*/g, "");
+    for (const stmt of stripped.split(";")) {
+      const sql = stmt.trim();
+      if (sql.length > 0) db.run(sql);
     }
 
     // Transparent migration: add controller_name if it doesn't exist yet

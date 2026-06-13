@@ -39,27 +39,34 @@ export function appendChunk(
     .replace(/\r/g, "");
   if (normalized === "") return prev as string[];
   const incoming = normalized.split("\n");
-  const merged = prev.length === 0 ? incoming : [...prev, ...incoming];
-  return merged.length > max ? merged.slice(merged.length - max) : merged;
+
+  // Fast path: when prev is already at capacity and incoming fits in the tail,
+  // avoid spreading the entire prev array. Instead slice off what we need to
+  // drop and concat only the tail — one allocation instead of two.
+  const total = prev.length + incoming.length;
+  if (total <= max) {
+    return prev.length === 0 ? incoming : (prev as string[]).concat(incoming);
+  }
+  // Need to trim. Drop from the front: keep the last `max` lines overall.
+  const keep = max - incoming.length;
+  const base = keep > 0 ? prev.slice(Math.max(0, prev.length - keep)) : [];
+  return base.concat(incoming).slice(-max);
 }
 
+// Pre-compiled case-insensitive regexes avoid toUpperCase() allocation per line.
+const RE_ERROR = /error|failed|failure|exception/i;
+const RE_WARN = /warn/i;
+const RE_SUCCESS = /success|finished|completed/i;
+
 /**
- * Map a log line to a theme color by keyword scan (uppercased), mirroring the
+ * Map a log line to a theme color by keyword scan, mirroring the
  * legacy priority order: error → warn → success → pipeline/shell → default.
  * Returns undefined for unstyled lines.
  */
 export function colorForLine(line: string): string | undefined {
-  const u = line.toUpperCase();
-  if (
-    u.includes("ERROR") ||
-    u.includes("FAILED") ||
-    u.includes("FAILURE") ||
-    u.includes("EXCEPTION")
-  )
-    return THEME.error;
-  if (u.includes("WARN")) return THEME.warning;
-  if (u.includes("SUCCESS") || u.includes("FINISHED") || u.includes("COMPLETED"))
-    return THEME.success;
+  if (RE_ERROR.test(line)) return THEME.error;
+  if (RE_WARN.test(line)) return THEME.warning;
+  if (RE_SUCCESS.test(line)) return THEME.success;
   if (line.includes("[Pipeline]") || line.startsWith("+")) return THEME.blue;
   return undefined;
 }

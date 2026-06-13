@@ -19,10 +19,9 @@ import {
   normalizeRegex,
   validateRegex,
 } from "../../domain/email";
-import { escapeXml } from "../../domain/xml";
+import { escapeXml, xmlParser } from "../../domain/xml";
 import { buildTimerTriggerBlock } from "../../domain/schedule";
 import type { JobConfigSummary, UpdateFreestyleOpts, CreateFreestyleOpts } from "./types";
-import { XMLParser } from "fast-xml-parser";
 
 const _JOB_TREE = "jobs[_class,name,url,color,description,buildable,lastBuild[number,result,url]]";
 
@@ -424,8 +423,7 @@ export async function getJobConfigSummary(
   const xmlStr = await client.getText(`/job/${jobSeg(name)}/config.xml`);
   let doc: Record<string, unknown>;
   try {
-    const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: false });
-    doc = parser.parse(xmlStr) as Record<string, unknown>;
+    doc = xmlParser.parse(xmlStr) as Record<string, unknown>;
   } catch {
     // Malformed XML — return partial summary rather than crashing.
     return summary;

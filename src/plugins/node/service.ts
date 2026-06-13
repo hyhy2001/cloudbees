@@ -2,7 +2,7 @@
  * Node / Agent service — list, get, create, copy, delete, toggle offline, update.
  * Ports legacy/cb/services/node_service.py.
  */
-import { XMLParser } from "fast-xml-parser";
+import { xmlParser, xmlParserTagValues } from "../../domain/xml";
 import type { CloudBeesClient } from "../../core/api/types";
 import { NodeDTO, NodeDetailDTO, nodeFromDict, nodeDetailFromDict } from "../../core/dtos/index";
 import {
@@ -221,7 +221,7 @@ export interface NodeConfig {
  * defaults: jnlp launcher, always-on).
  */
 export function parseNodeConfig(xml: string): NodeConfig {
-  const doc = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" }).parse(
+  const doc = xmlParserTagValues.parse(
     xml,
   ) as Record<string, unknown>;
   // Jenkins serializes the root as 'slave', 'hudson.slaves.DumbSlave', or
@@ -273,7 +273,7 @@ export async function updateNode(
   let xml = await client.getText(`/computer/${nodeSeg(name)}/config.xml`);
 
   // Validate the document is well-formed before patching.
-  new XMLParser({ ignoreAttributes: false }).parse(xml);
+  xmlParser.parse(xml);
 
   const setElement = (src: string, tag: string, value: string): string => {
     const re = new RegExp(`(<${tag}>)[\\s\\S]*?(</${tag}>)`);

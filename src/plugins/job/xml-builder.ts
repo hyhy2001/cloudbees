@@ -9,8 +9,7 @@
  * `<project>`.
  */
 
-import { XMLParser } from "fast-xml-parser";
-import { escapeXml } from "../../domain/xml";
+import { escapeXml, xmlParser } from "../../domain/xml";
 import { buildEmailPublisherBlock } from "../../domain/email";
 import { buildTimerTriggerBlock } from "../../domain/schedule";
 import type { StringParamDef } from "./types";
@@ -149,8 +148,7 @@ export function buildFolderXml(desc = ""): string {
 
 /** Parse config.xml and extract the presendScript text value. */
 export function extractPresendScriptFromXml(configXml: string): string | null {
-  const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: false });
-  const doc = parser.parse(configXml) as Record<string, unknown>;
+  const doc = xmlParser.parse(configXml) as Record<string, unknown>;
   // Walk: project > publishers > ExtendedEmailPublisher > presendScript
   const project = doc["project"] as Record<string, unknown> | undefined;
   if (!project) return null;

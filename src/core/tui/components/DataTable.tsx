@@ -14,7 +14,7 @@
  * Cells carry their own color/dim so callers (e.g. job status) can colorize.
  */
 
-import React from "react";
+import React, { useCallback, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
@@ -125,13 +125,17 @@ export const DataTable: React.FC<DataTableProps> = ({
   rowKeys,
   tableWidth,
 }) => {
-  const clamp = (i: number) => Math.max(0, Math.min(rows.length - 1, i));
-  const colWidths = resolveColumnWidths(columns, tableWidth);
+  const clamp = useCallback(
+    (i: number) => Math.max(0, Math.min(rows.length - 1, i)),
+    [rows.length],
+  );
+  // Memoize column widths — only recompute when columns or tableWidth change.
+  const colWidths = useMemo(() => resolveColumnWidths(columns, tableWidth), [columns, tableWidth]);
 
   // Navigation only. Enter (and every action key) is owned by the screen's
   // keymap — the table never handles selection, so there's no double-fire.
-  useInput(
-    (input, key) => {
+  const handleInput = useCallback(
+    (input: string, key: { downArrow: boolean; upArrow: boolean; ctrl: boolean }) => {
       if (rows.length === 0) return;
       if (input === "j" || key.downArrow) onCursorChange(clamp(cursor + 1));
       else if (input === "k" || key.upArrow) onCursorChange(clamp(cursor - 1));
@@ -140,8 +144,9 @@ export const DataTable: React.FC<DataTableProps> = ({
       else if (key.ctrl && input === "f") onCursorChange(clamp(cursor + PAGE));
       else if (key.ctrl && input === "b") onCursorChange(clamp(cursor - PAGE));
     },
-    { isActive: active },
+    [cursor, rows.length, onCursorChange, clamp],
   );
+  useInput(handleInput, { isActive: active });
 
   // Compute the visible window around the cursor.
   const start = Math.max(

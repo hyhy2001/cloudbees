@@ -57,7 +57,9 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
 
   /**
    * Core request method with exponential-backoff retry.
-   * Mirrors CloudBeesClient._request() exactly.
+   * Uses a total deadline budget so retries + sleeps never exceed
+   * `_timeout` seconds in aggregate. Without a deadline, 4 attempts ×
+   * 30 s each plus 7 s of backoff sleep = 127 s worst-case wait.
    */
   private async _request(
     method: string,
@@ -80,12 +82,20 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
 
     let lastErr: Error | undefined;
     const retries = _RETRY_DELAYS.length; // 4 attempts total
+    // Total deadline: the entire request (all retries + sleep) must finish
+    // within _timeout seconds. Each attempt gets the remaining budget.
+    const deadline = Date.now() + this._timeout * 1000;
 
     for (let attempt = 0; attempt < retries; attempt++) {
       const delay = _RETRY_DELAYS[attempt];
       if (delay > 0) {
-        await Bun.sleep(delay * 1000);
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break; // budget exhausted before even sleeping
+        await Bun.sleep(Math.min(delay * 1000, remaining));
       }
+
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break; // budget consumed by sleep
 
       let resp: Response;
       try {
@@ -93,7 +103,9 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
           method,
           headers: mergedHeaders,
           body: opts?.body,
-          signal: AbortSignal.timeout(this._timeout * 1000),
+          // Use whichever is smaller: per-attempt remaining budget or 30 s floor
+          // (avoids sub-second timeouts on final retry while honoring the deadline).
+          signal: AbortSignal.timeout(Math.max(5000, remaining)),
         });
       } catch (err: unknown) {
         // AbortError / TimeoutError → retry; other network errors → throw
