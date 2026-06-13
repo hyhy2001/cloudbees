@@ -39,33 +39,30 @@ export interface JobConfigDTO {
 /**
  * Map a Jenkins `_class` string to a short job-type code.
  *
- * Matches against well-known exact class names (priority order matters —
- * MB before FD so MultiBranch isn't misclassified as a plain Folder).
- * Falls back to the last dot-segment (first 4 chars, original case) for
- * unknown types, preserving the old fallback contract.
+ * Uses a Map for O(1) lookup — with 1000 jobs the previous linear array scan
+ * cost 7000 string comparisons per list call.
+ *
+ * Ordered insertion doesn't matter for Map lookups, but MB entries must still
+ * be present before FD so the fallback dot-segment logic isn't needed for those.
  */
+const CLASS_TO_TYPE = new Map<string, string>([
+  // MultiBranch — must be distinct from Folder
+  ["org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject", "MB"],
+  ["com.cloudbees.hudson.plugins.folder.OrganizationFolder", "MB"],
+  ["jenkins.branch.OrganizationFolder", "MB"],
+  // Pipeline (Workflow)
+  ["org.jenkinsci.plugins.workflow.job.WorkflowJob", "PL"],
+  ["com.cloudbees.workflow.flow.CpsFlowJob", "PL"],
+  // Folder
+  ["com.cloudbees.hudson.plugins.folder.Folder", "FD"],
+  // Freestyle
+  ["hudson.model.FreeStyleProject", "FS"],
+]);
+
 function classToJobType(className: string): string {
   if (!className) return "";
-
-  // Ordered: more-specific entries must come before broader ones.
-  const EXACT: [string, string][] = [
-    // MultiBranch — must precede Folder because some MB classes contain "Folder"
-    ["MB", "org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject"],
-    ["MB", "com.cloudbees.hudson.plugins.folder.OrganizationFolder"],
-    ["MB", "jenkins.branch.OrganizationFolder"],
-    // Pipeline (Workflow)
-    ["PL", "org.jenkinsci.plugins.workflow.job.WorkflowJob"],
-    ["PL", "com.cloudbees.workflow.flow.CpsFlowJob"],
-    // Folder
-    ["FD", "com.cloudbees.hudson.plugins.folder.Folder"],
-    // Freestyle
-    ["FS", "hudson.model.FreeStyleProject"],
-  ];
-
-  for (const [code, cls] of EXACT) {
-    if (className === cls) return code;
-  }
-
+  const hit = CLASS_TO_TYPE.get(className);
+  if (hit) return hit;
   // Fallback: last dot-segment, first 4 chars (original case, no uppercase).
   return className.split(".").at(-1)!.slice(0, 4);
 }

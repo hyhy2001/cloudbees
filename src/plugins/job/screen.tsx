@@ -250,18 +250,17 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
     ? `#${buildNum}${buildNums ? ` [${buildIdx + 1}/${buildNums.length}]` : ""}`
     : "latest";
 
-  // Scrollbar: render a 1-char wide track on the right side.
-  const renderScrollbar = (visibleRows: number): string[] => {
-    if (totalLines <= visibleRows) return Array(visibleRows).fill(" ");
-    const trackH = visibleRows;
-    const thumbH = Math.max(1, Math.round((visibleRows / totalLines) * trackH));
-    const thumbTop = Math.round((effectiveTop / Math.max(1, totalLines - visibleRows)) * (trackH - thumbH));
+  // Memoize scrollbar: rebuilding Array.from({length: logRows}) on every poll
+  // (every 2 s) is wasteful when position hasn't changed.
+  const scrollbar = useMemo(() => {
+    if (totalLines <= logRows) return Array<string>(logRows).fill(" ");
+    const trackH = logRows;
+    const thumbH = Math.max(1, Math.round((logRows / totalLines) * trackH));
+    const thumbTop = Math.round((effectiveTop / Math.max(1, totalLines - logRows)) * (trackH - thumbH));
     return Array.from({ length: trackH }, (_, i) =>
       i >= thumbTop && i < thumbTop + thumbH ? "█" : "│"
     );
-  };
-
-  const scrollbar = renderScrollbar(logRows);
+  }, [totalLines, logRows, effectiveTop]);
   const contentWidth = Math.max(10, termCols - 6); // border(2)+padding(2)+scrollbar(1)+gap(1)
 
   return (
@@ -428,20 +427,49 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     return [...mine, ...deleted];
   }, [allJobs, showAll, trackedNames]);
 
-  // Then the "/" search filter (matches name + description), client-side.
-  const jobs = useMemo(
-    () =>
-      computeView(scoped, {
-        query: search.query,
-        searchText: (j) => `${j.name} ${j.description ?? ""}`,
-      }),
-    [scoped, search.query],
+  // Pre-compute lowercase search index once per scoped change (not per keystroke).
+  // computeView's inner loop calls searchText(item).toLowerCase() for every item on
+  // every query change — with 1000 jobs that's 1000 string allocs per keypress.
+  // Indexing here moves that work out of the hot search path.
+  const searchIndex = useMemo(
+    () => scoped.map((j) => `${j.name} ${j.description ?? ""}`.toLowerCase()),
+    [scoped],
   );
+
+  // Then the "/" search filter (matches name + description), client-side.
+  const jobs = useMemo(() => {
+    const q = search.query.trim().toLowerCase();
+    if (!q) return scoped;
+    return scoped.filter((_, i) => searchIndex[i]!.includes(q));
+  }, [scoped, search.query, searchIndex]);
 
   // ── Stable cursor: keep selection on the same job across refresh/filter ──
   const rowKeys = useMemo(() => jobs.map((j) => j.name), [jobs]);
   const { cursor, setCursor } = useStableCursor(rowKeys);
   const current = jobs[cursor];
+
+  // Pre-build DataTable cell rows once per jobs/trackedNames change.
+  // With 1000+ jobs, jobs.map() inside JSX runs on every keystroke (cursor move
+  // → re-render). Memoizing here means the 6000-cell array is only rebuilt when
+  // the underlying data actually changes, not on navigation.
+  type CellRow = { text: string; color?: string; dim?: boolean }[];
+  const tableRows = useMemo<CellRow[]>(
+    () =>
+      jobs.map((j) => {
+        const st = statusCell(j.color);
+        const tp = typeLabel(j.jobType);
+        const mine = trackedNames.has(j.name);
+        return [
+          { text: mine ? SYM.tracked : "", color: THEME.success },
+          { text: st.text, color: st.color, dim: st.dim },
+          { text: tp.text, color: tp.color, dim: (tp as { dim?: boolean }).dim },
+          { text: j.name },
+          { text: j.lastBuildNumber ? `#${j.lastBuildNumber}` : "—" },
+          { text: j.description ?? "" },
+        ];
+      }),
+    [jobs, trackedNames],
+  );
 
   // Detail panel (config summary for the highlighted job).
   const [summary, setSummary] = useState<JobConfigSummary | null>(null);
@@ -961,19 +989,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               { header: "Build #", width: 9 },
               { header: "Description", width: 30, flex: true },
             ]}
-            rows={jobs.map((j) => {
-              const st = statusCell(j.color);
-              const tp = typeLabel(j.jobType);
-              const mine = trackedNames.has(j.name);
-              return [
-                { text: mine ? SYM.tracked : "", color: THEME.success },
-                { text: st.text, color: st.color, dim: st.dim },
-                { text: tp.text, color: tp.color, dim: (tp as { dim?: boolean }).dim },
-                { text: j.name },
-                { text: j.lastBuildNumber ? `#${j.lastBuildNumber}` : "—" },
-                { text: j.description ?? "" },
-              ];
-            })}
+            rows={tableRows}
             rowKeys={rowKeys}
             cursor={cursor}
             onCursorChange={setCursor}

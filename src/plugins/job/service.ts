@@ -87,12 +87,40 @@ const jobSeg = jobPathSegments;
 // List / Get
 // ---------------------------------------------------------------------------
 
+/**
+ * How many jobs to fetch per page. Jenkins tree syntax `{start,end}` is used
+ * for range queries. 200 is a sweet spot: small enough to keep individual
+ * responses under ~60 KB, large enough to cover most instances in 1–2 pages.
+ */
+const LIST_PAGE_SIZE = 200;
+
+/**
+ * List all jobs, fetching in pages of LIST_PAGE_SIZE to avoid a single massive
+ * JSON response on large instances (1000+ jobs = 300 KB+ in one shot, blocking
+ * the JS thread during JSON.parse). Pages are fetched sequentially until an
+ * empty page signals end-of-results.
+ *
+ * The first page's result is cached under `jobs.list.<baseUrl>` (matching the
+ * old single-call cache key) so small instances (~200 jobs) still benefit from
+ * SQLite TTL caching. Subsequent pages are not individually cached because their
+ * position depends on the current total, which changes as jobs are added/removed.
+ */
 export async function listJobs(client: CloudBeesClient): Promise<JobDTO[]> {
-  const endpoint = `/api/json?tree=${_JOB_TREE}`;
-  const cacheKey = `jobs.list.${client.baseUrl}`;
-  const data = await client.get<Record<string, unknown>>(endpoint, { cacheKey });
-  const jobs = (data?.["jobs"] as Record<string, unknown>[] | undefined) ?? [];
-  return jobs.map((j) => jobFromDict(j));
+  const all: JobDTO[] = [];
+  let start = 0;
+
+  while (true) {
+    const end = start + LIST_PAGE_SIZE;
+    const endpoint = `/api/json?tree=${_JOB_TREE}{${start},${end}}`;
+    const cacheKey = start === 0 ? `jobs.list.${client.baseUrl}` : undefined;
+    const data = await client.get<Record<string, unknown>>(endpoint, cacheKey ? { cacheKey } : undefined);
+    const page = (data?.["jobs"] as Record<string, unknown>[] | undefined) ?? [];
+    for (const j of page) all.push(jobFromDict(j));
+    if (page.length < LIST_PAGE_SIZE) break; // last page
+    start = end;
+  }
+
+  return all;
 }
 
 /**
