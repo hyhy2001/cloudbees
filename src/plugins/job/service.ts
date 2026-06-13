@@ -10,7 +10,6 @@ import {
   buildFreestyleXml,
   buildFolderXml,
   buildParametersProperty,
-  extractPresendScriptFromXml,
 } from "./xml-builder";
 import {
   buildEmailPublisherBlock,
@@ -26,41 +25,58 @@ import type { JobConfigSummary, UpdateFreestyleOpts, CreateFreestyleOpts } from 
 const _JOB_TREE = "jobs[_class,name,url,color,description,buildable,lastBuild[number,result,url]]";
 
 /**
+ * How many jobs to fetch per page. Jenkins tree syntax `{start,end}` is used
+ * for range queries. 200 is a sweet spot: small enough to keep individual
+ * responses under ~60 KB, large enough to cover most instances in 1–2 pages.
+ */
+const LIST_PAGE_SIZE = 200;
+
+/**
  * Recursively list jobs, descending into folders.
  * Returns flat list with names like "folder/subfolder/job".
+ *
+ * Each folder level is paginated (LIST_PAGE_SIZE items per request) so large
+ * folders don't return a single massive JSON payload. Sibling folder descents
+ * at each level run in parallel via Promise.all.
  */
 export async function listJobsRecursive(client: CloudBeesClient): Promise<JobDTO[]> {
   async function fetchLevel(urlPath: string, prefix: string): Promise<JobDTO[]> {
-    const endpoint = `${urlPath}/api/json?tree=${_JOB_TREE}`;
-    const data = await client.get<Record<string, unknown>>(endpoint, {
-      cacheKey: `jobs.list.recursive.${client.baseUrl}.${urlPath}`,
-    });
-    const jobs = (data?.["jobs"] as Record<string, unknown>[] | undefined) ?? [];
-
     const dtos: JobDTO[] = [];
     const folderTasks: Promise<JobDTO[]>[] = [];
+    let start = 0;
 
-    for (const j of jobs) {
-      const dto = jobFromDict(j);
-      const qualifiedName = prefix ? `${prefix}/${dto.name}` : dto.name;
-      dto.name = qualifiedName;
-      dtos.push(dto);
+    // Paginate within this folder level — same approach as listJobs().
+    while (true) {
+      const end = start + LIST_PAGE_SIZE;
+      const endpoint = `${urlPath}/api/json?tree=${_JOB_TREE}{${start},${end}}`;
+      // Include start offset in cache key to distinguish pages of the same folder.
+      const cacheKey = `jobs.list.recursive.${client.baseUrl}.${urlPath}.${start}`;
+      const data = await client.get<Record<string, unknown>>(endpoint, { cacheKey });
+      const page = (data?.["jobs"] as Record<string, unknown>[] | undefined) ?? [];
 
-      // Descend into folders in parallel — siblings don't depend on each other.
-      const cls = String((j as Record<string, unknown>)["_class"] ?? "");
-      if (cls.toLowerCase().includes("folder")) {
-        const folderPath = `/job/${jobPathSegments(qualifiedName)}`;
-        folderTasks.push(
-          fetchLevel(folderPath, qualifiedName).catch(() => [] as JobDTO[]),
-        );
+      for (const j of page) {
+        const dto = jobFromDict(j);
+        const qualifiedName = prefix ? `${prefix}/${dto.name}` : dto.name;
+        dto.name = qualifiedName;
+        dtos.push(dto);
+
+        // Collect folder descent tasks — siblings run in parallel after all pages.
+        const cls = String((j as Record<string, unknown>)["_class"] ?? "");
+        if (cls.toLowerCase().includes("folder")) {
+          const folderPath = `/job/${jobPathSegments(qualifiedName)}`;
+          folderTasks.push(
+            fetchLevel(folderPath, qualifiedName).catch(() => [] as JobDTO[]),
+          );
+        }
       }
+
+      if (page.length < LIST_PAGE_SIZE) break; // last page
+      start = end;
     }
 
-    // Await all sibling folder fetches concurrently, then flatten.
+    // Descend into all discovered folders in parallel.
     const childArrays = await Promise.all(folderTasks);
-    for (const children of childArrays) {
-      dtos.push(...children);
-    }
+    for (const children of childArrays) dtos.push(...children);
     return dtos;
   }
   return fetchLevel("", "");
@@ -86,13 +102,6 @@ const jobSeg = jobPathSegments;
 // ---------------------------------------------------------------------------
 // List / Get
 // ---------------------------------------------------------------------------
-
-/**
- * How many jobs to fetch per page. Jenkins tree syntax `{start,end}` is used
- * for range queries. 200 is a sweet spot: small enough to keep individual
- * responses under ~60 KB, large enough to cover most instances in 1–2 pages.
- */
-const LIST_PAGE_SIZE = 200;
 
 /**
  * List all jobs, fetching in pages of LIST_PAGE_SIZE to avoid a single massive
@@ -592,9 +601,19 @@ export async function getJobConfigSummary(
 // ---------------------------------------------------------------------------
 
 /**
- * Patch a freestyle job's config.xml in-place via string manipulation.
- * We re-build the relevant sections rather than using a full XML DOM library,
- * mirroring the Python approach of reading with ET, modifying, and re-posting.
+ * Patch a freestyle job's config.xml in-place.
+ *
+ * Strategy: hybrid DOM + string.
+ *  - READ current values by parsing the XML once with XMLParser (reliable,
+ *    no regex fragility around whitespace or attribute order).
+ *  - WRITE changes via targeted string replacements that preserve the original
+ *    Jenkins XML structure (indentation, prolog, CDATA). XMLBuilder is
+ *    intentionally NOT used for serialisation — it would change the prolog
+ *    version (1.1 → 1.0) and may reorder elements, both of which Jenkins
+ *    would reject or mishandle.
+ *
+ * String helpers use a single .replace() with a flag-tracking callback to
+ * avoid the two-pass test() + replace() pattern.
  */
 export async function updateJobFreestyle(
   client: CloudBeesClient,
@@ -617,7 +636,48 @@ export async function updateJobFreestyle(
   } = opts;
   const xmlStr = await client.getText(`/job/${jobSeg(name)}/config.xml`);
 
-  // Partial update via string-level replacement, reading existing values inline.
+  // Parse once here — used only to READ current values reliably (whitespace-
+  // agnostic, no regex fragility). WRITING still uses targeted string
+  // replacements to preserve the Jenkins XML structure (prolog version 1.1,
+  // element order, CDATA blocks) that XMLBuilder would corrupt.
+  const _doc = xmlParser.parse(xmlStr) as Record<string, unknown>;
+  const _project = (_doc["project"] ?? {}) as Record<string, unknown>;
+  const _publishers = (_project["publishers"] ?? {}) as Record<string, unknown>;
+  const _extMail = _publishers[
+    "hudson.plugins.emailext.ExtendedEmailPublisher"
+  ] as Record<string, unknown> | undefined;
+
+  // Current email recipient (top-level <recipientList> of the publisher).
+  const _currentEmail =
+    typeof _extMail?.["recipientList"] === "string"
+      ? (_extMail["recipientList"] as string).trim()
+      : "";
+
+  // Current presend script + its embedded filter metadata.
+  const _currentPresend =
+    typeof _extMail?.["presendScript"] === "string"
+      ? (_extMail["presendScript"] as string)
+      : null;
+  const _currentMeta = parseEmailFilterMetadata(_currentPresend);
+  const _currentKeywords = normalizeKeywords(_currentMeta?.keywords);
+  const _currentRegex = normalizeRegex(_currentMeta?.regex);
+
+  // Infer current condition from trigger DOM nodes instead of regex-scanning the
+  // raw string (robust against element ordering and whitespace variation).
+  const _configuredTriggers = (_extMail?.["configuredTriggers"] ?? {}) as Record<string, unknown>;
+  const _hasFailureTrigger = Boolean(
+    _configuredTriggers["hudson.plugins.emailext.plugins.trigger.FailureTrigger"],
+  );
+  const _hasSuccessTrigger = Boolean(
+    _configuredTriggers["hudson.plugins.emailext.plugins.trigger.SuccessTrigger"],
+  );
+  const _currentCond: string = _hasFailureTrigger && _hasSuccessTrigger
+    ? "always"
+    : _hasSuccessTrigger
+      ? "success"
+      : "failed";
+
+  // Partial update via string-level replacement.
   let updated = xmlStr;
 
   // Insert `content` before the root closing tag (handles <project>, <folder>, <matrix-project>, etc.)
@@ -625,18 +685,25 @@ export async function updateJobFreestyle(
     return xml.replace(/(<\/[A-Za-z][A-Za-z0-9._-]*>\s*)$/, `${content}\n$1`);
   }
 
-  // Helper: replace or insert a simple text element inside a parent tag
-  function replaceTextElement(xml: string, tag: string, newValue: string): string {
-    const re = new RegExp(`(<${tag}>)[^<]*(</\\s*${tag}>)`, "s");
-    if (re.test(xml)) {
-      return xml.replace(re, `$1${escapeXml(newValue)}$2`);
-    }
+  // Helper: replace or insert a simple text element.
+  // Single-pass: one .replace() call with a flag-tracking callback avoids the
+  // two-operation test() + replace() pattern of the previous implementation.
+  function replaceOrInsertElement(xml: string, tag: string, newValue: string): string {
+    let replaced = false;
+    const next = xml.replace(
+      new RegExp(`(<${tag}>)[^<]*(</\\s*${tag}>)`, "s"),
+      (_m, open: string, close: string) => {
+        replaced = true;
+        return `${open}${escapeXml(newValue)}${close}`;
+      },
+    );
+    if (replaced) return next;
     return insertBeforeRootClose(xml, `  <${tag}>${escapeXml(newValue)}</${tag}>`);
   }
 
   // 1. description
   if (desc != null) {
-    updated = replaceTextElement(updated, "description", desc);
+    updated = replaceOrInsertElement(updated, "description", desc);
   }
 
   // 2. node / canRoam
@@ -706,31 +773,13 @@ export async function updateJobFreestyle(
     clearEmailRegex;
 
   if (shouldUpdateEmail) {
-    // Extract current values from existing config using extractPresendScriptFromXml
-    const currentPresend = extractPresendScriptFromXml(updated);
-    const currentMeta = parseEmailFilterMetadata(currentPresend);
-    const currentKeywords = normalizeKeywords(currentMeta?.keywords);
-    const currentRegex = normalizeRegex(currentMeta?.regex);
-
-    // Extract current email recipient from XML. Scope the search to the
-    // ExtendedEmailPublisher block so we read its top-level <recipientList>
-    // (the actual recipient) and never an empty <recipientList></recipientList>
-    // nested inside a trigger's <email>, regardless of element ordering.
-    const publisherForEmail = updated.match(
-      /<hudson\.plugins\.emailext\.ExtendedEmailPublisher[\s\S]*?<\/hudson\.plugins\.emailext\.ExtendedEmailPublisher>/,
-    );
-    const emailSearchScope = publisherForEmail ? publisherForEmail[0] : updated;
-    const emailMatch = emailSearchScope.match(/<recipientList>([^<]*)<\/recipientList>/);
-    const currentEmail = emailMatch ? emailMatch[1]!.trim() : "";
-
-    // Infer current condition from existing triggers
-    const hasFailureTrigger =
-      /hudson\.plugins\.emailext\.plugins\.trigger\.FailureTrigger/.test(updated);
-    const hasSuccessTrigger =
-      /hudson\.plugins\.emailext\.plugins\.trigger\.SuccessTrigger/.test(updated);
-    let currentCond = "failed";
-    if (hasFailureTrigger && hasSuccessTrigger) currentCond = "always";
-    else if (hasSuccessTrigger) currentCond = "success";
+    // Use the DOM-read values computed at the top of the function (xmlParser parse).
+    // These replace the three regex-based reads that were here before — the DOM
+    // approach is whitespace-agnostic and element-order-independent.
+    const currentKeywords = _currentKeywords;
+    const currentRegex = _currentRegex;
+    const currentEmail = _currentEmail;
+    let currentCond = _currentCond;
 
     const requestedKeywords =
       emailKeywords != null ? normalizeKeywords(emailKeywords) : null;
