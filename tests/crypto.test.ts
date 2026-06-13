@@ -9,6 +9,7 @@ import { mkdtempSync, rmSync, statSync, existsSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomBytes } from "node:crypto";
+import { CBError } from "../src/core/api/errors";
 
 // Import crypto module after env vars would be set in individual tests.
 // These imports are fine here because encryptToken/decryptToken take an explicit key.
@@ -106,7 +107,7 @@ describe("decryptToken — tamper detection", () => {
       tampered[12] ^= 0xff;
     }
     const tamperedEncoded = tampered.toString("base64");
-    expect(() => decryptToken(tamperedEncoded, key)).toThrow();
+    expect(() => decryptToken(tamperedEncoded, key)).toThrow(Error);
   });
 
   test("decryptToken throws when auth tag is modified", () => {
@@ -117,14 +118,14 @@ describe("decryptToken — tamper detection", () => {
     // Flip a byte inside the auth tag (bytes 12..27)
     const tampered = Buffer.from(buf);
     tampered[12] ^= 0x01;
-    expect(() => decryptToken(tampered.toString("base64"), key)).toThrow();
+    expect(() => decryptToken(tampered.toString("base64"), key)).toThrow(Error);
   });
 
   test("decryptToken throws with a wrong key", () => {
     const plaintext = "real-token";
     const encrypted = encryptToken(plaintext, key);
     const wrongKey = randomBytes(32);
-    expect(() => decryptToken(encrypted, wrongKey)).toThrow();
+    expect(() => decryptToken(encrypted, wrongKey)).toThrow(Error);
   });
 
   test("decryptToken throws with a key derived from a different secret", () => {
@@ -156,7 +157,7 @@ describe("decryptToken — tamper detection", () => {
 
   test("decryptToken throws for ciphertext that is too short", () => {
     const shortBuf = randomBytes(10); // less than IV_LEN + TAG_LEN = 28
-    expect(() => decryptToken(shortBuf.toString("base64"), key)).toThrow();
+    expect(() => decryptToken(shortBuf.toString("base64"), key)).toThrow(CBError);
   });
 });
 

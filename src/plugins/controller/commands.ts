@@ -4,7 +4,7 @@
  */
 
 import type { PluginContext } from "../../registry/types";
-import { printSuccess, printError, tableFormatter } from "../../core/cli/output";
+import { printSuccess, printError, printInfo, printMessage, tableFormatter } from "../../core/cli/output";
 import { CloudBeesClientImpl } from "../../core/api/index";
 import {
   listControllers,
@@ -39,8 +39,8 @@ export function registerControllerCommands(ctx: PluginContext): void {
           (c.description ?? "").slice(0, 40),
           c.online ? "ONLINE" : "OFFLINE",
         ]);
-        console.log(formatter.table(["Active", "Name", "Description", "Status"], rows));
-        console.log(`  ${controllers.length} controller(s)`);
+        printMessage(formatter.table(["Active", "Name", "Description", "Status"], rows));
+        printMessage(`  ${controllers.length} controller(s)`);
       } catch (err) {
         printError("Failed to list controllers", err);
         process.exit(1);
@@ -60,7 +60,7 @@ export function registerControllerCommands(ctx: PluginContext): void {
         const caps = await getControllerCapabilities(client, name, rawToken);
 
         const formatter = ctx.getFormatter("table") ?? tableFormatter;
-        console.log(
+        printMessage(
           formatter.kv({
             name: caps.name,
             url: caps.url,
@@ -96,7 +96,7 @@ export function registerControllerCommands(ctx: PluginContext): void {
         const url = await resolveControllerUrl(client, match.url);
         selectController(match.name, url, dbPath);
         printSuccess(`OK Active controller: ${match.name}`);
-        console.log(`     Resolved URL: ${url}`);
+        printMessage(`     Resolved URL: ${url}`);
       } catch (err) {
         printError("Failed to select controller", err);
         process.exit(1);
@@ -110,10 +110,10 @@ export function registerControllerCommands(ctx: PluginContext): void {
     .action(() => {
       const active = getActiveController(dbPath);
       if (active) {
-        console.log(`Active controller: ${active[0]}`);
-        console.log(`URL              : ${active[1]}`);
+        printMessage(`Active controller: ${active[0]}`);
+        printMessage(`URL              : ${active[1]}`);
       } else {
-        console.log("No active controller selected. Use: bee controller select <name>");
+        printInfo("INFO No active controller selected. Use: bee controller select <name>");
       }
     });
 }

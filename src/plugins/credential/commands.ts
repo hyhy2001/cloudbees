@@ -4,7 +4,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { PluginContext } from "../../registry/types";
-import { printError, printSuccess, printInfo, printWarning, readHidden, tableFormatter } from "../../core/cli/output";
+import { printError, printSuccess, printInfo, printWarning, printMessage, readHidden, tableFormatter } from "../../core/cli/output";
 import { confirm } from "../../core/cli/utils";
 import { NotFoundError, ValidationError } from "../../core/api/errors";
 import { loadSession, getActiveProfileName } from "../../core/session/index";
@@ -99,7 +99,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
         }
 
         if (opts.output === "json") {
-          console.log(JSON.stringify(creds, null, 2));
+          printMessage(JSON.stringify(creds, null, 2));
         } else {
           const headers = ["ID", "Type", "Description", "Scope"];
           const rows = creds.map((c) => [
@@ -109,8 +109,8 @@ export function registerCredentialCommands(ctx: PluginContext): void {
             c.scope,
           ]);
           const fmt = ctx.getFormatter("table") ?? tableFormatter;
-          console.log(fmt.table(headers, rows));
-          console.log(`  ${creds.length} credential(s)  [store: ${opts.store}]`);
+          printMessage(fmt.table(headers, rows));
+          printMessage(`  ${creds.length} credential(s)  [store: ${opts.store}]`);
         }
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
@@ -135,7 +135,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
           if (/(password|secret|key|token)/i.test(k)) data[k] = "[HIDDEN]";
         }
         const fmt = ctx.getFormatter("table") ?? tableFormatter;
-        console.log(fmt.kv(data));
+        printMessage(fmt.kv(data));
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -210,7 +210,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
             opts.store === "user"
               ? `${base}/user/${username}/credentials/store/user/domain/_/credential/${credId}/`
               : `${base}/credentials/store/system/domain/_/credential/${credId}/`;
-          console.log(`  Link: ${url}`);
+          printMessage(`  Link: ${url}`);
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
           process.exit(1);
@@ -233,7 +233,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
           !opts.yes &&
           !(await confirm(`Delete credential '${credId}' from ${opts.store} store? [y/N] `))
         ) {
-          console.log("Cancelled.");
+          printInfo("INFO Cancelled.");
           return;
         }
         const client = await ctx.getClient({ useController: true });

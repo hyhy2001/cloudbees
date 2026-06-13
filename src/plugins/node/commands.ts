@@ -3,7 +3,7 @@
  * Ports legacy/cb/cli/commands/nodes.py with 1:1 behavior and strings.
  */
 import type { PluginContext } from "../../registry/types";
-import { printError, printInfo, printSuccess, tableFormatter } from "../../core/cli/output";
+import { printError, printInfo, printSuccess, printMessage, tableFormatter } from "../../core/cli/output";
 import { confirm } from "../../core/cli/utils";
 import { NotFoundError } from "../../core/api/errors";
 import { getActiveProfileName } from "../../core/session/index";
@@ -68,8 +68,8 @@ export function registerNodeCommands(ctx: PluginContext): void {
           (n.labels || "").slice(0, 20),
           (n.description || "").slice(0, 25),
         ]);
-        console.log(tableFormatter.table(headers, rows));
-        console.log(`  ${nodes.length} node(s)`);
+        printMessage(tableFormatter.table(headers, rows));
+        printMessage(`  ${nodes.length} node(s)`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -85,7 +85,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
       try {
         const client = await ctx.getClient({ useController: true });
         const node = await getNode(client, name);
-        console.log(
+        printMessage(
           tableFormatter.kv({
             name: node.name,
             offline: node.offline,
@@ -162,15 +162,11 @@ export function registerNodeCommands(ctx: PluginContext): void {
           trackResource("node", opts.name, profile, client.baseUrl, dbPath);
 
           printSuccess(`OK Node '${opts.name}' created.`);
-          console.log(`  Link: ${client.baseUrl.replace(/\/+$/, "")}/computer/${opts.name}/`);
+          printMessage(`  Link: ${client.baseUrl.replace(/\/+$/, "")}/computer/${opts.name}/`);
           if (opts.host) {
-            console.log(
-              `  SSH Node will auto-connect to ${opts.host}:${opts.port} using cred: '${opts.credId || "None"}'`,
-            );
+            printMessage(`  SSH Node will auto-connect to ${opts.host}:${opts.port} using cred: '${opts.credId || "None"}'`);
           } else {
-            console.log(
-              `  Connect it via: Manage Jenkins -> Nodes -> ${opts.name} -> Agent command`,
-            );
+            printMessage(`  Connect it via: Manage Jenkins -> Nodes -> ${opts.name} -> Agent command`);
           }
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
@@ -236,7 +232,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
     .action(async (name: string, opts: { yes: boolean }) => {
       try {
         if (!opts.yes && !(await confirm(`Delete node '${name}'? [y/N] `))) {
-          console.log("Cancelled.");
+          printInfo("INFO Cancelled.");
           return;
         }
         const client = await ctx.getClient({ useController: true });

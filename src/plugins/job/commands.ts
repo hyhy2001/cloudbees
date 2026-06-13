@@ -4,7 +4,7 @@
  */
 
 import type { PluginContext } from "../../registry/types";
-import { printSuccess, printError, printInfo, printWarning, tableFormatter } from "../../core/cli/output";
+import { printSuccess, printError, printInfo, printWarning, printMessage, tableFormatter } from "../../core/cli/output";
 import { confirm } from "../../core/cli/utils";
 import { NotFoundError } from "../../core/api/errors";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
@@ -128,8 +128,8 @@ export function registerJobCommands(ctx: PluginContext): void {
         ]);
 
         const formatter = ctx.getFormatter("table") ?? tableFormatter;
-        console.log(formatter.table(headers, rows));
-        console.log(`  ${jobs.length} job(s)  [FS=Freestyle  PL=Pipeline  FD=Folder]`);
+        printMessage(formatter.table(headers, rows));
+        printMessage(`  ${jobs.length} job(s)  [FS=Freestyle  PL=Pipeline  FD=Folder]`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -170,7 +170,7 @@ export function registerJobCommands(ctx: PluginContext): void {
         };
 
         const formatter = ctx.getFormatter("table") ?? tableFormatter;
-        console.log(formatter.kv(data));
+        printMessage(formatter.kv(data));
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -244,7 +244,7 @@ export function registerJobCommands(ctx: PluginContext): void {
           const nodeMsg = opts.node ? ` on node '${opts.node}'` : "";
           printSuccess(`OK Freestyle job '${name}' created.${nodeMsg}`);
           const url = `${client.baseUrl.replace(/\/$/, "")}/job/${name}/`;
-          console.log(`  Link: ${url}`);
+          printMessage(`  Link: ${url}`);
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
           process.exit(1);
@@ -264,7 +264,7 @@ export function registerJobCommands(ctx: PluginContext): void {
         trackResource("job", name, profile, client.baseUrl, dbPath);
         printSuccess(`OK Folder '${name}' created.`);
         const url = `${client.baseUrl.replace(/\/$/, "")}/job/${name}/`;
-        console.log(`  Link: ${url}`);
+        printMessage(`  Link: ${url}`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -282,7 +282,7 @@ export function registerJobCommands(ctx: PluginContext): void {
         if (!opts.yes) {
           const ok = await confirm(`Delete job '${name}'? [y/N] `);
           if (!ok) {
-            console.log("Cancelled.");
+            printInfo("INFO Cancelled.");
             return;
           }
         }
@@ -298,7 +298,7 @@ export function registerJobCommands(ctx: PluginContext): void {
           } else {
             const msg = e instanceof Error ? e.message : String(e);
             printWarning(`WARN Could not delete job on server: ${msg}`);
-            console.log("Proceeding with local removal anyway.");
+            printInfo("INFO Proceeding with local removal anyway.");
           }
         }
 
@@ -323,7 +323,7 @@ export function registerJobCommands(ctx: PluginContext): void {
         trackResource("job", destination, profile, client.baseUrl, dbPath);
         printSuccess(`OK Job '${source}' cloned to '${destination}'.`);
         const url = `${client.baseUrl.replace(/\/$/, "")}/job/${destination}/`;
-        console.log(`  Link: ${url}`);
+        printMessage(`  Link: ${url}`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -385,7 +385,7 @@ export function registerJobCommands(ctx: PluginContext): void {
               before = (await getLastBuildNumber(client, name)) ?? 0;
             } catch (e) {
               printWarning(`WARN Could not get current build number: ${e instanceof Error ? e.message : e}`);
-              console.log("Will use 0 as reference.");
+              printInfo("INFO Will use 0 as reference.");
               before = 0;
             }
           }
@@ -431,7 +431,7 @@ export function registerJobCommands(ctx: PluginContext): void {
           }
 
           if (newBuildNum == null) {
-            console.log("  Could not determine build number. Check Jenkins manually.");
+            printWarning("WARN Could not determine build number. Check Jenkins manually.");
             process.exit(1);
           }
 
@@ -441,7 +441,7 @@ export function registerJobCommands(ctx: PluginContext): void {
             );
             const build = await waitForBuild(client, name, newBuildNum, timeout);
             const result = build.result || "IN_PROGRESS";
-            console.log(`  Result: ${result}`);
+            printMessage(`  Result: ${result}`);
           } catch (e) {
             printError(`Error while waiting for build: ${e instanceof Error ? e.message : e}`);
             process.exit(1);
@@ -498,7 +498,7 @@ export function registerJobCommands(ctx: PluginContext): void {
             try {
               buildNumber = await getLastBuildNumber(client, name);
               if (buildNumber == null) {
-                console.log("No builds found.");
+                printInfo("INFO No builds found.");
                 return;
               }
             } catch (e) {
@@ -510,7 +510,7 @@ export function registerJobCommands(ctx: PluginContext): void {
           try {
             if (!opts.follow) {
               const log = await getBuildLog(client, name, buildNumber);
-              console.log(log);
+              printMessage(log);
               return;
             }
 
@@ -532,7 +532,7 @@ export function registerJobCommands(ctx: PluginContext): void {
               await Bun.sleep(3000);
             }
             const result = lastBuild.result ?? "UNKNOWN";
-            console.log(`\n  Build #${buildNumber} result: ${result}`);
+            printMessage(`\n  Build #${buildNumber} result: ${result}`);
           } catch (e) {
             console.error(`[ERROR] Could not get build log: ${e instanceof Error ? e.message : e}`);
             process.exit(1);
@@ -559,7 +559,7 @@ export function registerJobCommands(ctx: PluginContext): void {
         const builds = await getBuildHistory(client, name, count);
 
         if (builds.length === 0) {
-          console.log("No builds found.");
+          printInfo("INFO No builds found.");
           return;
         }
 
@@ -574,7 +574,7 @@ export function registerJobCommands(ctx: PluginContext): void {
         });
 
         const formatter = ctx.getFormatter("table") ?? tableFormatter;
-        console.log(formatter.table(headers, rows));
+        printMessage(formatter.table(headers, rows));
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);

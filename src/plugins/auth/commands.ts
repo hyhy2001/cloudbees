@@ -4,7 +4,7 @@
  */
 
 import type { PluginContext } from "../../registry/types";
-import { printSuccess, printError, printInfo, tableFormatter } from "../../core/cli/output";
+import { printSuccess, printError, printInfo, printMessage, tableFormatter, readHidden } from "../../core/cli/output";
 import { login, logout, deleteProfile, listProfiles } from "./service";
 import { switchProfile, getActiveProfileName, clearSession, loadSessionFor } from "../../core/session/index";
 
@@ -20,23 +20,6 @@ async function readVisible(promptText: string): Promise<string> {
     stderr: "inherit",
   });
   const output = await new Response(proc.stdout).text();
-  return output.trimEnd();
-}
-
-/**
- * Read a line from stdin with echo disabled (hidden input for token).
- * Falls back to a visible prompt if raw-mode is unavailable.
- */
-async function readHidden(promptText: string): Promise<string> {
-  process.stderr.write(promptText);
-  // Use stty to disable echo, read one line, then restore
-  const proc = Bun.spawn(["bash", "-c", "stty -echo; read line; stty echo; echo \"$line\""], {
-    stdin: "inherit",
-    stdout: "pipe",
-    stderr: "inherit",
-  });
-  const output = await new Response(proc.stdout).text();
-  process.stderr.write("\n");
   return output.trimEnd();
 }
 
@@ -133,7 +116,7 @@ export function registerAuthCommands(ctx: PluginContext): void {
     .action(() => {
       const profiles = listProfiles(dbPath);
       if (profiles.length === 0) {
-        console.log("No profiles found. Run: bee auth login");
+        printInfo("INFO No profiles found. Run: bee auth login");
         return;
       }
       const activeName = getActiveProfileName(dbPath);
@@ -145,7 +128,7 @@ export function registerAuthCommands(ctx: PluginContext): void {
         p.isDefault ? "*" : "",
       ]);
       const formatter = ctx.getFormatter("table") ?? tableFormatter;
-      console.log(formatter.table(["Active", "Profile", "Server", "Username", "Default"], rows));
+      printMessage(formatter.table(["Active", "Profile", "Server", "Username", "Default"], rows));
     });
 
   // ── use ────────────────────────────────────────────────────────────────────

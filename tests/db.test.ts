@@ -14,6 +14,7 @@ const DB_PATH = join(TMP_DIR, "test.db");
 
 // Import after setting up paths so initDb uses our explicit dbPath.
 import { initDb } from "../src/core/db/connection";
+import { NotFoundError } from "../src/core/api/errors";
 import {
   saveProfile,
   getProfile,
@@ -67,7 +68,7 @@ describe("profile-repo", () => {
   });
 
   test("getProfile throws for non-existent profile", () => {
-    expect(() => getProfile("does-not-exist-xyz", DB_PATH)).toThrow();
+    expect(() => getProfile("does-not-exist-xyz", DB_PATH)).toThrow(NotFoundError);
   });
 
   test("isDefault flag is stored and returned correctly", () => {
@@ -133,7 +134,7 @@ describe("profile-repo", () => {
   test("deleteProfile removes the profile", () => {
     saveProfile("to-delete", "https://del.example.com", "eve", false, DB_PATH);
     deleteProfile("to-delete", DB_PATH);
-    expect(() => getProfile("to-delete", DB_PATH)).toThrow();
+    expect(() => getProfile("to-delete", DB_PATH)).toThrow(NotFoundError);
   });
 
   test("deleteProfile on non-existent profile does not throw", () => {

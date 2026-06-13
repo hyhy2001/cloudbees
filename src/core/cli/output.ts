@@ -48,6 +48,10 @@ export function printSuccess(msg: string): void {
 export function printWarning(msg: string): void {
   console.log(theme.warning(msg));
 }
+/** Plain stdout line — no colour, for neutral status messages (e.g. "Cancelled."). */
+export function printMessage(msg: string): void {
+  console.log(msg);
+}
 
 /**
  * Read a line from stdin with echo disabled (for passwords/tokens).
