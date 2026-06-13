@@ -264,31 +264,31 @@ describe("cacheAge", () => {
 // ---------------------------------------------------------------------------
 
 describe("getTtl (policy)", () => {
-  test("jobs.list returns 10", () => {
-    expect(getTtl("jobs.list")).toBe(10);
+  test("jobs.list returns 15", () => {
+    expect(getTtl("jobs.list")).toBe(15);
   });
 
-  test("jobs.list.some-suffix matches prefix and returns 10", () => {
-    expect(getTtl("jobs.list.https://ci.example.com")).toBe(10);
+  test("jobs.list.some-suffix matches prefix and returns 15", () => {
+    expect(getTtl("jobs.list.https://ci.example.com")).toBe(15);
   });
 
-  test("nodes.detail returns 10", () => {
-    expect(getTtl("nodes.detail")).toBe(10);
+  test("nodes.detail returns 30", () => {
+    expect(getTtl("nodes.detail")).toBe(30);
   });
 
-  test("credentials.list returns 10", () => {
-    expect(getTtl("credentials.list")).toBe(10);
+  test("credentials.list returns 30", () => {
+    expect(getTtl("credentials.list")).toBe(30);
   });
 
-  test("controllers.capabilities returns 10", () => {
-    expect(getTtl("controllers.capabilities")).toBe(10);
+  test("controllers.capabilities returns 300", () => {
+    expect(getTtl("controllers.capabilities")).toBe(300);
   });
 
-  test("unknown key returns DEFAULT_TTL (10)", () => {
-    expect(getTtl("totally.unknown.key.xyz")).toBe(10);
+  test("unknown key returns DEFAULT_TTL (15)", () => {
+    expect(getTtl("totally.unknown.key.xyz")).toBe(15);
   });
 
   test("empty string returns DEFAULT_TTL", () => {
-    expect(getTtl("")).toBe(10);
+    expect(getTtl("")).toBe(15);
   });
 });

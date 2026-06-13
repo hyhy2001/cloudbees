@@ -261,68 +261,18 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
     xml: string,
     opts?: { invalidate?: string },
   ): Promise<string | null> {
-    const url =
-      path.startsWith("http://") || path.startsWith("https://")
-        ? path
-        : `${this.baseUrl}${path}`;
-
-    const crumb = await getCrumb(this);
-    const crumbHeaders: Record<string, string> = crumb
-      ? { [crumb.field]: crumb.value }
-      : {};
-
-    const headers: Record<string, string> = {
-      ...this._headers(),
-      "Content-Type": "text/xml;charset=UTF-8",
-      ...crumbHeaders,
-    };
-
+    // Encode as UTF-8 bytes — Jenkins requires Content-Type: text/xml;charset=UTF-8.
+    // Delegate to _writeRequest so postXml gets the same 4-attempt exponential
+    // backoff, 401/403/404 classification, and stale-crumb retry as post().
     const body = new TextEncoder().encode(xml);
-
-    let resp: Response;
-    try {
-      resp = await fetch(url, {
-        method: "POST",
-        headers,
-        body,
-        signal: AbortSignal.timeout(this._timeout * 1000),
-      });
-    } catch (err: unknown) {
-      throw new CBConnectionError(err instanceof Error ? err.message : String(err));
-    }
-
-    // Stale crumb → invalidate, re-fetch, retry once
-    if (resp.status === 403) {
-      invalidateCrumb(this.baseUrl);
-      const freshCrumb = await getCrumb(this);
-      const freshHeaders: Record<string, string> = {
-        ...this._headers(),
-        "Content-Type": "text/xml;charset=UTF-8",
-        ...(freshCrumb ? { [freshCrumb.field]: freshCrumb.value } : {}),
-      };
-      try {
-        resp = await fetch(url, {
-          method: "POST",
-          headers: freshHeaders,
-          body,
-          signal: AbortSignal.timeout(this._timeout * 1000),
-        });
-      } catch (err: unknown) {
-        throw new CBConnectionError(err instanceof Error ? err.message : String(err));
-      }
-    }
-
-    if (!resp.ok) {
-      const errBody = await resp.text();
-      throw new APIError(resp.status, errBody.slice(0, 300));
-    }
-
+    const result = await this._writeRequest("POST", path, {
+      body,
+      headers: { "Content-Type": "text/xml;charset=UTF-8" },
+    });
     if (opts?.invalidate) {
       invalidatePrefix(opts.invalidate, this._dbPath);
     }
-
-    const respText = await resp.text();
-    return respText || null;
+    return result == null ? null : String(result) || null;
   }
 
   async delete<T = unknown>(

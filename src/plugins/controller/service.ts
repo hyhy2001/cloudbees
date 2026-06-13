@@ -150,51 +150,26 @@ export async function getControllerCapabilities(
     // Probe client bound to the controller's real URL
     const ctrlClient = new CloudBeesClientImpl(realUrl, rawToken);
 
-    // 1. Job probe — 400 means we're allowed but missing XML payload
-    try {
-      await ctrlClient.post("/createItem?name=probe_test");
-      canCreateJob = true;
-    } catch (err) {
-      if (err instanceof AuthError || err instanceof NotFoundError) {
-        canCreateJob = false;
-      } else if (err instanceof APIError) {
-        canCreateJob = (err as APIError).statusCode === 400;
-      } else {
-        canCreateJob = false;
+    // Run all three permission probes in parallel — they are independent.
+    // 400 = endpoint reachable but payload missing → we have permission.
+    // 405 = method not allowed → endpoint visible → we have permission (cred probe).
+    const probe = async (fn: () => Promise<unknown>, okStatuses: number[]): Promise<boolean> => {
+      try {
+        await fn();
+        return true;
+      } catch (err) {
+        if (err instanceof AuthError || err instanceof NotFoundError) return false;
+        if (err instanceof APIError) return okStatuses.includes((err as APIError).statusCode ?? 0);
+        return false;
       }
-    }
+    };
 
-    // 2. Node probe
-    try {
-      await ctrlClient.post("/computer/doCreateItem?name=probe_tester&type=hudson.slaves.DumbSlave");
-      canCreateNode = true;
-    } catch (err) {
-      if (err instanceof AuthError || err instanceof NotFoundError) {
-        canCreateNode = false;
-      } else if (err instanceof APIError) {
-        canCreateNode = (err as APIError).statusCode === 400;
-      } else {
-        canCreateNode = false;
-      }
-    }
-
-    // 3. Credential probe
-    // Mirrors credential_service._get_user_seg("") for store=system, username=""
-    // → "/credentials/store/system/domain/_"
     const userSeg = "/credentials/store/system/domain/_";
-    try {
-      await ctrlClient.post(`${userSeg}/createCredentials`);
-      canCreateCred = true;
-    } catch (err) {
-      if (err instanceof AuthError || err instanceof NotFoundError) {
-        canCreateCred = false;
-      } else if (err instanceof APIError) {
-        // 405 Method Not Allowed also proves endpoint visibility
-        canCreateCred = [400, 405].includes((err as APIError).statusCode ?? 0);
-      } else {
-        canCreateCred = false;
-      }
-    }
+    [canCreateJob, canCreateNode, canCreateCred] = await Promise.all([
+      probe(() => ctrlClient.post("/createItem?name=probe_test"), [400]),
+      probe(() => ctrlClient.post("/computer/doCreateItem?name=probe_tester&type=hudson.slaves.DumbSlave"), [400]),
+      probe(() => ctrlClient.post(`${userSeg}/createCredentials`), [400, 405]),
+    ]);
   }
 
   const caps: CapabilityInfo = {

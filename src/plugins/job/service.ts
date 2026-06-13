@@ -37,25 +37,32 @@ export async function listJobsRecursive(client: CloudBeesClient): Promise<JobDTO
       cacheKey: `jobs.list.recursive.${client.baseUrl}.${urlPath}`,
     });
     const jobs = (data?.["jobs"] as Record<string, unknown>[] | undefined) ?? [];
-    const result: JobDTO[] = [];
+
+    const dtos: JobDTO[] = [];
+    const folderTasks: Promise<JobDTO[]>[] = [];
+
     for (const j of jobs) {
       const dto = jobFromDict(j);
       const qualifiedName = prefix ? `${prefix}/${dto.name}` : dto.name;
       dto.name = qualifiedName;
-      result.push(dto);
-      // Descend into folders (any class containing "Folder" or "OrganizationFolder")
+      dtos.push(dto);
+
+      // Descend into folders in parallel — siblings don't depend on each other.
       const cls = String((j as Record<string, unknown>)["_class"] ?? "");
       if (cls.toLowerCase().includes("folder")) {
         const folderPath = `/job/${jobPathSegments(qualifiedName)}`;
-        try {
-          const children = await fetchLevel(folderPath, qualifiedName);
-          result.push(...children);
-        } catch {
-          // Silently skip folders we can't read (permission denied etc.)
-        }
+        folderTasks.push(
+          fetchLevel(folderPath, qualifiedName).catch(() => [] as JobDTO[]),
+        );
       }
     }
-    return result;
+
+    // Await all sibling folder fetches concurrently, then flatten.
+    const childArrays = await Promise.all(folderTasks);
+    for (const children of childArrays) {
+      dtos.push(...children);
+    }
+    return dtos;
   }
   return fetchLevel("", "");
 }
@@ -96,35 +103,24 @@ export async function listJobs(client: CloudBeesClient): Promise<JobDTO[]> {
  */
 export async function getJob(client: CloudBeesClient, name: string): Promise<JobDTO | null> {
   try {
-    // Try direct endpoint first to confirm existence
-    let directData: Record<string, unknown> | null = null;
+    // Try direct endpoint — if it succeeds we have all we need without
+    // also fetching the full job list (which is expensive for large instances).
     try {
-      directData = await client.get<Record<string, unknown>>(
-        `/job/${jobSeg(name)}/api/json?tree=name,url`,
-        { cacheKey: `jobs.exists.${client.baseUrl}.${name}` },
+      const directData = await client.get<Record<string, unknown>>(
+        `/job/${jobSeg(name)}/api/json?tree=_class,name,url,color,description,buildable,lastBuild[number,result,url]`,
+        { cacheKey: `jobs.detail.${client.baseUrl}.${name}` },
       );
+      if (directData) return jobFromDict(directData);
     } catch (e) {
       if (String(e).includes("404")) return null;
-      // fall through to list approach
+      // fall through to list approach on other errors
     }
 
-    // Get full detail from list
+    // Fallback: look up from the flat list (handles cases where the direct
+    // endpoint is unavailable but the job appears in the root listing).
     const allJobs = await listJobs(client);
     for (const job of allJobs) {
       if (job.name === name) return job;
-    }
-
-    // Found in direct but not in list — return minimal DTO
-    if (directData) {
-      return jobFromDict({
-        _class: "",
-        name: directData["name"] ?? name,
-        url: directData["url"] ?? "",
-        color: "unknown",
-        description: "",
-        buildable: true,
-        lastBuild: null,
-      });
     }
 
     return null;

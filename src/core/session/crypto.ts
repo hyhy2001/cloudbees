@@ -26,6 +26,11 @@ const IV_LEN = 12; // GCM standard nonce length
 const TAG_LEN = 16; // GCM auth tag length
 const KEY_LEN = 32; // AES-256
 
+// scryptSync is deliberately slow (high N). Cache the derived key per dbPath so
+// repeated calls within the same process (loadSession, saveSession, etc.) only
+// pay the KDF cost once.
+const _keyCache = new Map<string, Buffer>();
+
 /** Path of the secret file — lives alongside the DB so they share a directory/perms. */
 function secretFilePath(dbPath?: string): string {
   const db = dbPath ?? getDbPath();
@@ -63,11 +68,17 @@ export function getMachineSecret(dbPath?: string): Buffer {
 /**
  * Derive the 32-byte AES key from the secret file mixed with the current uid.
  * scrypt is deliberately slow, but the secret is high-entropy so cost params stay modest.
+ * Result is cached per dbPath so repeated calls within a process pay the KDF cost only once.
  */
 export function deriveKey(dbPath?: string): Buffer {
+  const cacheKey = dbPath ?? "__default__";
+  const cached = _keyCache.get(cacheKey);
+  if (cached) return cached;
   const secret = getMachineSecret(dbPath);
   const salt = Buffer.from(`bee:${currentUid()}`, "utf8");
-  return scryptSync(secret, salt, KEY_LEN);
+  const key = scryptSync(secret, salt, KEY_LEN);
+  _keyCache.set(cacheKey, key);
+  return key;
 }
 
 /**
