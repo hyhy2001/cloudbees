@@ -78,13 +78,19 @@ function statusCell(color: string): StatusCell {
   return cell;
 }
 
+/**
+ * Map a jobType code (already normalised by classToJobType in dtos/job.ts)
+ * to a display label + colour. No substring matching here — the DTO layer
+ * is the single source of truth for type detection.
+ */
 function typeLabel(jobType: string | undefined): { text: string; color?: string } {
-  const t = (jobType ?? "").toLowerCase();
-  if (t.includes("pl") || t.includes("pipeline")) return { text: "PL", color: THEME.blue };
-  if (t.includes("fs") || t.includes("freestyle")) return { text: "FS", color: "cyan" };
-  if (t.includes("fd") || t.includes("folder")) return { text: "FD", color: THEME.yellow };
-  if (t.includes("wf") || t.includes("workflow")) return { text: "WF", color: THEME.blue };
-  return { text: "--", dim: true } as { text: string; color?: string };
+  switch (jobType) {
+    case "FS": return { text: "FS", color: "cyan" };
+    case "PL": return { text: "PL", color: THEME.blue };
+    case "FD": return { text: "FD", color: THEME.yellow };
+    case "MB": return { text: "MB", color: THEME.blue };
+    default:   return { text: jobType || "--", color: THEME.dim };
+  }
 }
 
 // ─── Log viewer overlay (port of log_screen.py streaming) ────────────────────

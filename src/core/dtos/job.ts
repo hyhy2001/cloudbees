@@ -36,18 +36,37 @@ export interface JobConfigDTO {
   description: string;
 }
 
-/** Map a Jenkins _class string to a short job-type code. */
+/**
+ * Map a Jenkins `_class` string to a short job-type code.
+ *
+ * Matches against well-known exact class names (priority order matters —
+ * MB before FD so MultiBranch isn't misclassified as a plain Folder).
+ * Falls back to the last dot-segment (first 4 chars, original case) for
+ * unknown types, preserving the old fallback contract.
+ */
 function classToJobType(className: string): string {
-  if (className.includes("FreeStyle") || className.toLowerCase().includes("freestyle"))
-    return "FS";
-  if (className.includes("WorkflowJob") || className.includes("workflow.job"))
-    return "PL";
-  if (className.includes("Folder") || className.toLowerCase().includes("folder"))
-    return "FD";
-  if (className.includes("MultiBranch"))
-    return "MB";
   if (!className) return "";
-  // fallback: last dot-segment, first 4 chars
+
+  // Ordered: more-specific entries must come before broader ones.
+  const EXACT: [string, string][] = [
+    // MultiBranch — must precede Folder because some MB classes contain "Folder"
+    ["MB", "org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject"],
+    ["MB", "com.cloudbees.hudson.plugins.folder.OrganizationFolder"],
+    ["MB", "jenkins.branch.OrganizationFolder"],
+    // Pipeline (Workflow)
+    ["PL", "org.jenkinsci.plugins.workflow.job.WorkflowJob"],
+    ["PL", "com.cloudbees.workflow.flow.CpsFlowJob"],
+    // Folder
+    ["FD", "com.cloudbees.hudson.plugins.folder.Folder"],
+    // Freestyle
+    ["FS", "hudson.model.FreeStyleProject"],
+  ];
+
+  for (const [code, cls] of EXACT) {
+    if (className === cls) return code;
+  }
+
+  // Fallback: last dot-segment, first 4 chars (original case, no uppercase).
   return className.split(".").at(-1)!.slice(0, 4);
 }
 
