@@ -113,13 +113,7 @@ describe("email filters", () => {
     await updateJobFreestyle(
       asClient(client),
       "demo",
-      undefined, // desc
-      undefined, // shellCmd
-      undefined, // node
-      undefined, // schedule
-      undefined, // email
-      undefined, // emailCond
-      ["NEW", "panic"], // emailKeywords
+      { emailKeywords: ["NEW", "panic"] },
     );
 
     expect(client.posted.length).toBe(1);
@@ -145,11 +139,7 @@ describe("email filters", () => {
     await updateJobFreestyle(
       asClient(client),
       "demo",
-      undefined, undefined, undefined, undefined, undefined, undefined,
-      undefined, // emailKeywords
-      undefined, // emailRegex
-      false, // clearEmailKeywords
-      true, // clearEmailRegex
+      { clearEmailRegex: true },
     );
 
     const postedXml = client.posted[0]!.xml;
@@ -185,8 +175,7 @@ describe("email filters", () => {
       await updateJobFreestyle(
         asClient(updateClient),
         "n1",
-        undefined, undefined, undefined, undefined, undefined, undefined,
-        ["CRITICAL"], // emailKeywords
+        { emailKeywords: ["CRITICAL"] },
       );
     } catch {
       updateThrew = true;
@@ -201,10 +190,7 @@ describe("email filters", () => {
     await updateJobFreestyle(
       asClient(client),
       "n1",
-      undefined, undefined, undefined, undefined, undefined, undefined,
-      undefined, undefined,
-      true, // clearEmailKeywords
-      true, // clearEmailRegex
+      { clearEmailKeywords: true, clearEmailRegex: true },
     );
 
     const postedXml = client.posted[0]!.xml;

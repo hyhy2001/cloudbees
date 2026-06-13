@@ -21,10 +21,61 @@ import {
 } from "../../domain/email";
 import { escapeXml } from "../../domain/xml";
 import { buildTimerTriggerBlock } from "../../domain/schedule";
-import type { JobConfigSummary, StringParamDef } from "./types";
+import type { JobConfigSummary, StringParamDef, UpdateFreestyleOpts } from "./types";
 import { XMLParser } from "fast-xml-parser";
 
 const _JOB_TREE = "jobs[_class,name,url,color,description,buildable,lastBuild[number,result,url]]";
+
+/**
+ * Recursively list jobs, descending into folders.
+ * Returns flat list with names like "folder/subfolder/job".
+ */
+export async function listJobsRecursive(client: CloudBeesClient): Promise<JobDTO[]> {
+  async function fetchLevel(urlPath: string, prefix: string): Promise<JobDTO[]> {
+    const endpoint = `${urlPath}/api/json?tree=${_JOB_TREE}`;
+    const data = await client.get<Record<string, unknown>>(endpoint, {
+      cacheKey: `jobs.list.recursive.${client.baseUrl}.${urlPath}`,
+    });
+    const jobs = (data?.["jobs"] as Record<string, unknown>[] | undefined) ?? [];
+    const result: JobDTO[] = [];
+    for (const j of jobs) {
+      const dto = jobFromDict(j);
+      const qualifiedName = prefix ? `${prefix}/${dto.name}` : dto.name;
+      dto.name = qualifiedName;
+      result.push(dto);
+      // Descend into folders (any class containing "Folder" or "OrganizationFolder")
+      const cls = String((j as Record<string, unknown>)["_class"] ?? "");
+      if (cls.toLowerCase().includes("folder")) {
+        const folderPath = `/job/${jobPathSegments(qualifiedName)}`;
+        try {
+          const children = await fetchLevel(folderPath, qualifiedName);
+          result.push(...children);
+        } catch {
+          // Silently skip folders we can't read (permission denied etc.)
+        }
+      }
+    }
+    return result;
+  }
+  return fetchLevel("", "");
+}
+
+/**
+ * Convert a job name (possibly a folder path like "folder/subfolder/job") into
+ * the Jenkins REST path segment. Each slash-separated component is individually
+ * URL-encoded and joined with "/job/":
+ *   "my job"        → "my%20job"
+ *   "a/b/c"         → "a/job/b/job/c"
+ *   "a b/c d"       → "a%20b/job/c%20d"
+ */
+export function jobPathSegments(name: string): string {
+  return name
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/job/");
+}
+
+const jobSeg = jobPathSegments;
 
 // ---------------------------------------------------------------------------
 // List / Get
@@ -49,8 +100,8 @@ export async function getJob(client: CloudBeesClient, name: string): Promise<Job
     let directData: Record<string, unknown> | null = null;
     try {
       directData = await client.get<Record<string, unknown>>(
-        `/job/${name}/api/json?tree=name,url`,
-        { cacheKey: `jobs.exists.${name}` },
+        `/job/${jobSeg(name)}/api/json?tree=name,url`,
+        { cacheKey: `jobs.exists.${client.baseUrl}.${name}` },
       );
     } catch (e) {
       if (String(e).includes("404")) return null;
@@ -88,7 +139,7 @@ export async function getJob(client: CloudBeesClient, name: string): Promise<Job
 // ---------------------------------------------------------------------------
 
 export async function triggerJob(client: CloudBeesClient, name: string): Promise<void> {
-  await client.post(`/job/${name}/build`, {
+  await client.post(`/job/${jobSeg(name)}/build`, {
     body: "",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     invalidate: "jobs.",
@@ -105,7 +156,7 @@ export async function triggerJobWithParams(
   const body = Object.entries(params)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join("&");
-  await client.post(`/job/${name}/buildWithParameters`, {
+  await client.post(`/job/${jobSeg(name)}/buildWithParameters`, {
     body,
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     invalidate: "jobs.",
@@ -118,7 +169,7 @@ export async function stopBuild(
   jobName: string,
   buildNumber: number,
 ): Promise<void> {
-  await client.post(`/job/${jobName}/${buildNumber}/stop`, { invalidate: "jobs." });
+  await client.post(`/job/${jobSeg(jobName)}/${buildNumber}/stop`, { invalidate: "jobs." });
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +183,7 @@ export async function getBuildDetail(
   buildNumber: number,
 ): Promise<BuildDTO> {
   const data = await client.get<Record<string, unknown>>(
-    `/job/${jobName}/${buildNumber}/api/json`,
+    `/job/${jobSeg(jobName)}/${buildNumber}/api/json`,
   );
   return buildFromDict((data as Record<string, unknown>) ?? {});
 }
@@ -148,8 +199,8 @@ export async function getLastBuildNumber(
 ): Promise<number | null> {
   try {
     const data = await client.get<Record<string, unknown>>(
-      `/job/${jobName}/api/json?tree=lastBuild[number]`,
-      { cacheKey: `jobs.lastbuild.${jobName}` },
+      `/job/${jobSeg(jobName)}/api/json?tree=lastBuild[number]`,
+      { cacheKey: `jobs.lastbuild.${client.baseUrl}.${jobName}` },
     );
     const lb = data?.["lastBuild"] as Record<string, unknown> | null | undefined;
     if (lb && lb["number"] != null) return Number(lb["number"]);
@@ -161,8 +212,8 @@ export async function getLastBuildNumber(
       // Fallback: check builds array
       try {
         const buildsData = await client.get<Record<string, unknown>>(
-          `/job/${jobName}/api/json?tree=builds[number]`,
-          { cacheKey: `jobs.builds.${jobName}` },
+          `/job/${jobSeg(jobName)}/api/json?tree=builds[number]`,
+          { cacheKey: `jobs.builds.${client.baseUrl}.${jobName}` },
         );
         const builds = buildsData?.["builds"] as Record<string, unknown>[] | undefined;
         if (builds && builds.length > 0 && builds[0]["number"] != null) {
@@ -183,7 +234,7 @@ export async function getBuildLog(
   jobName: string,
   buildNumber: number,
 ): Promise<string> {
-  return client.getText(`/job/${jobName}/${buildNumber}/consoleText`);
+  return client.getText(`/job/${jobSeg(jobName)}/${buildNumber}/consoleText`);
 }
 
 /** Resolves the latest build number then returns its full console log. Returns `"(No builds found)"` if the job has never run. */
@@ -208,7 +259,7 @@ export async function streamBuildLog(
   start = 0,
 ): Promise<[string, number, boolean]> {
   return client.getProgressiveText(
-    `/job/${jobName}/${buildNum}/logText/progressiveText`,
+    `/job/${jobSeg(jobName)}/${buildNum}/logText/progressiveText`,
     start,
   );
 }
@@ -239,7 +290,7 @@ export async function getBuildHistory(
   count = 10,
 ): Promise<BuildDTO[]> {
   const data = await client.get<Record<string, unknown>>(
-    `/job/${jobName}/api/json?tree=builds[number,result,building,duration,timestamp,url]{0,${count}}`,
+    `/job/${jobSeg(jobName)}/api/json?tree=builds[number,result,building,duration,timestamp,url]{0,${count}}`,
   );
   const builds = (data?.["builds"] as Record<string, unknown>[] | undefined) ?? [];
   return builds.map((b) => buildFromDict(b));
@@ -329,7 +380,7 @@ export async function copyJob(
   srcName: string,
   destName: string,
 ): Promise<void> {
-  const xmlStr = await client.getText(`/job/${srcName}/config.xml`);
+  const xmlStr = await client.getText(`/job/${jobSeg(srcName)}/config.xml`);
   await client.postXml(`/createItem?name=${encodeURIComponent(destName)}`, xmlStr, {
     invalidate: "jobs.",
   });
@@ -337,7 +388,7 @@ export async function copyJob(
 
 export async function deleteJob(client: CloudBeesClient, name: string): Promise<void> {
   try {
-    await client.post(`/job/${name}/doDelete`);
+    await client.post(`/job/${jobSeg(name)}/doDelete`);
   } catch (e) {
     if (String(e).includes("404")) return;
     throw e;
@@ -371,12 +422,17 @@ export async function getJobConfigSummary(
     params: [],
   };
 
+  const xmlStr = await client.getText(`/job/${jobSeg(name)}/config.xml`);
+  let doc: Record<string, unknown>;
   try {
-    const xmlStr = await client.getText(`/job/${name}/config.xml`);
     const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: false });
-    const doc = parser.parse(xmlStr) as Record<string, unknown>;
-    const project = doc["project"] as Record<string, unknown> | undefined;
-    if (!project) return summary;
+    doc = parser.parse(xmlStr) as Record<string, unknown>;
+  } catch {
+    // Malformed XML — return partial summary rather than crashing.
+    return summary;
+  }
+  const project = doc["project"] as Record<string, unknown> | undefined;
+  if (!project) return summary;
 
     // 1. Schedule
     const triggers = project["triggers"] as Record<string, unknown> | undefined;
@@ -499,9 +555,6 @@ export async function getJobConfigSummary(
         }
       }
     }
-  } catch {
-    // Silently return partial summary on any error
-  }
 
   return summary;
 }
@@ -518,23 +571,31 @@ export async function getJobConfigSummary(
 export async function updateJobFreestyle(
   client: CloudBeesClient,
   name: string,
-  desc?: string | null,
-  shellCmd?: string | null,
-  node?: string | null,
-  schedule?: string | null,
-  email?: string | null,
-  emailCond?: string | null,
-  emailKeywords?: string[] | null,
-  emailRegex?: string | null,
-  clearEmailKeywords = false,
-  clearEmailRegex = false,
-  params?: StringParamDef[] | null,
-  clearParams = false,
+  opts: UpdateFreestyleOpts = {},
 ): Promise<void> {
-  const xmlStr = await client.getText(`/job/${name}/config.xml`);
+  const {
+    desc,
+    shellCmd,
+    node,
+    schedule,
+    email,
+    emailCond,
+    emailKeywords,
+    emailRegex,
+    clearEmailKeywords = false,
+    clearEmailRegex = false,
+    params,
+    clearParams = false,
+  } = opts;
+  const xmlStr = await client.getText(`/job/${jobSeg(name)}/config.xml`);
 
   // Partial update via string-level replacement, reading existing values inline.
   let updated = xmlStr;
+
+  // Insert `content` before the root closing tag (handles <project>, <folder>, <matrix-project>, etc.)
+  function insertBeforeRootClose(xml: string, content: string): string {
+    return xml.replace(/(<\/[A-Za-z][A-Za-z0-9._-]*>\s*)$/, `${content}\n$1`);
+  }
 
   // Helper: replace or insert a simple text element inside a parent tag
   function replaceTextElement(xml: string, tag: string, newValue: string): string {
@@ -542,8 +603,7 @@ export async function updateJobFreestyle(
     if (re.test(xml)) {
       return xml.replace(re, `$1${escapeXml(newValue)}$2`);
     }
-    // Insert before closing </project>
-    return xml.replace("</project>", `  <${tag}>${escapeXml(newValue)}</${tag}>\n</project>`);
+    return insertBeforeRootClose(xml, `  <${tag}>${escapeXml(newValue)}</${tag}>`);
   }
 
   // 1. description
@@ -559,10 +619,7 @@ export async function updateJobFreestyle(
         `$1${escapeXml(node)}$2`,
       );
     } else {
-      updated = updated.replace(
-        "</project>",
-        `  <assignedNode>${escapeXml(node)}</assignedNode>\n</project>`,
-      );
+      updated = insertBeforeRootClose(updated, `  <assignedNode>${escapeXml(node)}</assignedNode>`);
     }
     const canRoamVal = node ? "false" : "true";
     if (/<canRoam>/.test(updated)) {
@@ -571,34 +628,34 @@ export async function updateJobFreestyle(
         `$1${canRoamVal}$2`,
       );
     } else {
-      updated = updated.replace(
-        "</project>",
-        `  <canRoam>${canRoamVal}</canRoam>\n</project>`,
-      );
+      updated = insertBeforeRootClose(updated, `  <canRoam>${canRoamVal}</canRoam>`);
     }
   }
 
-  // 3. shell command
+  // 3. shell command — handle both plain text and CDATA content
   if (shellCmd != null) {
-    if (/<command>/.test(updated)) {
-      updated = updated.replace(
-        /(<command>)[^<]*(<\/\s*command>)/s,
-        `$1${escapeXml(shellCmd)}$2`,
-      );
+    // Match <command>...</command> with either plain text or CDATA content.
+    const cmdTagRe = /<command>([\s\S]*?)<\/\s*command>/;
+    const cdataTagRe = /<command><!\[CDATA\[[\s\S]*?\]\]><\/\s*command>/;
+    if (cdataTagRe.test(updated)) {
+      // Replace CDATA block — don't XML-escape since CDATA is literal content.
+      updated = updated.replace(cdataTagRe, `<command><![CDATA[${shellCmd}]]></command>`);
+    } else if (cmdTagRe.test(updated)) {
+      updated = updated.replace(cmdTagRe, `<command>${escapeXml(shellCmd)}</command>`);
     } else {
-      // No builders section? Inject one
-      updated = updated.replace(
-        "</project>",
-        `  <builders>\n    <hudson.tasks.Shell>\n      <command>${escapeXml(shellCmd)}</command>\n    </hudson.tasks.Shell>\n  </builders>\n</project>`,
+      // No builders section? Inject one.
+      updated = insertBeforeRootClose(
+        updated,
+        `  <builders>\n    <hudson.tasks.Shell>\n      <command>${escapeXml(shellCmd)}</command>\n    </hudson.tasks.Shell>\n  </builders>`,
       );
     }
   }
 
   // 4. schedule (triggers)
   if (schedule != null) {
-    // Remove existing TimerTrigger block
+    // Remove the first existing TimerTrigger block (Jenkins only supports one).
     updated = updated.replace(
-      /<hudson\.triggers\.TimerTrigger>[\s\S]*?<\/hudson\.triggers\.TimerTrigger>/g,
+      /<hudson\.triggers\.TimerTrigger>[\s\S]*?<\/hudson\.triggers\.TimerTrigger>/,
       "",
     );
     if (schedule) {
@@ -606,10 +663,7 @@ export async function updateJobFreestyle(
       if (/<triggers>/.test(updated)) {
         updated = updated.replace(/(<triggers>)/, `$1\n${timerBlock}`);
       } else {
-        updated = updated.replace(
-          "</project>",
-          `  <triggers>\n${timerBlock}\n  </triggers>\n</project>`,
-        );
+        updated = insertBeforeRootClose(updated, `  <triggers>\n${timerBlock}\n  </triggers>`);
       }
     }
   }
@@ -661,9 +715,9 @@ export async function updateJobFreestyle(
 
     const targetEmail = email != null ? email.trim() : currentEmail;
 
-    // Remove all existing ExtendedEmailPublisher blocks
+    // Remove the first existing ExtendedEmailPublisher block (Jenkins only supports one).
     updated = updated.replace(
-      /<hudson\.plugins\.emailext\.ExtendedEmailPublisher[\s\S]*?<\/hudson\.plugins\.emailext\.ExtendedEmailPublisher>/g,
+      /<hudson\.plugins\.emailext\.ExtendedEmailPublisher[\s\S]*?<\/hudson\.plugins\.emailext\.ExtendedEmailPublisher>/,
       "",
     );
 
@@ -702,10 +756,7 @@ export async function updateJobFreestyle(
       if (/<publishers>/.test(updated)) {
         updated = updated.replace(/(<publishers>)/, `$1\n${publisherBlock}`);
       } else {
-        updated = updated.replace(
-          "</project>",
-          `  <publishers>\n${publisherBlock}\n  </publishers>\n</project>`,
-        );
+        updated = insertBeforeRootClose(updated, `  <publishers>\n${publisherBlock}\n  </publishers>`);
       }
     } else {
       // No target email and no existing email
@@ -732,12 +783,9 @@ export async function updateJobFreestyle(
         block.trimStart(),
       );
     } else {
-      updated = updated.replace(
-        "</project>",
-        `${block}\n</project>`,
-      );
+      updated = insertBeforeRootClose(updated, block);
     }
   }
 
-  await client.postXml(`/job/${name}/config.xml`, updated, { invalidate: "jobs." });
+  await client.postXml(`/job/${jobSeg(name)}/config.xml`, updated, { invalidate: "jobs." });
 }

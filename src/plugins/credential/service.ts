@@ -9,7 +9,8 @@
  */
 import type { CloudBeesClient } from "../../core/api/types";
 import { CredentialDTO, credentialFromDict } from "../../core/dtos/index";
-import { buildUsernamePasswordCredXml } from "./xml-builder";
+import { buildUsernamePasswordCredXml, buildSecretTextCredXml } from "./xml-builder";
+import { XMLParser } from "fast-xml-parser";
 
 /** Valid store choices — exposed for CLI validation. */
 export const CREDENTIAL_STORES = ["system", "user"] as const;
@@ -48,7 +49,7 @@ export async function getCredential(
   const userSeg = getUserSeg(username, store);
   const data = await client.get<Record<string, unknown>>(
     `${userSeg}/credential/${credId}/api/json`,
-    { cacheKey: `credentials.detail.${credId}.${store}` },
+    { cacheKey: `credentials.detail.${client.baseUrl}.${credId}.${store}` },
   );
   return credentialFromDict(data ?? {});
 }
@@ -68,20 +69,37 @@ export async function getCredentialConfig(
 ): Promise<{ username: string; description: string }> {
   const userSeg = getUserSeg(username, store);
   const xml = await client.getText(`${userSeg}/credential/${credId}/config.xml`);
-  const pick = (tag: string): string => {
-    const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
-    if (!m || m[1] === undefined) return "";
-    return m[1]
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&")
-      .trim();
+  const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: false });
+  const doc = parser.parse(xml) as Record<string, unknown>;
+  // Root element name varies by credential type; skip the XML declaration node.
+  const root = Object.entries(doc)
+    .filter(([k]) => k !== "?xml")
+    .map(([, v]) => v)
+    .find((v) => v !== null && typeof v === "object") as Record<string, unknown> | undefined;
+  const pick = (key: string): string => {
+    const val = root?.[key];
+    if (val === null || val === undefined) return "";
+    return String(val).trim();
   };
   return { username: pick("username"), description: pick("description") };
 }
 
-/**
- * Posts a `Username with password` credential XML to `<storePath>/createCredentials`.
+/** Creates a SecretText credential via `<storePath>/createCredentials`. Scope defaults to `GLOBAL`. */
+export async function createSecretText(
+  client: CloudBeesClient,
+  credId: string,
+  secret: string,
+  desc = "",
+  scope = "GLOBAL",
+  username = "",
+  store = "system",
+): Promise<void> {
+  const userSeg = getUserSeg(username, store);
+  const xml = buildSecretTextCredXml(credId, secret, desc, scope);
+  await client.postXml(`${userSeg}/createCredentials`, xml, { invalidate: "credentials." });
+}
+
+/** Creates a `Username with password` credential XML to `<storePath>/createCredentials`.
  * Scope defaults to `GLOBAL`; `store="user"` scopes it to the per-user store.
  */
 export async function createUsernamePassword(
@@ -127,7 +145,8 @@ export async function updateCredential(
   let xml = await client.getText(`${userSeg}/credential/${credId}/config.xml`);
 
   const setElement = (src: string, tag: string, value: string): string => {
-    const re = new RegExp(`(<${tag}>)[\\s\\S]*?(</${tag}>)`);
+    // Match <tag> or <tag attr="..."> — Jenkins re-serializes tags with class attributes.
+    const re = new RegExp(`(<${tag}(?:\\s[^>]*)?>)[\\s\\S]*?(</${tag}>)`);
     const escaped = value
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")

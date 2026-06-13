@@ -2,10 +2,10 @@
  * Credential plugin CLI commands — `bee cred ...`.
  * Ports legacy/cb/cli/commands/credentials.py with 1:1 behavior and strings.
  */
-import readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import type { PluginContext } from "../../registry/types";
 import { printError, printSuccess, printInfo, printWarning, readHidden, tableFormatter } from "../../core/cli/output";
+import { confirm } from "../../core/cli/utils";
 import { loadSession, getActiveProfileName } from "../../core/session/index";
 import {
   getTrackedResources,
@@ -17,19 +17,11 @@ import {
   listCredentials,
   getCredential,
   createUsernamePassword,
+  createSecretText,
   deleteCredential,
   updateCredential,
 } from "./service";
 
-function confirm(question: string): Promise<boolean> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim().toLowerCase() === "y");
-    });
-  });
-}
 
 /** Logged-in username from the session (empty if not logged in). */
 function sessionUsername(dbPath?: string): string {
@@ -152,18 +144,20 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   // ── create ─────────────────────────────────────────────────────────────────
   grp
     .command("create")
-    .description("Create a Username+Password credential")
+    .description("Create a credential (Username+Password or SecretText)")
     .option("--id <id>", "Unique credential ID (auto-generated if omitted)")
-    .requiredOption("--username <username>", "Username")
-    .option("--password <password>", "Password (prompted if omitted)")
+    .option("--username <username>", "Username (Username+Password type)")
+    .option("--password <password>", "Password (prompted if omitted, Username+Password only)")
+    .option("--secret-text <secret>", "Plain-text secret value (creates SecretText type)")
     .option("--description <desc>", "Description", "")
     .option("--scope <scope>", "Credential scope (GLOBAL|SYSTEM)", "GLOBAL")
     .option("--store <store>", "Credential store: 'system' or 'user'", "system")
     .action(
       async (opts: {
         id?: string;
-        username: string;
+        username?: string;
         password?: string;
+        secretText?: string;
         description: string;
         scope: string;
         store: string;
@@ -171,23 +165,42 @@ export function registerCredentialCommands(ctx: PluginContext): void {
         try {
           validateStore(opts.store);
           warnUserStoreFallback(opts.store, dbPath);
-        warnUserStoreFallback(opts.store, dbPath);
           validateScope(opts.scope);
           const credId = opts.id || randomUUID();
-          const password = opts.password ?? (await readHidden(`Password for '${opts.username}': `));
+
+          if (opts.secretText !== undefined && opts.username !== undefined) {
+            throw new Error("--secret-text and --username are mutually exclusive.");
+          }
 
           const client = await ctx.getClient({ useController: true });
           const username = sessionUsername(dbPath);
-          await createUsernamePassword(
-            client,
-            credId,
-            opts.username,
-            password,
-            opts.description,
-            opts.scope,
-            username,
-            opts.store,
-          );
+
+          if (opts.secretText !== undefined) {
+            await createSecretText(
+              client,
+              credId,
+              opts.secretText,
+              opts.description,
+              opts.scope,
+              username,
+              opts.store,
+            );
+          } else {
+            if (!opts.username) {
+              throw new Error("--username is required for Username+Password credentials (or use --secret-text for SecretText).");
+            }
+            const password = opts.password ?? (await readHidden(`Password for '${opts.username}': `));
+            await createUsernamePassword(
+              client,
+              credId,
+              opts.username,
+              password,
+              opts.description,
+              opts.scope,
+              username,
+              opts.store,
+            );
+          }
           trackResource("credential", credId, profile, client.baseUrl, dbPath);
 
           printSuccess(`OK Credential '${credId}' created in ${opts.store} store.`);
@@ -285,7 +298,6 @@ export function registerCredentialCommands(ctx: PluginContext): void {
         try {
           validateStore(opts.store);
           warnUserStoreFallback(opts.store, dbPath);
-        warnUserStoreFallback(opts.store, dbPath);
           const client = await ctx.getClient({ useController: true });
           await updateCredential(
             client,

@@ -2,9 +2,9 @@
  * Node plugin CLI commands — `bee node ...`.
  * Ports legacy/cb/cli/commands/nodes.py with 1:1 behavior and strings.
  */
-import readline from "node:readline";
 import type { PluginContext } from "../../registry/types";
 import { printError, printInfo, printSuccess, tableFormatter } from "../../core/cli/output";
+import { confirm } from "../../core/cli/utils";
 import { getActiveProfileName } from "../../core/session/index";
 import {
   getTrackedResources,
@@ -19,19 +19,9 @@ import {
   deleteNode,
   toggleOffline,
   updateNode,
+  DEFAULT_JAVA_PATH,
 } from "./service";
 
-const DEFAULT_JAVA_PATH = "/usr/local/java/openjdk-19.0.2-7/bin/java";
-
-function confirm(question: string): Promise<boolean> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim().toLowerCase() === "y");
-    });
-  });
-}
 
 export function registerNodeCommands(ctx: PluginContext): void {
   const dbPath = process.env["CB_DB_PATH"];
@@ -269,8 +259,13 @@ export function registerNodeCommands(ctx: PluginContext): void {
     .action(async (name: string, opts: { reason: string }) => {
       try {
         const client = await ctx.getClient({ useController: true });
+        const node = await getNode(client, name);
+        if (node.offline) {
+          printInfo(`INFO Node '${name}' is already offline.`);
+          return;
+        }
         await toggleOffline(client, name, opts.reason);
-        printSuccess(`OK Node '${name}' toggled offline.`);
+        printSuccess(`OK Node '${name}' marked offline.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -285,8 +280,13 @@ export function registerNodeCommands(ctx: PluginContext): void {
     .action(async (name: string) => {
       try {
         const client = await ctx.getClient({ useController: true });
+        const node = await getNode(client, name);
+        if (!node.offline) {
+          printInfo(`INFO Node '${name}' is already online.`);
+          return;
+        }
         await toggleOffline(client, name, "");
-        printSuccess(`OK Node '${name}' toggled online.`);
+        printSuccess(`OK Node '${name}' brought online.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);

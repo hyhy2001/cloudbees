@@ -142,16 +142,18 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
 
   // Fetch build history once on mount.
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       try {
         const client = await ctx.getClient({ useController: true });
         const history = await getBuildHistory(client, jobName, 20);
         const nums = history.map((b) => b.number).sort((a, b) => b - a);
-        setBuildNums(nums.length > 0 ? nums : null);
+        if (!cancelled) setBuildNums(nums.length > 0 ? nums : null);
       } catch {
-        setBuildNums(null);
+        if (!cancelled) setBuildNums(null);
       }
     })();
+    return () => { cancelled = true; };
   }, [ctx, jobName]);
 
   const buildNum = buildNums?.[buildIdx] ?? null;
@@ -191,11 +193,16 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
     setScrollTop(-1);
     setStatus("connecting…");
     offsetRef.current = 0;
-    cancelledRef.current = false;
     if (timerRef.current) clearTimeout(timerRef.current);
 
+    // Per-effect local flag — avoids the race where React clears the previous
+    // effect (setting cancelledRef=true) then immediately re-runs this effect
+    // (setting cancelledRef=false) before the previous in-flight fetch resolves.
+    let cancelled = false;
+    cancelledRef.current = false;
+
     const poll = async () => {
-      if (cancelledRef.current) return;
+      if (cancelled) return;
       try {
         const client = await getClientRef.current({ useController: true });
         let text: string, newOffset: number, hasMore: boolean;
@@ -204,7 +211,7 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
         } else {
           [text, newOffset, hasMore] = await streamLastBuildLog(client, jobName, offsetRef.current);
         }
-        if (cancelledRef.current) return;
+        if (cancelled) return;
         if (text) {
           setLines((prev) => appendChunk(prev, text));
           offsetRef.current = newOffset;
@@ -216,7 +223,7 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
           setStatus("stream finished");
         }
       } catch (err) {
-        if (cancelledRef.current) return;
+        if (cancelled) return;
         setStatus(`error: ${err instanceof Error ? err.message : String(err)}`);
       }
     };
@@ -224,6 +231,7 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
     void poll();
 
     return () => {
+      cancelled = true;
       cancelledRef.current = true;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
@@ -632,9 +640,11 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         await updateJobFreestyle(
           client,
           job.name,
-          result.desc ?? null,
-          finalShell,
-          result.node && result.node !== NONE_OPTION ? result.node : null,
+          {
+            desc: result.desc ?? null,
+            shellCmd: finalShell,
+            node: result.node && result.node !== NONE_OPTION ? result.node : null,
+          },
         );
         ctx.notify(`${SYM.ok} Updated: ${job.name}`, "success");
         const initDesc = s?.description || job.description || "";
@@ -742,8 +752,11 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             try {
               const client = await ctx.getClient({ useController: true });
               await updateJobFreestyle(
-                client, name, null, null, null, null, null, null, null, null, false, false,
-                params, params.length === 0,
+                client, name,
+                {
+                  params,
+                  clearParams: params.length === 0,
+                },
               );
               ctx.notify(`${SYM.ok} Updated parameters: ${name}`, "success");
               if (params.length === 0) {
@@ -779,7 +792,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               const client = await ctx.getClient({ useController: true });
               // schedule "" removes the trigger; updateJobFreestyle treats the
               // schedule arg as: null = unchanged, "" = clear, value = set.
-              await updateJobFreestyle(client, name, null, null, null, cron);
+              await updateJobFreestyle(client, name, { schedule: cron });
               ctx.notify(`${SYM.ok} Updated schedule: ${name}`, "success");
               ctx.logCommand(cron
                 ? `bee job update ${name} --schedule "${cron}"`
@@ -810,21 +823,23 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               if (!spec.enabled) {
                 // Clear email by setting recipient to empty string.
                 await updateJobFreestyle(
-                  client, name, null, null, null, null,
-                  "", null, null, null, true, true,
+                  client, name,
+                  { email: "", clearEmailKeywords: true, clearEmailRegex: true },
                 );
               } else {
                 const keywords = spec.emailKeywords
                   ? spec.emailKeywords.split(",").map((k) => k.trim()).filter(Boolean)
                   : null;
                 await updateJobFreestyle(
-                  client, name, null, null, null, null,
-                  spec.email || null,
-                  spec.emailCond || null,
-                  keywords,
-                  spec.emailRegex || null,
-                  !spec.emailKeywords, // clear keywords if field left empty
-                  !spec.emailRegex,    // clear regex if field left empty
+                  client, name,
+                  {
+                    email: spec.email || null,
+                    emailCond: spec.emailCond || null,
+                    emailKeywords: keywords,
+                    emailRegex: spec.emailRegex || null,
+                    clearEmailKeywords: !spec.emailKeywords,
+                    clearEmailRegex: !spec.emailRegex,
+                  },
                 );
               }
               ctx.notify(`${SYM.ok} Updated email: ${name}`, "success");

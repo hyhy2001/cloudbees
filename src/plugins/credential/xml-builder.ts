@@ -4,6 +4,38 @@
  */
 
 /**
+ * Build a SecretText (plain string secret) credential config.xml string.
+ * Root element: org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl
+ * Child order: scope, id, description, secret
+ */
+export function buildSecretTextCredXml(
+  credId: string,
+  secret: string,
+  desc = "",
+  scope = "GLOBAL",
+): string {
+  const escape = (s: string): string =>
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+
+  const lines = [
+    "<?xml version='1.1' encoding='UTF-8'?>",
+    "<org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl>",
+    `  <scope>${escape(scope)}</scope>`,
+    `  <id>${escape(credId)}</id>`,
+    `  <description>${escape(desc)}</description>`,
+    `  <secret>${escape(secret)}</secret>`,
+    "</org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl>",
+  ];
+
+  return lines.join("\n");
+}
+
+/**
  * Build a UsernamePassword credential config.xml string.
  * Mirrors Python build_username_password_cred_xml() exactly:
  *   - XML 1.1 declaration prolog

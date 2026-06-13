@@ -32,7 +32,21 @@ export interface StringParamDef {
   description?: string;
 }
 
-/** Options for buildFreestyleXml. */
+/** Options for updateJobFreestyle — all fields optional; omit = leave unchanged. */
+export interface UpdateFreestyleOpts {
+  desc?: string | null;
+  shellCmd?: string | null;
+  node?: string | null;
+  schedule?: string | null;
+  email?: string | null;
+  emailCond?: string | null;
+  emailKeywords?: string[] | null;
+  emailRegex?: string | null;
+  clearEmailKeywords?: boolean;
+  clearEmailRegex?: boolean;
+  params?: StringParamDef[] | null;
+  clearParams?: boolean;
+}
 export interface FreestyleXmlOpts {
   desc?: string;
   shellCmd?: string;

@@ -3,13 +3,14 @@
  * Ports legacy/cb/cli/commands/jobs.py
  */
 
-import * as readline from "readline";
 import type { PluginContext } from "../../registry/types";
 import { printSuccess, printError, printInfo, printWarning, tableFormatter } from "../../core/cli/output";
+import { confirm } from "../../core/cli/utils";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
 import { getActiveProfileName } from "../../core/session/index";
 import {
   listJobs,
+  listJobsRecursive,
   getJob,
   triggerJob,
   triggerJobWithParams,
@@ -17,6 +18,7 @@ import {
   getBuildDetail,
   getLastBuildNumber,
   getBuildLog,
+  streamBuildLog,
   getBuildHistory,
   waitForBuild,
   createFreestyleJob,
@@ -49,15 +51,6 @@ function mapColor(color: string): string {
   return isRunning ? `${state} (Run)` : state;
 }
 
-async function confirm(question: string): Promise<boolean> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim().toLowerCase() === "y");
-    });
-  });
-}
 
 /**
  * Parse repeatable `--param-def NAME=default` flags into StringParamDef[].
@@ -88,10 +81,13 @@ export function registerJobCommands(ctx: PluginContext): void {
     .command("list")
     .description("List all jobs with type and last build status")
     .option("--all", "Show all jobs (by default, only shows yours)", false)
-    .action(async (opts: { all: boolean }) => {
+    .option("--recursive", "Descend into folders and list jobs at all levels", false)
+    .action(async (opts: { all: boolean; recursive: boolean }) => {
       try {
         const client = await ctx.getClient({ useController: true });
-        const allJobs = await listJobs(client);
+        const allJobs = opts.recursive
+          ? await listJobsRecursive(client)
+          : await listJobs(client);
 
         let jobs = allJobs;
         if (!opts.all) {
@@ -520,19 +516,25 @@ export function registerJobCommands(ctx: PluginContext): void {
               return;
             }
 
-            // Follow mode: poll until done
-            let shown = 0;
+            // Follow mode: use progressive text (byte-offset) to avoid re-downloading
+            // the whole log on every poll.
+            let offset = 0;
+            let lastBuild = await getBuildDetail(client, name, buildNumber);
             while (true) {
-              const log = await getBuildLog(client, name, buildNumber);
-              const newContent = log.slice(shown);
-              if (newContent) {
-                process.stdout.write(newContent);
-                shown = log.length;
+              const [text, newOffset, hasMore] = await streamBuildLog(client, name, buildNumber, offset);
+              if (text) {
+                process.stdout.write(text);
+                offset = newOffset;
               }
-              const build = await getBuildDetail(client, name, buildNumber);
-              if (!build.building) break;
+              if (!hasMore) {
+                // Confirm the build is really done (hasMore=false can be transient)
+                lastBuild = await getBuildDetail(client, name, buildNumber);
+                if (!lastBuild.building) break;
+              }
               await Bun.sleep(3000);
             }
+            const result = lastBuild.result ?? "UNKNOWN";
+            console.log(`\n  Build #${buildNumber} result: ${result}`);
           } catch (e) {
             console.error(`[ERROR] Could not get build log: ${e instanceof Error ? e.message : e}`);
             process.exit(1);
@@ -654,18 +656,20 @@ export function registerJobCommands(ctx: PluginContext): void {
           await updateJobFreestyle(
             client,
             name,
-            opts.description ?? null,
-            shellInput,
-            opts.node ?? null,
-            opts.schedule ?? null,
-            opts.email ?? null,
-            opts.emailCond ?? null,
-            emailKeywordsInput,
-            opts.emailRegex ?? null,
-            opts.clearEmailKeywords,
-            opts.clearEmailRegex,
-            paramsInput,
-            opts.clearParams,
+            {
+              desc: opts.description ?? null,
+              shellCmd: shellInput,
+              node: opts.node ?? null,
+              schedule: opts.schedule ?? null,
+              email: opts.email ?? null,
+              emailCond: opts.emailCond ?? null,
+              emailKeywords: emailKeywordsInput,
+              emailRegex: opts.emailRegex ?? null,
+              clearEmailKeywords: opts.clearEmailKeywords,
+              clearEmailRegex: opts.clearEmailRegex,
+              params: paramsInput,
+              clearParams: opts.clearParams,
+            },
           );
 
           printSuccess(`OK Freestyle job '${name}' updated.`);

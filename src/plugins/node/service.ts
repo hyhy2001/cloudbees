@@ -15,7 +15,10 @@ import {
 const _NODE_TREE =
   "computer[displayName,offline,numExecutors,assignedLabels[name],description]";
 
-const DEFAULT_JAVA_PATH = "/usr/local/java/openjdk-19.0.2-7/bin/java";
+export const DEFAULT_JAVA_PATH = "/usr/local/java/openjdk-19.0.2-7/bin/java";
+
+/** URL-encode a node name for use in path segments. */
+const nodeSeg = (name: string) => encodeURIComponent(name);
 
 function formEncode(data: Record<string, string>): string {
   return Object.entries(data)
@@ -38,12 +41,12 @@ export async function listNodes(client: CloudBeesClient): Promise<NodeDTO[]> {
  * the raw `config.xml` (silently omitted if the endpoint returns an error).
  */
 export async function getNode(client: CloudBeesClient, name: string): Promise<NodeDetailDTO> {
-  const data = await client.get<Record<string, unknown>>(`/computer/${name}/api/json`, {
-    cacheKey: `nodes.detail.${name}`,
+  const data = await client.get<Record<string, unknown>>(`/computer/${nodeSeg(name)}/api/json`, {
+    cacheKey: `nodes.detail.${client.baseUrl}.${name}`,
   });
   const dto = nodeDetailFromDict(data ?? {});
   try {
-    dto.configXml = await client.getText(`/computer/${name}/config.xml`);
+    dto.configXml = await client.getText(`/computer/${nodeSeg(name)}/config.xml`);
   } catch {
     // config.xml is best-effort
   }
@@ -164,7 +167,7 @@ export async function copyNode(
 
 /** Permanently removes an agent via `/computer/<name>/doDelete`. Invalidates the `nodes.` cache. */
 export async function deleteNode(client: CloudBeesClient, name: string): Promise<void> {
-  await client.post(`/computer/${name}/doDelete`, { invalidate: "nodes." });
+  await client.post(`/computer/${nodeSeg(name)}/doDelete`, { invalidate: "nodes." });
 }
 
 /**
@@ -177,7 +180,7 @@ export async function toggleOffline(
   reason = "",
 ): Promise<void> {
   const qs = `?offlineMessage=${encodeURIComponent(reason)}`;
-  await client.post(`/computer/${name}/toggleOffline${qs}`, { invalidate: "nodes." });
+  await client.post(`/computer/${nodeSeg(name)}/toggleOffline${qs}`, { invalidate: "nodes." });
 }
 
 /** Fields that can be patched on an existing agent. All are optional; only provided fields are written. */
@@ -220,7 +223,14 @@ export function parseNodeConfig(xml: string): NodeConfig {
   const doc = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" }).parse(
     xml,
   ) as Record<string, unknown>;
-  const slave = (doc["slave"] ?? doc["hudson.slaves.DumbSlave"] ?? {}) as Record<string, unknown>;
+  // Jenkins serializes the root as 'slave', 'hudson.slaves.DumbSlave', or
+  // 'agent' (some CloudBees CI builds). Fall through each candidate.
+  const slave = (
+    doc["slave"] ??
+    doc["hudson.slaves.DumbSlave"] ??
+    doc["agent"] ??
+    {}
+  ) as Record<string, unknown>;
 
   const launcher = (slave["launcher"] ?? {}) as Record<string, unknown>;
   const launcherClass = String(launcher["@_class"] ?? "");
@@ -259,7 +269,7 @@ export async function updateNode(
   name: string,
   opts: UpdateNodeOptions,
 ): Promise<void> {
-  let xml = await client.getText(`/computer/${name}/config.xml`);
+  let xml = await client.getText(`/computer/${nodeSeg(name)}/config.xml`);
 
   // Validate the document is well-formed before patching.
   new XMLParser({ ignoreAttributes: false }).parse(xml);
@@ -273,8 +283,8 @@ export async function updateNode(
     if (re.test(src)) {
       return src.replace(re, `$1${escaped}$2`);
     }
-    // Insert before closing </slave> if the element is missing.
-    return src.replace(/<\/slave>\s*$/, `  <${tag}>${escaped}</${tag}>\n</slave>`);
+    // Insert before the root closing tag (slave, agent, or hudson.slaves.DumbSlave).
+    return src.replace(/<\/(slave|agent|hudson\.slaves\.DumbSlave)>\s*$/, `  <${tag}>${escaped}</${tag}>\n</$1>`);
   };
 
   // Swap a whole subtree element (matches both `<tag .../>` and `<tag ...>..</tag>`).
@@ -283,8 +293,8 @@ export async function updateNode(
     const selfClosing = new RegExp(`[ \\t]*<${tag}(\\s[^>]*)?/>`);
     if (paired.test(src)) return src.replace(paired, block);
     if (selfClosing.test(src)) return src.replace(selfClosing, block);
-    // Insert before closing </slave> if the element is missing entirely.
-    return src.replace(/<\/slave>\s*$/, `${block}\n</slave>`);
+    // Insert before the root closing tag if missing.
+    return src.replace(/<\/(slave|agent|hudson\.slaves\.DumbSlave)>\s*$/, `${block}\n</$1>`);
   };
 
   if (opts.desc !== undefined) xml = setElement(xml, "description", opts.desc);
@@ -332,5 +342,5 @@ export async function updateNode(
     xml = swapElement(xml, "retentionStrategy", block);
   }
 
-  await client.postXml(`/computer/${name}/config.xml`, xml, { invalidate: "nodes." });
+  await client.postXml(`/computer/${nodeSeg(name)}/config.xml`, xml, { invalidate: "nodes." });
 }
