@@ -146,7 +146,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
               <React.Fragment key={s.id}>
                 {i > 0 && <Text color={THEME.subtle}>  </Text>}
                 <Text color={on ? THEME.active : THEME.dim} bold={on}>
-                  <Text color={on ? THEME.subtle : THEME.subtle}>{num}:</Text>
+                  <Text color={on ? THEME.keyhint : THEME.dim}>{num}:</Text>
                   {s.icon ? `${s.icon} ` : ""}{s.title}
                   {on ? <Text color={THEME.active}> ▾</Text> : ""}
                 </Text>

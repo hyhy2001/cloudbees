@@ -257,19 +257,15 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [ctx, store, refetch]);
 
-  // Edit = partial update of an existing credential. Password can't be read back
-  // and username isn't in the list DTO, so those are blank = unchanged. Only the
-  // description is prefilled. Blank username/password → undefined (keeps existing).
   const editCred = useCallback(
-    async (cred: CredentialDTO) => {
-      // Prefill the REAL current username + description (Jenkins hides the password).
+    async (cred: CredentialDTO): Promise<false | void> => {
       let prefill = { username: "", description: cred.description ?? "" };
       try {
         const cfgClient = await ctx.getClient({ useController: true });
         prefill = await getCredentialConfig(cfgClient, cred.id, ctx.username, store);
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
-        return;
+        return false;
       }
       const result = await ctx.openModal<Record<string, string>>({
         id: "edit-credential",
@@ -285,7 +281,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           />
         ),
       });
-      if (!result) return;
+      if (!result) return false;
       try {
         const client = await ctx.getClient({ useController: true });
         await updateCredential(
@@ -313,7 +309,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   );
 
   const removeCred = useCallback(
-    async (id: string) => {
+    async (id: string): Promise<false | void> => {
       const ok = await ctx.openModal<boolean>({
         id: "confirm-delete-credential",
         render: (resolve) => (
@@ -323,7 +319,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           />
         ),
       });
-      if (!ok) return;
+      if (!ok) return false;
       try {
         const client = await ctx.getClient({ useController: true });
         await deleteCredential(client, id, ctx.username, store);
@@ -365,10 +361,10 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const menuActions = useMemo(
     () => [
-      { label: "Edit",     icon: SYM.iconEdit,   run: () => { if (current) void editCred(current); } },
+      { label: "Edit",     icon: SYM.iconEdit,   run: async () => { if (!current) return false as const; return await editCred(current); } },
       { label: "Import",   icon: SYM.iconImport, when: () => canImport, run: () => { if (current) doImport(current.id); } },
       { label: "Unimport", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("credential", current.id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.id}' from Mine`, "success"); void refetch(); } } },
-      { label: "Delete",   icon: SYM.iconDelete, danger: true, run: () => { if (current) void removeCred(current.id); } },
+      { label: "Delete",   icon: SYM.iconDelete, danger: true, run: async () => { if (!current) return false as const; return await removeCred(current.id); } },
     ],
     [current, canImport, canUntrack, baseUrl, store, editCred, doImport, removeCred, refetch, ctx],
   );

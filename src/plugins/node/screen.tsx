@@ -256,7 +256,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   }, [ctx, refetch, credentialOptions]);
 
   const removeNode = useCallback(
-    async (name: string) => {
+    async (name: string): Promise<false | void> => {
       const ok = await ctx.openModal<boolean>({
         id: "confirm-delete-node",
         render: (resolve) => (
@@ -266,7 +266,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           />
         ),
       });
-      if (!ok) return;
+      if (!ok) return false;
       try {
         const client = await ctx.getClient({ useController: true });
         await deleteNode(client, name);
@@ -282,7 +282,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   );
 
   const doToggleOffline = useCallback(
-    async (node: NodeDTO) => {
+    async (node: NodeDTO): Promise<false | void> => {
       const action = node.offline ? "online" : "offline";
       const ok = await ctx.openModal<boolean>({
         id: "confirm-toggle-offline",
@@ -293,7 +293,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           />
         ),
       });
-      if (!ok) return;
+      if (!ok) return false;
       try {
         const client = await ctx.getClient({ useController: true });
         await toggleOffline(client, node.name, "");
@@ -307,26 +307,17 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, refetch],
   );
 
-  // Edit = partial update of an existing node's config. The list DTO lacks
-  // remoteDir, so fetch full detail first to prefill it. Fields are prefilled
-  // from detail; updateNode does a partial update.
-  // Edit = full partial update. Fetch detail + parse the launcher/availability
-  // subtrees out of config.xml so every field is prefilled with the real value.
-  // Credential is a dropdown of Mine credentials; launcher + availability are
-  // cyclers; SSH/Demand sub-fields are always shown (ignored when not applicable).
   const editNode = useCallback(
-    async (node: NodeDTO) => {
+    async (node: NodeDTO): Promise<false | void> => {
       const client = await ctx.getClient({ useController: true });
       let detail;
       try {
         detail = await getNode(client, node.name);
       } catch (err) {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
-        return;
+        return false;
       }
       const cfg = parseNodeConfig(detail.configXml ?? "");
-      // Prefill the credential cycler: put the current cred id first so it shows
-      // as the initial value even if it isn't in the Mine list.
       const credInitial = cfg.credentialsId || NONE_OPTION;
       const baseCreds = credentialOptions.length > 0 ? credentialOptions : [NONE_OPTION];
       const credChoices = baseCreds.includes(credInitial)
@@ -354,7 +345,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           />
         ),
       });
-      if (!result) return;
+      if (!result) return false;
       try {
         const launcherType = result.launcher === "jnlp" ? "jnlp" : "ssh";
         const credId = result.credentialsId === NONE_OPTION ? "" : result.credentialsId;
@@ -421,11 +412,11 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const menuActions = useMemo(
     () => [
-      { label: "Toggle Offline", icon: SYM.iconToggle, run: () => { if (current) void doToggleOffline(current); } },
-      { label: "Edit",           icon: SYM.iconEdit,   run: () => { if (current) void editNode(current); } },
+      { label: "Toggle Offline", icon: SYM.iconToggle, run: async () => { if (!current) return false as const; return await doToggleOffline(current); } },
+      { label: "Edit",           icon: SYM.iconEdit,   run: async () => { if (!current) return false as const; return await editNode(current); } },
       { label: "Import",         icon: SYM.iconImport, when: () => canImport, run: () => { if (current) doImport(current.name); } },
       { label: "Unimport",       icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
-      { label: "Delete",         icon: SYM.iconDelete, danger: true, run: () => { if (current) void removeNode(current.name); } },
+      { label: "Delete",         icon: SYM.iconDelete, danger: true, run: async () => { if (!current) return false as const; return await removeNode(current.name); } },
     ],
     [current, canImport, canUntrack, baseUrl, editNode, doImport, removeNode, doToggleOffline, refetch, ctx],
   );
@@ -444,12 +435,6 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   );
   useKeymap(bindings, { isActive: active && !menuOpen && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
-
-  const scope = showAll ? (
-    <Text color={THEME.yellow}>ALL</Text>
-  ) : (
-    <Text color={THEME.success}>MINE</Text>
-  );
 
   if (menuOpen && current) {
     return (

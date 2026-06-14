@@ -515,12 +515,11 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   }, [ctx, current?.name]);
 
   const runJob = useCallback(
-    async (name: string) => {
+    async (name: string): Promise<false | void> => {
       const paramDefs = summary?.params ?? [];
       let runParams: Record<string, string> | null = null;
 
       if (paramDefs.length > 0) {
-        // Job has parameters — collect values via FormModal before triggering.
         const values = await ctx.openModal<Record<string, string>>({
           id: "run-params",
           render: (resolve) => (
@@ -535,14 +534,14 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             />
           ),
         });
-        if (!values) return; // cancelled
+        if (!values) return false;
         runParams = values;
       } else {
         const ok = await ctx.openModal<boolean>({
           id: "confirm-run",
           render: (resolve) => <ConfirmModal message={`Run job '${name}'?`} onResult={resolve} />,
         });
-        if (!ok) return;
+        if (!ok) return false;
       }
 
       try {
@@ -565,10 +564,10 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   );
 
   const stopJob = useCallback(
-    async (job: JobDTO) => {
+    async (job: JobDTO): Promise<false | void> => {
       if (!job.lastBuildNumber) {
         ctx.notify("No builds found to stop.", "warning");
-        return;
+        return false;
       }
       const ok = await ctx.openModal<boolean>({
         id: "confirm-stop",
@@ -576,7 +575,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           <ConfirmModal message={`Stop build #${job.lastBuildNumber} of '${job.name}'?`} onResult={resolve} />
         ),
       });
-      if (!ok) return;
+      if (!ok) return false;
       try {
         const client = await ctx.getClient({ useController: true });
         await stopBuild(client, job.name, job.lastBuildNumber);
@@ -591,14 +590,14 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   );
 
   const removeJob = useCallback(
-    async (name: string) => {
+    async (name: string): Promise<false | void> => {
       const ok = await ctx.openModal<boolean>({
         id: "confirm-delete",
         render: (resolve) => (
           <ConfirmModal message={`Delete job '${name}'? This cannot be undone.`} onResult={resolve} />
         ),
       });
-      if (!ok) return;
+      if (!ok) return false;
       try {
         const client = await ctx.getClient({ useController: true });
         await deleteJob(client, name);
@@ -660,12 +659,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [ctx, refetch]);
 
-  // Edit = update an existing job's config. Prefills from the detail-panel
-  // summary already fetched for the highlighted row. Blank fields = unchanged
-  // (updateJobFreestyle does a partial update). Shell command can't be read back
-  // from the summary, so leaving it blank keeps the current command.
   const editJob = useCallback(
-    async (job: JobDTO) => {
+    async (job: JobDTO): Promise<false | void> => {
       const s = summary;
       const result = await ctx.openModal<Record<string, string>>({
         id: "edit-job",
@@ -682,11 +677,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           />
         ),
       });
-      if (!result) return;
+      if (!result) return false;
       try {
         const client = await ctx.getClient({ useController: true });
-        // chdir folds into the shell command (updateJobFreestyle has no chdir
-        // param). Only compose when shell_cmd is set; otherwise pass null = unchanged.
         const finalShell = result.shell_cmd
           ? (result.chdir ? `cd ${result.chdir} && ${result.shell_cmd}` : result.shell_cmd)
           : null;
@@ -714,7 +707,6 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           if (finalShell) parts.push(`--shell "${finalShell}"`);
         }
         if (result.node !== initNode) {
-          // Log --node whether setting a value OR clearing it (empty string = roam anywhere).
           parts.push(result.node !== NONE_OPTION ? `--node "${result.node}"` : `--node ""`);
         }
         ctx.logCommand(parts.join(" "));
@@ -750,13 +742,13 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const menuActions = useMemo(
     () => [
       { label: "View Log",   icon: SYM.iconLog,      run: () => { if (current) setLogJob(current.name); } },
-      { label: "Run",        icon: SYM.iconPlay,      run: () => { if (current) void runJob(current.name); } },
-      { label: "Stop",       icon: SYM.iconStop,      run: () => { if (current) void stopJob(current); } },
-      { label: "Edit",       icon: SYM.iconEdit,      run: () => { if (current) void editJob(current); } },
+      { label: "Run",        icon: SYM.iconPlay,      run: async () => { if (!current) return false; await runJob(current.name); } },
+      { label: "Stop",       icon: SYM.iconStop,      run: async () => { if (!current) return false; await stopJob(current); } },
+      { label: "Edit",       icon: SYM.iconEdit,      run: async () => { if (!current) return false; await editJob(current); } },
       { label: "Params",     icon: SYM.iconParams,    run: () => { if (current) setParamJob(current.name); } },
       { label: "Schedule",   icon: SYM.iconSchedule,  run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); } },
       { label: "Email",      icon: SYM.iconEmail,     run: () => {
-        if (!current) return;
+        if (!current) return false as const;
         const s = summary;
         const hasEmail = s?.email && s.email !== "-";
         setEmailJob({
@@ -772,7 +764,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       } },
       { label: "Import",     icon: SYM.iconImport,    when: () => canImport, run: () => { if (current) doImport(current.name); } },
       { label: "Unimport",   icon: SYM.iconImport,    when: () => canUntrack, run: () => { if (current) { untrackResource("job", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
-      { label: "Delete",     icon: SYM.iconDelete,    danger: true, run: () => { if (current) void removeJob(current.name); } },
+      { label: "Delete",     icon: SYM.iconDelete,    danger: true, run: async () => { if (!current) return false; await removeJob(current.name); } },
     ],
     [current, canImport, canUntrack, baseUrl, summary, runJob, stopJob, editJob, doImport, removeJob, refetch, ctx],
   );

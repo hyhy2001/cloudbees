@@ -17,7 +17,12 @@ import { SYM } from "../symbols";
 
 export interface ContextMenuAction {
   label: string;
-  run: () => void;
+  /**
+   * Return `false` to keep the menu open (e.g. user cancelled a sub-modal).
+   * Return void / undefined to close the menu after the action completes.
+   * May be async.
+   */
+  run: () => void | false | Promise<void | false>;
   /**
    * When false, the action is not shown in the menu at all.
    * Evaluated at render time.
@@ -43,8 +48,12 @@ export const ContextMenu: FC<ContextMenuProps> = ({ title, actions, onClose }) =
     (idx: number) => {
       const action = visible[idx];
       if (!action) return;
-      onClose();
-      action.run();
+      const result = action.run();
+      if (result instanceof Promise) {
+        void result.then((ret) => { if (ret !== false) onClose(); });
+      } else {
+        if (result !== false) onClose();
+      }
     },
     [visible, onClose],
   );
