@@ -36,9 +36,9 @@ const LEVEL_ICON: Record<ToastLevel, string> = {
 export const Toast: React.FC<{ message: ToastMessage | null }> = ({ message }) => {
   if (!message) return null;
   return (
-    <Box>
-      <Text color={LEVEL_COLOR[message.level]}>
-        {LEVEL_ICON[message.level]} {message.text}
+    <Box paddingY={0} marginTop={1}>
+      <Text color={LEVEL_COLOR[message.level]} bold>
+        {LEVEL_ICON[message.level]}{"  "}{message.text}
       </Text>
     </Box>
   );

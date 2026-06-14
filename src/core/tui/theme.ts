@@ -25,6 +25,8 @@ export const THEME = {
   warning: "#ffd700",
   /** dimmed text — xterm 244 (#808080) */
   dim: "#808080",
+  /** very dimmed — for separators, chrome (#4e4e4e) */
+  subtle: "#4e4e4e",
   /** active/amber accent — xterm 214 (#ffaf00) */
   active: "#ffaf00",
   /** key-hint cyan — xterm 39 (#00afff) */
@@ -33,6 +35,12 @@ export const THEME = {
   blue: "#00afff",
   /** job-type yellow / folder — xterm 220 */
   yellow: "#ffd700",
+  /** danger — bright red for destructive actions (#ff5f5f) */
+  danger: "#ff5f5f",
+  /** muted success badge bg — dark green (#005f00) */
+  badgeSuccessBg: "#005f00",
+  /** muted warn badge bg — dark yellow (#5f4f00) */
+  badgeWarnBg: "#5f4f00",
 } as const;
 
 export type ThemeColor = keyof typeof THEME;

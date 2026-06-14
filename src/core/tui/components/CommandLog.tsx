@@ -1,9 +1,9 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { THEME } from "../theme";
-import { borderStyle } from "../symbols";
+import { SYM, borderStyle } from "../symbols";
 
-const VISIBLE_LINES = 5;
+const VISIBLE_LINES = 4;
 
 export const CommandLog: React.FC<{ entries: string[] }> = ({ entries }) => {
   const tail = entries.slice(-VISIBLE_LINES);
@@ -12,22 +12,24 @@ export const CommandLog: React.FC<{ entries: string[] }> = ({ entries }) => {
     <Box
       flexDirection="column"
       borderStyle={borderStyle()}
-      borderColor={THEME.dim}
+      borderColor={THEME.subtle}
       borderTop={true}
       borderBottom={false}
       borderLeft={false}
       borderRight={false}
       paddingX={1}
+      marginTop={0}
     >
-      <Text color={THEME.dim} bold>
-        Command Log
+      <Text color={THEME.dim}>
+        {SYM.iconLog}{"  "}Command Log
+        <Text color={THEME.subtle}>{"  "}{entries.length > 0 ? `(${entries.length})` : ""}</Text>
       </Text>
       {tail.length === 0 ? (
-        <Text color={THEME.dim}>  —</Text>
+        <Text color={THEME.subtle}>{"  "}—</Text>
       ) : (
         tail.map((entry, i) => (
           <Text key={i}>
-            <Text color={THEME.dim}>  $ </Text>
+            <Text color={THEME.subtle}>{"  $ "}</Text>
             <Text color={THEME.keyhint}>{entry}</Text>
           </Text>
         ))

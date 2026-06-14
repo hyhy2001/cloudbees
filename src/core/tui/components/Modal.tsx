@@ -1,33 +1,32 @@
-/**
- * Modal — overlay frame used by ConfirmModal and FormModal.
- *
- * Ink has no true z-index overlay; the app renders at most one modal *instead of*
- * the main content (or below it), so "modal" here is a bordered, centered panel.
- */
-
 import React from "react";
 import { Box, Text } from "ink";
 import { THEME } from "../theme";
 import { borderStyle } from "../symbols";
 
-/** Props for the Modal overlay frame. */
 export interface ModalProps {
   title: string;
   children: React.ReactNode;
+  /** Controls border color. Default "info". */
+  severity?: "info" | "danger" | "warning";
 }
 
-/** Bordered, centered panel used as the base frame for all modal dialogs. */
-export const Modal: React.FC<ModalProps> = ({ title, children }) => {
+const SEVERITY_COLOR = {
+  info: THEME.keyhint,
+  danger: THEME.danger,
+  warning: THEME.warning,
+};
+
+export const Modal: React.FC<ModalProps> = ({ title, children, severity = "info" }) => {
   return (
     <Box
       flexDirection="column"
       borderStyle={borderStyle()}
-      borderColor={THEME.keyhint}
+      borderColor={SEVERITY_COLOR[severity]}
       paddingX={2}
       paddingY={1}
       marginX={2}
     >
-      <Text color={THEME.keyhint} bold>
+      <Text color={SEVERITY_COLOR[severity]} bold>
         {title}
       </Text>
       <Box flexDirection="column" marginTop={1}>
