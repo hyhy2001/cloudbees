@@ -491,6 +491,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         title={`Node: ${current.name}`}
         actions={menuActions}
         onClose={() => setMenuOpen(false)}
+        isActive={!ctx.modalActive}
       />
     );
   }

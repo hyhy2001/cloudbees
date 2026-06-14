@@ -165,6 +165,7 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
       switchProfile,
       refreshController,
       openModal,
+      modalActive: activeModal !== null,
       notify,
       dbPath,
       activeModal,

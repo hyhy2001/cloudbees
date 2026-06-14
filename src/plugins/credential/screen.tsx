@@ -440,6 +440,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         title={`Credential: ${current.id}`}
         actions={menuActions}
         onClose={() => setMenuOpen(false)}
+        isActive={!ctx.modalActive}
       />
     );
   }

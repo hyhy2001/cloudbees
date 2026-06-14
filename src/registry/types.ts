@@ -126,6 +126,12 @@ export interface TuiContext {
   refreshController(): void;
   /** Push a modal and resolve with its result (or null if dismissed). */
   openModal<T>(spec: ModalSpec<T>): Promise<T | null>;
+  /**
+   * True while a modal opened via openModal is on screen. Screens that stay
+   * mounted behind the modal (e.g. an open context menu) read this to gate
+   * their own input so the modal's Esc isn't double-handled.
+   */
+  modalActive: boolean;
   /** Show a transient toast notification. */
   notify(message: string, level?: NotifyLevel): void;
   /** Resolved DB path (for tracked-resource lookups). */

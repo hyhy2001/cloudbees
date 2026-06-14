@@ -1025,6 +1025,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       <ContextMenu
         title={`Job: ${current.name}`}
         actions={menuActions}
+        isActive={!ctx.modalActive}
         onClose={() => setMenuOpen(false)}
       />
     );

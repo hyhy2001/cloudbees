@@ -166,15 +166,18 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
       <Text color={THEME.subtle}>{sepLine}</Text>
 
       {/* ── Body ── */}
+      {/* The active screen stays mounted while a modal/help overlay is open
+          (display:none, not unmounted) so its local state — open context menu,
+          folder stack, cursor — survives. Closing the overlay (Esc) drops back
+          to exactly the screen state the user left, instead of a fresh mount. */}
       <Box flexDirection="column" marginTop={0} minHeight={14}>
-        {modalOpen ? (
-          tui.activeModal!.node
-        ) : showHelp ? (
-          <HelpScreen screens={screens} />
-        ) : active ? (
-          <active.Component ctx={tui} active={!modalOpen && !showHelp} />
+        {modalOpen ? tui.activeModal!.node : showHelp ? <HelpScreen screens={screens} /> : null}
+        {active ? (
+          <Box flexDirection="column" display={modalOpen || showHelp ? "none" : "flex"}>
+            <active.Component ctx={tui} active={!modalOpen && !showHelp} />
+          </Box>
         ) : (
-          <Text color={THEME.dim}>No screens registered.</Text>
+          !modalOpen && !showHelp && <Text color={THEME.dim}>No screens registered.</Text>
         )}
       </Box>
 

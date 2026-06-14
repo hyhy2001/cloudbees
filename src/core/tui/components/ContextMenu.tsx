@@ -38,9 +38,16 @@ export interface ContextMenuProps {
   title: string;
   actions: ContextMenuAction[];
   onClose: () => void;
+  /**
+   * Gate keyboard input. Defaults to true. Set false when a modal opened from
+   * a menu action covers this menu — the menu stays mounted (so its state
+   * survives) but must not also consume Esc, or closing the modal would close
+   * the menu too and drop the user back to the bare list.
+   */
+  isActive?: boolean;
 }
 
-export const ContextMenu: FC<ContextMenuProps> = ({ title, actions, onClose }) => {
+export const ContextMenu: FC<ContextMenuProps> = ({ title, actions, onClose, isActive = true }) => {
   const visible = actions.filter((a) => !a.when || a.when());
   const [cursor, setCursor] = useState(0);
 
@@ -65,7 +72,7 @@ export const ContextMenu: FC<ContextMenuProps> = ({ title, actions, onClose }) =
     if (key.return) { run(cursor); return; }
     if (input >= "1" && input <= "9") { run(parseInt(input, 10) - 1); return; }
     if (input === "0") { run(9); return; }
-  });
+  }, { isActive });
 
   // Truncate long titles gracefully
   const maxTitleLen = 32;
