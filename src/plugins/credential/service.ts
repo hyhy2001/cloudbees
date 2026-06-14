@@ -152,8 +152,12 @@ export async function updateCredential(
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
     if (re.test(src)) return src.replace(re, `$1${escaped}$2`);
-    // Insert before the root closing tag if missing.
-    return src.replace(/(\n?)(<\/[A-Za-z0-9_.$]+>\s*)$/, `\n  <${tag}>${escaped}</${tag}>$1$2`);
+    // Insert before the root closing tag — only alphanumeric + dot + hyphen (valid XML names).
+    const rootCloseRe = /(\n?)(<\/[A-Za-z][A-Za-z0-9._-]*>\s*)$/;
+    if (!rootCloseRe.test(src)) {
+      throw new Error(`updateCredential: cannot insert <${tag}> — root closing tag not found in config.xml`);
+    }
+    return src.replace(rootCloseRe, `\n  <${tag}>${escaped}</${tag}>$1$2`);
   };
 
   if (usernameCred !== undefined) xml = setElement(xml, "username", usernameCred);

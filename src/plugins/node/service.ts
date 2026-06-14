@@ -5,6 +5,7 @@
 import { xmlParser, xmlParserTagValues } from "../../domain/xml";
 import type { CloudBeesClient } from "../../core/api/types";
 import { NodeDTO, NodeDetailDTO, nodeFromDict, nodeDetailFromDict } from "../../core/dtos/index";
+import { NotFoundError } from "../../core/api/errors";
 import {
   buildLauncherXml,
   buildRetentionXml,
@@ -48,8 +49,9 @@ export async function getNode(client: CloudBeesClient, name: string): Promise<No
   const dto = nodeDetailFromDict(data ?? {});
   try {
     dto.configXml = await client.getText(`/computer/${nodeSeg(name)}/config.xml`);
-  } catch {
-    // config.xml is best-effort
+  } catch (err) {
+    // config.xml is best-effort — 404 is expected for built-in nodes; other errors are surfaced.
+    if (!(err instanceof NotFoundError)) throw err;
   }
   return dto;
 }
@@ -276,7 +278,8 @@ export async function updateNode(
   xmlParser.parse(xml);
 
   const setElement = (src: string, tag: string, value: string): string => {
-    const re = new RegExp(`(<${tag}>)[\\s\\S]*?(</${tag}>)`);
+    // Handle both plain <tag> and Jenkins-style <tag attr="..."> serialization.
+    const re = new RegExp(`(<${tag}(?:\\s[^>]*)?>)[\\s\\S]*?(</${tag}>)`);
     const escaped = value
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -284,18 +287,26 @@ export async function updateNode(
     if (re.test(src)) {
       return src.replace(re, `$1${escaped}$2`);
     }
-    // Insert before the root closing tag (slave, agent, or hudson.slaves.DumbSlave).
-    return src.replace(/<\/(slave|agent|hudson\.slaves\.DumbSlave)>\s*$/, `  <${tag}>${escaped}</${tag}>\n</$1>`);
+    // Insert before root closing tag (slave / agent / hudson.slaves.DumbSlave).
+    const rootCloseRe = /<\/(slave|agent|hudson\.slaves\.DumbSlave)\s*>/;
+    if (!rootCloseRe.test(src)) {
+      throw new Error(`updateNode: cannot insert <${tag}> — root closing tag not found in config.xml`);
+    }
+    return src.replace(rootCloseRe, `  <${tag}>${escaped}</${tag}>\n</$1>`);
   };
 
-  // Swap a whole subtree element (matches both `<tag .../>` and `<tag ...>..</tag>`).
+  // Swap a whole subtree (matches `<tag .../>` and `<tag ...>...</tag>`).
   const swapElement = (src: string, tag: string, block: string): string => {
     const paired = new RegExp(`[ \\t]*<${tag}(\\s[^>]*)?>[\\s\\S]*?</${tag}>`);
-    const selfClosing = new RegExp(`[ \\t]*<${tag}(\\s[^>]*)?/>`);
+    const selfClosing = new RegExp(`[ \\t]*<${tag}(\\s[^>]*)?\\s*/>`);
     if (paired.test(src)) return src.replace(paired, block);
     if (selfClosing.test(src)) return src.replace(selfClosing, block);
-    // Insert before the root closing tag if missing.
-    return src.replace(/<\/(slave|agent|hudson\.slaves\.DumbSlave)>\s*$/, `${block}\n</$1>`);
+    // Insert before root closing tag if subtree is missing.
+    const rootCloseRe = /<\/(slave|agent|hudson\.slaves\.DumbSlave)\s*>/;
+    if (!rootCloseRe.test(src)) {
+      throw new Error(`updateNode: cannot insert <${tag}> — root closing tag not found in config.xml`);
+    }
+    return src.replace(rootCloseRe, `${block}\n</$1>`);
   };
 
   if (opts.desc !== undefined) xml = setElement(xml, "description", opts.desc);
@@ -320,11 +331,11 @@ export async function updateNode(
 
   if (launcherTouched) {
     const block = buildLauncherXml({
-      type: opts.launcherType ?? current.launcherType,
-      host: opts.host ?? current.host,
-      port: opts.port ?? current.port,
-      credentialsId: opts.credentialsId ?? current.credentialsId,
-      javaPath: opts.javaPath ?? current.javaPath,
+      type: opts.launcherType !== undefined ? opts.launcherType : current.launcherType,
+      host: opts.host !== undefined ? opts.host : current.host,
+      port: opts.port !== undefined ? opts.port : current.port,
+      credentialsId: opts.credentialsId !== undefined ? opts.credentialsId : current.credentialsId,
+      javaPath: opts.javaPath !== undefined ? opts.javaPath : current.javaPath,
     });
     xml = swapElement(xml, "launcher", block);
   }
@@ -336,9 +347,9 @@ export async function updateNode(
 
   if (retentionTouched) {
     const block = buildRetentionXml({
-      availability: opts.availability ?? current.availability,
-      inDemandDelay: opts.inDemandDelay ?? current.inDemandDelay,
-      idleDelay: opts.idleDelay ?? current.idleDelay,
+      availability: opts.availability !== undefined ? opts.availability : current.availability,
+      inDemandDelay: opts.inDemandDelay !== undefined ? opts.inDemandDelay : current.inDemandDelay,
+      idleDelay: opts.idleDelay !== undefined ? opts.idleDelay : current.idleDelay,
     });
     xml = swapElement(xml, "retentionStrategy", block);
   }

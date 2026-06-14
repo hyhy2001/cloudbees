@@ -737,13 +737,12 @@ export async function updateJobFreestyle(
   // 3. shell command — handle both plain text and CDATA content
   if (shellCmd != null) {
     // Match <command>...</command> with either plain text or CDATA content.
-    const cmdTagRe = /<command>([\s\S]*?)<\/\s*command>/;
-    const cdataTagRe = /<command><!\[CDATA\[[\s\S]*?\]\]><\/\s*command>/;
+    const cmdTagRe = /(<command>)([\s\S]*?)(<\/\s*command>)/;
+    const cdataTagRe = /(<command>)<!\[CDATA\[[\s\S]*?\]\]>(<\/\s*command>)/;
     if (cdataTagRe.test(updated)) {
-      // Replace CDATA block — don't XML-escape since CDATA is literal content.
-      updated = updated.replace(cdataTagRe, `<command><![CDATA[${shellCmd}]]></command>`);
+      updated = updated.replace(cdataTagRe, `$1<![CDATA[${shellCmd}]]>$2`);
     } else if (cmdTagRe.test(updated)) {
-      updated = updated.replace(cmdTagRe, `<command>${escapeXml(shellCmd)}</command>`);
+      updated = updated.replace(cmdTagRe, `$1${escapeXml(shellCmd)}$3`);
     } else {
       // No builders section? Inject one.
       updated = insertBeforeRootClose(
@@ -755,15 +754,17 @@ export async function updateJobFreestyle(
 
   // 4. schedule (triggers)
   if (schedule != null) {
-    // Remove the first existing TimerTrigger block (Jenkins only supports one).
-    updated = updated.replace(
-      /<hudson\.triggers\.TimerTrigger>[\s\S]*?<\/hudson\.triggers\.TimerTrigger>/,
-      "",
-    );
+    const timerRe = /<hudson\.triggers\.TimerTrigger>[\s\S]*?<\/hudson\.triggers\.TimerTrigger>/;
+    const hadTimer = timerRe.test(updated);
+    // Remove existing timer block before re-inserting (Jenkins only supports one).
+    updated = updated.replace(timerRe, "");
     if (schedule) {
       const timerBlock = buildTimerTriggerBlock(schedule, "    ");
       if (/<triggers>/.test(updated)) {
         updated = updated.replace(/(<triggers>)/, `$1\n${timerBlock}`);
+      } else if (hadTimer) {
+        // Timer was removed but <triggers> wrapper went with it — re-add wrapper.
+        updated = insertBeforeRootClose(updated, `  <triggers>\n${timerBlock}\n  </triggers>`);
       } else {
         updated = insertBeforeRootClose(updated, `  <triggers>\n${timerBlock}\n  </triggers>`);
       }

@@ -41,10 +41,11 @@ export function buildLauncherXml(opts: LauncherOpts, indent = "  "): string {
   const c = `${indent}  `;
   if (opts.type === "ssh") {
     const { host = "", port = 22, credentialsId = "", javaPath = DEFAULT_JAVA_PATH } = opts;
+    const safePort = Math.max(1, Math.min(65535, Math.trunc(Number(port)) || 22));
     return [
       `${indent}<launcher class="hudson.plugins.sshslaves.SSHLauncher" plugin="ssh-slaves">`,
       `${c}<host>${escapeXml(host)}</host>`,
-      `${c}<port>${port}</port>`,
+      `${c}<port>${safePort}</port>`,
       `${c}<credentialsId>${escapeXml(credentialsId)}</credentialsId>`,
       `${c}<javaPath>${escapeXml(javaPath)}</javaPath>`,
       `${c}<sshHostKeyVerificationStrategy class="hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy"/>`,
