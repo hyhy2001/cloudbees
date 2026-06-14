@@ -5,7 +5,7 @@
  * No DataTable — just an info panel with key bindings.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps } from "../../registry/types";
@@ -69,18 +69,18 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const bindings = useMemo<KeyBinding[]>(
     () => [
-      { key: "c", label: "clear cache", run: () => void doClearCache() },
+      { key: "ctrl+x", label: "clear cache", run: () => void doClearCache() },
       { key: "R", label: "refresh", run: () => void refetch() },
       {
-        key: "j",
-        label: "down",
+        key: "down",
+        label: "↓",
         hidden: true,
         when: () => plugins.length > 0,
         run: () => setPluginCursor((c) => Math.min(plugins.length - 1, c + 1)),
       },
       {
-        key: "k",
-        label: "up",
+        key: "up",
+        label: "↑",
         hidden: true,
         when: () => plugins.length > 0,
         run: () => setPluginCursor((c) => Math.max(0, c - 1)),
@@ -96,16 +96,11 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {/* Header */}
-      <Text>
-        {" "}
-        {SYM.gear} Info
-      </Text>
-      <Text>
-        {" "}
-        {SYM.arrow} System info
-        {status === "stale" ? <Text color={THEME.dim}> · refreshing…</Text> : null}
-      </Text>
+      {/* ── Compact header ── */}
+      <Box>
+        <Text color={THEME.dim}>{SYM.gear} Info</Text>
+        {status === "stale" ? <Text color={THEME.subtle}>  ⟳</Text> : null}
+      </Box>
 
       {/* Body */}
       {isInitialLoading && ctx.loggedIn ? (
@@ -195,7 +190,6 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               <Text>
                 {" "}
                 {SYM.arrow} Plugins ({plugins.length})
-                <Text color={THEME.dim}> · j/k navigate</Text>
               </Text>
               <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} marginTop={0}>
                 {plugins.slice(Math.max(0, pluginCursor - 8), pluginCursor + 9).map((p, relIdx) => {

@@ -137,10 +137,10 @@ export const DataTable: React.FC<DataTableProps> = ({
   const handleInput = useCallback(
     (input: string, key: { downArrow: boolean; upArrow: boolean; ctrl: boolean }) => {
       if (rows.length === 0) return;
-      if (input === "j" || key.downArrow) onCursorChange(clamp(cursor + 1));
-      else if (input === "k" || key.upArrow) onCursorChange(clamp(cursor - 1));
-      else if (input === "g") onCursorChange(0);
-      else if (input === "G") onCursorChange(rows.length - 1);
+      if (key.downArrow) onCursorChange(clamp(cursor + 1));
+      else if (key.upArrow) onCursorChange(clamp(cursor - 1));
+      else if ((key as { home?: boolean }).home) onCursorChange(0);
+      else if ((key as { end?: boolean }).end) onCursorChange(rows.length - 1);
       else if (key.ctrl && input === "f") onCursorChange(clamp(cursor + PAGE));
       else if (key.ctrl && input === "b") onCursorChange(clamp(cursor - PAGE));
     },
@@ -159,12 +159,20 @@ export const DataTable: React.FC<DataTableProps> = ({
     <Box flexDirection="column">
       {/* Header */}
       <Box>
-        <Text> </Text>
+        <Text color={THEME.subtle}>{"  "}</Text>
         {columns.map((c, i) => (
           <Text key={i} color={THEME.keyhint} bold>
             {pad(c.header, colWidths[i] ?? c.width)}{" "}
           </Text>
         ))}
+      </Box>
+
+      {/* Header separator */}
+      <Box>
+        <Text color={THEME.subtle}>
+          {"  "}
+          {columns.map((_, i) => SYM.sep.repeat((colWidths[i] ?? columns[i]!.width) + 1)).join("")}
+        </Text>
       </Box>
 
       {/* Rows */}
@@ -175,6 +183,7 @@ export const DataTable: React.FC<DataTableProps> = ({
         return (
           <Box key={rowKey}>
             <Text color={isCursor ? THEME.active : THEME.dim}>{isCursor ? SYM.selected : " "}</Text>
+            <Text color={THEME.subtle}> </Text>
             {row.map((cell, ci) => {
               const width = colWidths[ci] ?? columns[ci]?.width ?? 10;
               const color = isCursor ? THEME.selectedFg : cell.dim ? THEME.dim : cell.color;
@@ -193,14 +202,21 @@ export const DataTable: React.FC<DataTableProps> = ({
         );
       })}
 
-      {rows.length === 0 && <Text color={THEME.dim}> {emptyText}</Text>}
+      {rows.length === 0 && <Text color={THEME.dim}>{"  "}{emptyText}</Text>}
 
-      {/* Scroll hint */}
+      {/* Scroll position — only shown when content overflows */}
       {rows.length > height && (
-        <Text color={THEME.dim}>
-          {" "}
-          {cursor + 1}/{rows.length}
-        </Text>
+        <Box marginTop={0}>
+          <Text color={THEME.subtle}>
+            {"  "}
+            <Text color={THEME.dim}>
+              {cursor + 1}/{rows.length}
+            </Text>
+            {"  "}
+            {start > 0 ? <Text color={THEME.dim}>{SYM.arrow} scroll up</Text> : null}
+            {start + height < rows.length ? <Text color={THEME.dim}>{start > 0 ? "  " : ""}{SYM.arrow} more below</Text> : null}
+          </Text>
+        </Box>
       )}
     </Box>
   );

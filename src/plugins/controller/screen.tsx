@@ -102,7 +102,6 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "Enter", label: "select", when: () => current !== undefined, run: () => { if (current) void doSelectController(current); } },
-      { key: "s", label: "select", hidden: true, when: () => current !== undefined, run: () => { if (current) void doSelectController(current); } },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
@@ -125,28 +124,21 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {/* Header */}
-      <Text>
-        {" "}
-        {SYM.gear} Controllers
-      </Text>
-      <Text>
-        {" "}
-        {SYM.arrow} Active:{" "}
-        {ctx.activeController ? (
-          <Text color={THEME.success}>{ctx.activeController}</Text>
-        ) : (
-          <Text color={THEME.dim}>(none)</Text>
-        )}
-        {autoRefresh ? <Text color={THEME.success}> · auto ⟳</Text> : null}
-        {status === "stale" ? <Text color={THEME.dim}> · refreshing…</Text> : null}
-      </Text>
+      {/* ── Compact header ── */}
+      <Box>
+        <Text color={THEME.dim}>{SYM.gear} Controllers  </Text>
+        {ctx.activeController
+          ? <Text color={THEME.success} bold>[{ctx.activeController}]</Text>
+          : <Text color={THEME.dim}>[none]</Text>}
+        {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
+        {status === "stale" ? <Text color={THEME.subtle}>  ⟳</Text> : null}
+      </Box>
 
       {/* Body */}
       {notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
-            {SYM.warn} Not logged in — press l to login
+            {SYM.warn} Not logged in — press Ctrl+l to login
           </Text>
         </Box>
       ) : isInitialLoading ? (
@@ -199,30 +191,26 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           {/* Detail panel */}
           {current && (
             <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} marginTop={1}>
-              <Text>
-                <Text bold>{current.name}</Text>
-                {"   "}
-                <Text color={THEME.dim}>status:</Text>{" "}
-                {current.online ? (
-                  <Text color={THEME.success}>online</Text>
-                ) : (
-                  <Text color={THEME.warning}>offline</Text>
-                )}
-                {current.name === ctx.activeController ? (
-                  <Text color={THEME.success}> {SYM.selected} active</Text>
-                ) : null}
-              </Text>
-              <Text color={THEME.dim} wrap="truncate-end">
-                type: {typeLabel(current.className)}
-              </Text>
-              <Text color={THEME.dim} wrap="truncate-end">
-                url: {current.url || "—"}
-              </Text>
-              {current.description ? (
-                <Text color={THEME.dim} wrap="truncate-end">
-                  {current.description}
-                </Text>
-              ) : null}
+              <Box>
+                <Text bold color={THEME.normal}>{current.name}</Text>
+                {"  "}
+                {current.online
+                  ? <Text color={THEME.success}>{SYM.online} online</Text>
+                  : <Text color={THEME.warning}>{SYM.offline} offline</Text>}
+                {current.name === ctx.activeController
+                  ? <Text color={THEME.active}>{"  "}{SYM.selected} active</Text>
+                  : null}
+              </Box>
+              <Box>
+                <Text color={THEME.dim}>type </Text>
+                <Text color={THEME.blue}>{typeLabel(current.className)}</Text>
+              </Box>
+              {current.url && (
+                <Text color={THEME.subtle} wrap="truncate-end">{current.url}</Text>
+              )}
+              {current.description && (
+                <Text color={THEME.dim} wrap="truncate-end">{current.description}</Text>
+              )}
             </Box>
           )}
         </Box>

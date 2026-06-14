@@ -52,10 +52,10 @@ import { listNodes } from "../node/service";
 import { hasPlugin } from "../system/service";
 import { ScheduleBuilder } from "../../core/tui/components/ScheduleBuilder";
 import { EmailBuilder, type EmailSpec } from "../../core/tui/components/EmailBuilder";
+import { ContextMenu } from "../../core/tui/components/ContextMenu";
 import { parseCron } from "../../domain/schedule";
-import type { JobConfigSummary } from "./types";
 
-// ─── Status + type rendering (port of _status_markup / _type_label) ─────────
+import type { JobConfigSummary } from "./types";
 
 interface StatusCell {
   text: string;
@@ -178,17 +178,13 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
 
   useKeymap(
     [
-      { key: "q",      label: "back",  group: "nav", run: onClose },
-      { key: "b",      label: "back",  group: "nav", run: onClose, hidden: true },
-      { key: "Esc",    label: "back",  group: "nav", run: onClose, hidden: true },
-      { key: "j",      label: "↓",    group: "nav", hidden: true, when: () => canScrollDown, run: () => scrollBy(1) },
-      { key: "k",      label: "↑",    group: "nav", hidden: true, when: () => canScrollUp,   run: () => scrollBy(-1) },
+      { key: "Esc",    label: "back",  group: "nav", run: onClose },
       { key: "down",   label: "↓",    group: "nav", hidden: true, when: () => canScrollDown, run: () => scrollBy(1) },
       { key: "up",     label: "↑",    group: "nav", hidden: true, when: () => canScrollUp,   run: () => scrollBy(-1) },
       { key: "ctrl+f", label: "pgdn", group: "nav", hidden: true, when: () => canScrollDown, run: () => scrollBy(LOG_PAGE) },
       { key: "ctrl+b", label: "pgup", group: "nav", hidden: true, when: () => canScrollUp,   run: () => scrollBy(-LOG_PAGE) },
-      { key: "g",      label: "top",  group: "nav", hidden: true, run: () => setScrollTop(0) },
-      { key: "G",      label: "bottom", group: "nav", hidden: true, run: () => setScrollTop(-1) },
+      { key: "Home",   label: "top",  group: "nav", hidden: true, run: () => setScrollTop(0) },
+      { key: "End",    label: "bottom", group: "nav", hidden: true, run: () => setScrollTop(-1) },
       { key: "[", label: "older", run: goOlder, when: () => buildNums != null && buildIdx < (buildNums?.length ?? 0) - 1 },
       { key: "]", label: "newer", run: goNewer, when: () => buildIdx > 0 },
     ],
@@ -298,7 +294,7 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
       <Text color={THEME.dim}>
         {totalLines > logRows
           ? ` lines ${effectiveTop + 1}–${Math.min(effectiveTop + logRows, totalLines)}/${totalLines}${scrollTop < 0 ? " [bottom]" : ""} · `
-          : " "}j/k scroll · g/G top/bottom · Esc close
+          : " "}↑/↓ scroll · Home/End top/bottom · Esc back
       </Text>
     </Box>
   );
@@ -332,9 +328,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Whether the email-ext plugin is installed on the server. Checked once per
   // login session; fails open (true) when the API returns 403 or errors.
   const [emailExtAvailable, setEmailExtAvailable] = useState(true);
-  // When true, the cursor is "locked" on the current job — extra action hints
-  // (p/t/m/e/r/s/d) are shown and Enter opens the log. Esc exits select mode.
-  const [jobSelected, setJobSelected] = useState(false);
+  // When true, the context menu is open for the current job row.
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Inline "/" search box (client-side filter; no refetch). Disabled while the
   // log overlay is open.
@@ -454,13 +449,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   // ── Stable cursor: keep selection on the same job across refresh/filter ──
   const rowKeys = useMemo(() => jobs.map((j) => j.name), [jobs]);
-  const { cursor, setCursor: _setCursor } = useStableCursor(rowKeys);
+  const { cursor, setCursor } = useStableCursor(rowKeys);
   const current = jobs[cursor];
-  // Moving the cursor exits select mode — the new job has not been "entered".
-  const setCursor = useCallback((next: number) => {
-    setJobSelected(false);
-    _setCursor(next);
-  }, [_setCursor]);
 
   // Pre-build DataTable cell rows once per jobs/trackedNames change.
   // With 1000+ jobs, jobs.map() inside JSX runs on every keystroke (cursor move
@@ -756,20 +746,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const canImport = hasRow && current !== undefined && !trackedNames.has(current.name);
   // Untrackable = a row already in Mine (inverse of import).
   const canUntrack = hasRow && current !== undefined && trackedNames.has(current.name);
-  const bindings = useMemo<KeyBinding[]>(
+
+  const menuActions = useMemo(
     () => [
-      // Enter: first press selects job (shows extra hints); second press opens log.
-      { key: "Enter", label: "select", group: "action", when: () => current !== undefined && !jobSelected, run: () => setJobSelected(true) },
-      { key: "Enter", label: "log",    group: "action", when: () => current !== undefined && jobSelected,  run: () => { if (current) setLogJob(current.name); } },
-      { key: "Esc",   label: "back",   group: "nav",    when: () => jobSelected, run: () => setJobSelected(false) },
-      { key: "l", label: "log",     hidden: true, when: () => current !== undefined, run: () => { if (current) setLogJob(current.name); } },
-      { key: "r", label: "run",     when: () => hasRow && jobSelected, run: () => { if (current) void runJob(current.name); } },
-      { key: "s", label: "stop",    when: () => hasRow && jobSelected, run: () => { if (current) void stopJob(current); } },
-      { key: "n", label: "new",     run: () => void newJob() },
-      { key: "e", label: "edit",    when: () => hasRow && jobSelected, run: () => { if (current) void editJob(current); } },
-      { key: "p", label: "params",  when: () => hasRow && jobSelected, run: () => { if (current) setParamJob(current.name); } },
-      { key: "t", label: "schedule", when: () => hasRow && jobSelected, run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); } },
-      { key: "m", label: "email",   when: () => hasRow && jobSelected, run: () => {
+      { label: "View Log",   icon: SYM.iconLog,      run: () => { if (current) setLogJob(current.name); } },
+      { label: "Run",        icon: SYM.iconPlay,      run: () => { if (current) void runJob(current.name); } },
+      { label: "Stop",       icon: SYM.iconStop,      run: () => { if (current) void stopJob(current); } },
+      { label: "Edit",       icon: SYM.iconEdit,      run: () => { if (current) void editJob(current); } },
+      { label: "Params",     icon: SYM.iconParams,    run: () => { if (current) setParamJob(current.name); } },
+      { label: "Schedule",   icon: SYM.iconSchedule,  run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); } },
+      { label: "Email",      icon: SYM.iconEmail,     run: () => {
         if (!current) return;
         const s = summary;
         const hasEmail = s?.email && s.email !== "-";
@@ -784,23 +770,30 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           },
         });
       } },
-      { key: "i", label: "import",  when: () => canImport && jobSelected, run: () => { if (current) doImport(current.name); } },
-      { key: "u", label: "unimport", when: () => canUntrack && jobSelected, run: () => { if (current) { untrackResource("job", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
-      { key: "d", label: "del",     when: () => hasRow && jobSelected, run: () => { if (current) void removeJob(current.name); } },
-      { key: "a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("job", nv, ctx.dbPath); return nv; }) },
-      { key: "f", label: recursive ? "flat" : "recursive", run: () => setRecursive((v) => !v) },
+      { label: "Import",     icon: SYM.iconImport,    when: () => canImport, run: () => { if (current) doImport(current.name); } },
+      { label: "Unimport",   icon: SYM.iconImport,    when: () => canUntrack, run: () => { if (current) { untrackResource("job", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
+      { label: "Delete",     icon: SYM.iconDelete,    danger: true, run: () => { if (current) void removeJob(current.name); } },
+    ],
+    [current, canImport, canUntrack, baseUrl, summary, runJob, stopJob, editJob, doImport, removeJob, refetch, ctx],
+  );
+
+  const bindings = useMemo<KeyBinding[]>(
+    () => [
+      { key: "Enter", label: "menu", group: "action", when: () => current !== undefined && !menuOpen, run: () => setMenuOpen(true) },
+      { key: "ctrl+n", label: "new",      run: () => void newJob() },
+      { key: "ctrl+a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("job", nv, ctx.dbPath); return nv; }) },
+      { key: "ctrl+r", label: recursive ? "flat" : "recursive", run: () => setRecursive((v) => !v) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
-      // Esc clears an active query (only shown/handled when one is set).
-      { key: "Esc", label: "clear", hidden: true, when: () => search.active && !jobSelected, run: () => search.clear() },
+      { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, jobSelected, canImport, canUntrack, baseUrl, summary, recursive, runJob, stopJob, newJob, editJob, doImport, removeJob, refetch, search],
+    [current, menuOpen, newJob, recursive, search, refetch, ctx],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
   // action keymap (and the table's nav) so letters don't trigger actions.
-  useKeymap(bindings, { isActive: active && !logJob && !paramJob && !scheduleJob && !emailJob && !search.editing });
+  useKeymap(bindings, { isActive: active && !logJob && !paramJob && !scheduleJob && !emailJob && !menuOpen && !search.editing });
 
   // Publish hints to the shell footer while this tab is the active one.
   useEffect(() => {
@@ -947,11 +940,15 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     );
   }
 
-  const scope = showAll ? (
-    <Text color={THEME.yellow}>ALL</Text>
-  ) : (
-    <Text color={THEME.success}>MINE</Text>
-  );
+  if (menuOpen && current) {
+    return (
+      <ContextMenu
+        title={`Job: ${current.name}`}
+        actions={menuActions}
+        onClose={() => setMenuOpen(false)}
+      />
+    );
+  }
 
   // Not-logged-in is a distinct, friendly state rather than an error.
   const notLoggedIn = !ctx.loggedIn;
@@ -960,24 +957,22 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {/* Header */}
-      <Text>
-        {" "}
-        {SYM.gear} Jobs
-      </Text>
-      <Text>
-        {" "}
-        {SYM.arrow} Scope: {scope}
-        {recursive ? <Text color={THEME.yellow}> · recursive</Text> : null}
-        {autoRefresh ? <Text color={THEME.success}> · auto ⟳</Text> : null}
-        {status === "stale" ? <Text color={THEME.dim}> · refreshing…</Text> : null}
-      </Text>
+      {/* ── Compact header ── */}
+      <Box>
+        <Text color={THEME.dim}>{SYM.gear} Jobs  </Text>
+        {showAll
+          ? <Text color={THEME.yellow} bold>[ALL]</Text>
+          : <Text color={THEME.success} bold>[MINE]</Text>}
+        {recursive ? <Text color={THEME.yellow}>  [rec]</Text> : null}
+        {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
+        {status === "stale" ? <Text color={THEME.subtle}>  ⟳</Text> : null}
+      </Box>
 
       {/* Body */}
       {notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
-            {SYM.warn} Not logged in — press l to login
+            {SYM.warn} Not logged in — press Ctrl+l to login
           </Text>
         </Box>
       ) : noController ? (
@@ -1020,30 +1015,48 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             cursor={cursor}
             onCursorChange={setCursor}
             active={active && !search.editing}
-            emptyText="No jobs. Press n to create one."
+            emptyText="No jobs. Press Ctrl+n to create one."
           />
 
           {/* Detail panel */}
           {current && (
             <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} marginTop={1}>
-              <Text>
-                {jobSelected ? <Text color={THEME.active}>{SYM.arrow} </Text> : "  "}
-                <Text bold>{current.name}</Text>
-                {"   "}
-                <Text color={THEME.dim}>type:</Text> {current.jobType || "-"}
-                {"   "}
-                <Text color={THEME.dim}>build:</Text>{" "}
-                {current.lastBuildNumber ? `#${current.lastBuildNumber}` : "—"}
-              </Text>
-              {summary && (
-                <Text color={THEME.dim} wrap="truncate-end">
-                  schedule: {summary.schedule || "-"} · email: {summary.email || "-"} · cond:{" "}
-                  {summary.email_cond || "-"}
-                </Text>
+              {/* Title row */}
+              <Box>
+                <Text bold color={THEME.normal}>{current.name}</Text>
+                {current.lastBuildNumber
+                  ? <Text color={THEME.dim}>{"  "}#{current.lastBuildNumber}</Text>
+                  : null}
+              </Box>
+              {/* Fields row */}
+              <Box marginTop={0}>
+                <Text color={THEME.dim}>type </Text>
+                <Text color={THEME.blue}>{current.jobType || "—"}</Text>
+                {summary?.schedule && summary.schedule !== "-" && (
+                  <>
+                    <Text color={THEME.subtle}>{"   "}</Text>
+                    <Text color={THEME.dim}>schedule </Text>
+                    <Text color={THEME.normal}>{summary.schedule}</Text>
+                  </>
+                )}
+                {summary?.node && summary.node !== "-" && (
+                  <>
+                    <Text color={THEME.subtle}>{"   "}</Text>
+                    <Text color={THEME.dim}>node </Text>
+                    <Text color={THEME.normal}>{summary.node}</Text>
+                  </>
+                )}
+                {summary?.email && summary.email !== "-" && (
+                  <>
+                    <Text color={THEME.subtle}>{"   "}</Text>
+                    <Text color={THEME.dim}>email </Text>
+                    <Text color={THEME.normal}>{summary.email}</Text>
+                  </>
+                )}
+              </Box>
+              {current.url && (
+                <Text color={THEME.subtle} wrap="truncate-end">{current.url}</Text>
               )}
-              <Text color={THEME.dim} wrap="truncate-end">
-                {current.url || "-"}
-              </Text>
             </Box>
           )}
         </Box>

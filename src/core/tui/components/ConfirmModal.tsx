@@ -1,5 +1,5 @@
 /**
- * ConfirmModal — yes/no confirmation. Resolves true on confirm, false on cancel.
+ * ConfirmModal — yes/no confirmation. Resolves true on Enter, false on Esc.
  * Port of legacy ConfirmModal (modals.py).
  */
 
@@ -8,34 +8,34 @@ import { Box, Text, useInput } from "ink";
 import { Modal } from "./Modal";
 import { THEME } from "../theme";
 
-/** Props for ConfirmModal. `onResult` receives true on y/Y/Enter, false on n/N/Esc. */
+/** Props for ConfirmModal. `onResult` receives true on Enter, false on Esc. */
 export interface ConfirmModalProps {
   title?: string;
   message: string;
   onResult: (confirmed: boolean) => void;
 }
 
-/** Yes/no confirmation modal. Resolves true on confirm, false on cancel. */
+/** Confirmation modal. Enter=confirm, Esc=cancel. */
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   title = "Confirm Action",
   message,
   onResult,
 }) => {
-  useInput((input, key) => {
-    if (input === "y" || input === "Y" || key.return) {
+  useInput((_input, key) => {
+    if (key.return) {
       onResult(true);
-    } else if (input === "n" || input === "N" || key.escape) {
+    } else if (key.escape) {
       onResult(false);
     }
   });
 
   return (
-    <Modal title={title}>
-      <Text>{message}</Text>
+    <Modal title={title} severity="danger">
+      <Text color={THEME.normal}>{message}</Text>
       <Box marginTop={1}>
-        <Text color={THEME.success}>[Y]es</Text>
-        <Text>{"   "}</Text>
-        <Text color={THEME.error}>[N]o / Esc</Text>
+        <Text color={THEME.dim}>Enter </Text>
+        <Text color={THEME.danger}>confirm</Text>
+        <Text color={THEME.dim}>  ·  Esc cancel</Text>
       </Box>
     </Modal>
   );

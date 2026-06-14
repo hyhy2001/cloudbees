@@ -33,12 +33,24 @@ export interface Symbols {
   sep: string;
   pipe: string;
   arrow: string;
+  arrowLeft: string;
   dot: string;
   online: string;
   offline: string;
   selected: string;
   tracked: string;
   spinnerFrames: string[];
+  // action icons for ContextMenu
+  iconPlay: string;
+  iconStop: string;
+  iconLog: string;
+  iconEdit: string;
+  iconDelete: string;
+  iconImport: string;
+  iconParams: string;
+  iconSchedule: string;
+  iconEmail: string;
+  iconToggle: string;
 }
 
 const UNICODE_SYMBOLS: Symbols = {
@@ -55,12 +67,23 @@ const UNICODE_SYMBOLS: Symbols = {
   sep: "─",
   pipe: "│",
   arrow: "›",
+  arrowLeft: "‹",
   dot: "·",
   online: "◉",
   offline: "◌",
   selected: "▶",
   tracked: "★",
   spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+  iconPlay: "▶",
+  iconStop: "■",
+  iconLog: "≡",
+  iconEdit: "✎",
+  iconDelete: "✕",
+  iconImport: "↓",
+  iconParams: "¶",
+  iconSchedule: "◷",
+  iconEmail: "✉",
+  iconToggle: "⇄",
 };
 
 const ASCII_SYMBOLS: Symbols = {
@@ -77,12 +100,23 @@ const ASCII_SYMBOLS: Symbols = {
   sep: "-",
   pipe: "|",
   arrow: ">",
+  arrowLeft: "<",
   dot: ".",
   online: "[O]",
   offline: "[ ]",
   selected: ">",
   tracked: "*",
   spinnerFrames: ["[ |  ]", "[ /  ]", "[ -- ]", "[ \\  ]"],
+  iconPlay: ">",
+  iconStop: "[]",
+  iconLog: "=",
+  iconEdit: "~",
+  iconDelete: "x",
+  iconImport: "v",
+  iconParams: "#",
+  iconSchedule: "@",
+  iconEmail: "@",
+  iconToggle: "<>",
 };
 
 /** Return the symbol set for the given mode. Exposed for testing. */

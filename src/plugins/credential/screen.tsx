@@ -9,7 +9,7 @@
  * and triggers a real refetch, unlike Mine/All which is client-side only.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { randomUUID } from "node:crypto";
 import { Box, Text } from "ink";
 import type { FC } from "react";
@@ -22,6 +22,7 @@ import { DataTable } from "../../core/tui/components/DataTable";
 import { SearchBar } from "../../core/tui/components/SearchBar";
 import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
+import { ContextMenu } from "../../core/tui/components/ContextMenu";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
 import { useSearch } from "../../core/tui/data/use-search";
@@ -54,6 +55,9 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
   // Store is a server-side scope — changing it refetches from a different endpoint.
   const [store, setStore] = useState<"system" | "user">("system");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [credConfig, setCredConfig] = useState<{ username: string; description: string } | null>(null);
+  const credConfigCache = useRef<Map<string, { username: string; description: string }>>(new Map());
 
   // Inline "/" search box (client-side filter; no refetch).
   const search = useSearch({ isActive: active, onEditingChange: ctx.setInputCaptured });
@@ -147,6 +151,24 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const rowKeys = useMemo(() => credentials.map((c) => c.id), [credentials]);
   const { cursor, setCursor } = useStableCursor(rowKeys);
   const current = credentials[cursor];
+
+  // Fetch and cache credential config (username) for the detail panel.
+  useEffect(() => {
+    if (!current) { setCredConfig(null); return; }
+    const ck = `${current.id}.${store}`;
+    const cached = credConfigCache.current.get(ck);
+    if (cached) { setCredConfig(cached); return; }
+    void (async () => {
+      try {
+        const cfgClient = await ctx.getClient({ useController: true });
+        const cfg = await getCredentialConfig(cfgClient, current.id, ctx.username, store);
+        credConfigCache.current.set(ck, cfg);
+        setCredConfig(cfg);
+      } catch {
+        /* best-effort */
+      }
+    })();
+  }, [current?.id, store, ctx]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -277,7 +299,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         );
         ctx.notify(`${SYM.ok} Updated credential: ${cred.id}`, "success");
         const cp = [`bee cred update ${cred.id}`];
-        if (result.username !== prefill.username) cp.push(`--username-cred "${result.username}"`);
+        if (result.username !== prefill.username) cp.push(`--username "${result.username}"`);
         if (result.password) cp.push(`--password "***"`);
         if (result.desc !== prefill.description) cp.push(`--description "${result.desc}"`);
         if (store !== "system") cp.push(`--store ${store}`);
@@ -340,31 +362,42 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const canImport = hasRow && current !== undefined && !trackedIds.has(current.id);
   // Unimportable = a tracked row that can be removed from Mine.
   const canUntrack = hasRow && current !== undefined && trackedIds.has(current.id);
+
+  const menuActions = useMemo(
+    () => [
+      { label: "Edit",     icon: SYM.iconEdit,   run: () => { if (current) void editCred(current); } },
+      { label: "Import",   icon: SYM.iconImport, when: () => canImport, run: () => { if (current) doImport(current.id); } },
+      { label: "Unimport", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("credential", current.id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.id}' from Mine`, "success"); void refetch(); } } },
+      { label: "Delete",   icon: SYM.iconDelete, danger: true, run: () => { if (current) void removeCred(current.id); } },
+    ],
+    [current, canImport, canUntrack, baseUrl, store, editCred, doImport, removeCred, refetch, ctx],
+  );
+
   const bindings = useMemo<KeyBinding[]>(
     () => [
-      { key: "n", label: "new", run: () => void createCred() },
-      { key: "c", label: "new", hidden: true, run: () => void createCred() },
-      { key: "e", label: "edit", when: () => hasRow, run: () => { if (current) void editCred(current); } },
-      { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.id); } },
-      { key: "u", label: "unimport", when: () => canUntrack, run: () => { if (current) { untrackResource("credential", current.id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.id}' from Mine`, "success"); void refetch(); } } },
-      { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeCred(current.id); } },
+      { key: "Enter", label: "menu", group: "action", when: () => current !== undefined && !menuOpen, run: () => setMenuOpen(true) },
+      { key: "ctrl+n", label: "new", run: () => void createCred() },
       { key: "S", label: "store", run: () => setStore((s) => (s === "system" ? "user" : "system")) },
-      { key: "a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("credential", nv, ctx.dbPath); return nv; }) },
+      { key: "ctrl+a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("credential", nv, ctx.dbPath); return nv; }) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, canImport, canUntrack, baseUrl, store, ctx, createCred, editCred, doImport, removeCred, refetch, search],
+    [current, menuOpen, createCred, search, refetch, ctx],
   );
-  useKeymap(bindings, { isActive: active && !search.editing });
+  useKeymap(bindings, { isActive: active && !menuOpen && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
 
-  const scope = showAll ? (
-    <Text color={THEME.yellow}>ALL</Text>
-  ) : (
-    <Text color={THEME.success}>MINE</Text>
-  );
+  if (menuOpen && current) {
+    return (
+      <ContextMenu
+        title={`Credential: ${current.id}`}
+        actions={menuActions}
+        onClose={() => setMenuOpen(false)}
+      />
+    );
+  }
 
   const notLoggedIn = !ctx.loggedIn;
   const noController = ctx.loggedIn && !ctx.activeController;
@@ -372,26 +405,23 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {/* Header */}
-      <Text>
-        {" "}
-        {SYM.gear} Credentials
-      </Text>
-      <Text>
-        {" "}
-        {SYM.arrow} Scope: {scope}
+      {/* ── Compact header ── */}
+      <Box>
+        <Text color={THEME.dim}>{SYM.gear} Credentials  </Text>
+        {showAll
+          ? <Text color={THEME.yellow} bold>[ALL]</Text>
+          : <Text color={THEME.success} bold>[MINE]</Text>}
         {"  "}
-        <Text color={THEME.dim}>store:</Text>{" "}
-        <Text color={store === "system" ? THEME.blue : THEME.yellow}>{store}</Text>
-        {autoRefresh ? <Text color={THEME.success}> · auto ⟳</Text> : null}
-        {status === "stale" ? <Text color={THEME.dim}> · refreshing…</Text> : null}
-      </Text>
+        <Text color={store === "system" ? THEME.blue : THEME.yellow}>[{store}]</Text>
+        {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
+        {status === "stale" ? <Text color={THEME.subtle}>  ⟳</Text> : null}
+      </Box>
 
       {/* Body */}
       {notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
-            {SYM.warn} Not logged in — press l to login
+            {SYM.warn} Not logged in — press Ctrl+l to login
           </Text>
         </Box>
       ) : noController ? (
@@ -446,29 +476,46 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             cursor={cursor}
             onCursorChange={setCursor}
             active={active && !search.editing}
-            emptyText="No credentials. Press n to create one."
+            emptyText="No credentials. Press Ctrl+n to create one."
           />
 
           {/* Detail panel */}
           {current && (
-            <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} marginTop={1}>
-              <Text>
-                <Text bold>{current.id}</Text>
-                {"   "}
-                <Text color={THEME.dim}>type:</Text> {current.typeName || "-"}
-                {"   "}
-                <Text color={THEME.dim}>scope:</Text> {current.scope || "-"}
-              </Text>
+            <Box
+              flexDirection="column"
+              borderStyle={borderStyle()}
+              paddingX={1}
+              marginTop={1}
+            >
+              <Box>
+                <Text bold color={THEME.normal}>{current.id}</Text>
+                {"  "}
+                <Text color={THEME.blue}>{current.typeName || "—"}</Text>
+              </Box>
+              <Box>
+                {credConfig?.username && (
+                  <>
+                    <Text color={THEME.dim}>user </Text>
+                    <Text color={THEME.normal}>{credConfig.username}</Text>
+                    <Text color={THEME.subtle}>{"   "}</Text>
+                  </>
+                )}
+                <Text color={THEME.dim}>scope </Text>
+                <Text color={THEME.normal}>{current.scope || "—"}</Text>
+                <Text color={THEME.subtle}>{"   "}</Text>
+                <Text color={THEME.dim}>store </Text>
+                <Text color={store === "system" ? THEME.blue : THEME.yellow}>{store}</Text>
+              </Box>
               {current.displayName && current.displayName !== current.id && (
-                <Text color={THEME.dim} wrap="truncate-end">
-                  display: {current.displayName}
+                <Text color={THEME.dim} wrap="truncate-end">{current.displayName}</Text>
+              )}
+              {baseUrl && (
+                <Text color={THEME.subtle} wrap="truncate-end">
+                  {store === "user"
+                    ? `${baseUrl.replace(/\/+$/, "")}/user/${ctx.username}/credentials/store/user/domain/_/credential/${current.id}/`
+                    : `${baseUrl.replace(/\/+$/, "")}/credentials/store/system/domain/_/credential/${current.id}/`}
                 </Text>
               )}
-              {current.description ? (
-                <Text color={THEME.dim} wrap="truncate-end">
-                  {current.description}
-                </Text>
-              ) : null}
             </Box>
           )}
         </Box>

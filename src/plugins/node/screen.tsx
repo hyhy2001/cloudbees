@@ -6,7 +6,7 @@
  *   useResource → computeView → useStableCursor → DataTable
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps } from "../../registry/types";
@@ -18,6 +18,7 @@ import { DataTable } from "../../core/tui/components/DataTable";
 import { SearchBar } from "../../core/tui/components/SearchBar";
 import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
+import { ContextMenu } from "../../core/tui/components/ContextMenu";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
 import { useSearch } from "../../core/tui/data/use-search";
@@ -25,6 +26,7 @@ import { useStableCursor } from "../../core/tui/data/use-stable-cursor";
 import { useAutoRefresh } from "../../core/tui/data/use-auto-refresh";
 import { getTtl } from "../../core/cache/policy";
 import type { NodeDTO } from "../../core/dtos/node";
+import type { NodeConfig } from "./service";
 import {
   listNodes,
   getNode,
@@ -50,6 +52,9 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [showAll, setShowAll] = useState(() => getScopeShowAll("node", ctx.dbPath));
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [nodeConfig, setNodeConfig] = useState<NodeConfig | null>(null);
+  const configCache = useRef<Map<string, NodeConfig>>(new Map());
   const { columns: termCols } = useDimensions();
 
   // Inline "/" search box (client-side filter; no refetch).
@@ -158,6 +163,24 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const rowKeys = useMemo(() => nodes.map((n) => n.name), [nodes]);
   const { cursor, setCursor } = useStableCursor(rowKeys);
   const current = nodes[cursor];
+
+  // Fetch and cache NodeConfig for the detail panel (best-effort, non-blocking).
+  useEffect(() => {
+    if (!current) { setNodeConfig(null); return; }
+    const cached = configCache.current.get(current.name);
+    if (cached) { setNodeConfig(cached); return; }
+    void (async () => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        const detail = await getNode(client, current.name);
+        const cfg = parseNodeConfig(detail.configXml ?? "");
+        configCache.current.set(current.name, cfg);
+        setNodeConfig(cfg);
+      } catch {
+        /* best-effort; detail panel falls back gracefully */
+      }
+    })();
+  }, [current?.name, ctx]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -395,23 +418,31 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const canImport = hasRow && current !== undefined && !trackedNames.has(current.name);
   // Untrackable = a row currently in the Mine list (can be removed from Mine).
   const canUntrack = hasRow && current !== undefined && trackedNames.has(current.name);
+
+  const menuActions = useMemo(
+    () => [
+      { label: "Toggle Offline", icon: SYM.iconToggle, run: () => { if (current) void doToggleOffline(current); } },
+      { label: "Edit",           icon: SYM.iconEdit,   run: () => { if (current) void editNode(current); } },
+      { label: "Import",         icon: SYM.iconImport, when: () => canImport, run: () => { if (current) doImport(current.name); } },
+      { label: "Unimport",       icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
+      { label: "Delete",         icon: SYM.iconDelete, danger: true, run: () => { if (current) void removeNode(current.name); } },
+    ],
+    [current, canImport, canUntrack, baseUrl, editNode, doImport, removeNode, doToggleOffline, refetch, ctx],
+  );
+
   const bindings = useMemo<KeyBinding[]>(
     () => [
-      { key: "n", label: "new", run: () => void createNode() },
-      { key: "e", label: "edit", when: () => hasRow, run: () => { if (current) void editNode(current); } },
-      { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.name); } },
-      { key: "u", label: "unimport", when: () => canUntrack, run: () => { if (current) { untrackResource("node", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
-      { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeNode(current.name); } },
-      { key: "o", label: "toggle offline", when: () => hasRow, run: () => { if (current) void doToggleOffline(current); } },
-      { key: "a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("node", nv, ctx.dbPath); return nv; }) },
+      { key: "Enter", label: "menu", group: "action", when: () => current !== undefined && !menuOpen, run: () => setMenuOpen(true) },
+      { key: "ctrl+n", label: "new", run: () => void createNode() },
+      { key: "ctrl+a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("node", nv, ctx.dbPath); return nv; }) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, canImport, canUntrack, baseUrl, createNode, editNode, doImport, removeNode, doToggleOffline, refetch, search],
+    [current, menuOpen, createNode, search, refetch, ctx],
   );
-  useKeymap(bindings, { isActive: active && !search.editing });
+  useKeymap(bindings, { isActive: active && !menuOpen && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
 
   const scope = showAll ? (
@@ -420,29 +451,37 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     <Text color={THEME.success}>MINE</Text>
   );
 
+  if (menuOpen && current) {
+    return (
+      <ContextMenu
+        title={`Node: ${current.name}`}
+        actions={menuActions}
+        onClose={() => setMenuOpen(false)}
+      />
+    );
+  }
+
   const notLoggedIn = !ctx.loggedIn;
   const noController = ctx.loggedIn && !ctx.activeController;
   const errMsg = error ? error.message : "";
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {/* Header */}
-      <Text>
-        {" "}
-        {SYM.online} Nodes
-      </Text>
-      <Text>
-        {" "}
-        {SYM.arrow} Scope: {scope}
-        {autoRefresh ? <Text color={THEME.success}> · auto ⟳</Text> : null}
-        {status === "stale" ? <Text color={THEME.dim}> · refreshing…</Text> : null}
-      </Text>
+      {/* ── Compact header ── */}
+      <Box>
+        <Text color={THEME.dim}>{SYM.online} Nodes  </Text>
+        {showAll
+          ? <Text color={THEME.yellow} bold>[ALL]</Text>
+          : <Text color={THEME.success} bold>[MINE]</Text>}
+        {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
+        {status === "stale" ? <Text color={THEME.subtle}>  ⟳</Text> : null}
+      </Box>
 
       {/* Body */}
       {notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
-            {SYM.warn} Not logged in — press l to login
+            {SYM.warn} Not logged in — press Ctrl+l to login
           </Text>
         </Box>
       ) : noController ? (
@@ -505,34 +544,56 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             cursor={cursor}
             onCursorChange={setCursor}
             active={active && !search.editing}
-            emptyText="No nodes. Press n to create one."
+            emptyText="No nodes. Press Ctrl+n to create one."
           />
 
           {/* Detail panel */}
           {current && (
-            <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} marginTop={1}>
-              <Text>
-                <Text bold>{current.displayName || current.name}</Text>
-                {"   "}
-                <Text color={THEME.dim}>executors:</Text> {current.numExecutors}
-                {"   "}
-                <Text color={THEME.dim}>status:</Text>{" "}
-                {current.offline ? (
-                  <Text color={THEME.warning}>offline</Text>
-                ) : (
-                  <Text color={THEME.success}>online</Text>
-                )}
-              </Text>
+            <Box
+              flexDirection="column"
+              borderStyle={borderStyle()}
+              paddingX={1}
+              marginTop={1}
+            >
+              {/* Title + status */}
+              <Box>
+                <Text bold color={THEME.normal}>{current.displayName || current.name}</Text>
+                {"  "}
+                {current.offline
+                  ? <Text color={THEME.warning}>{SYM.offline} offline</Text>
+                  : <Text color={THEME.success}>{SYM.online} online</Text>}
+                <Text color={THEME.dim}>{"  "}exec </Text>
+                <Text color={THEME.normal}>{current.numExecutors}</Text>
+              </Box>
+              {/* Config fields */}
+              {nodeConfig && (
+                <Box>
+                  <Text color={THEME.dim}>launcher </Text>
+                  <Text color={THEME.normal}>{nodeConfig.launcherType}</Text>
+                  {nodeConfig.launcherType === "ssh" && nodeConfig.host ? (
+                    <>
+                      <Text color={THEME.subtle}>{"   "}</Text>
+                      <Text color={THEME.dim}>host </Text>
+                      <Text color={THEME.normal}>{nodeConfig.host}:{nodeConfig.port}</Text>
+                    </>
+                  ) : null}
+                  {nodeConfig.remoteDir ? (
+                    <>
+                      <Text color={THEME.subtle}>{"   "}</Text>
+                      <Text color={THEME.dim}>remote </Text>
+                      <Text color={THEME.normal}>{nodeConfig.remoteDir}</Text>
+                    </>
+                  ) : null}
+                </Box>
+              )}
               {current.labels && current.labels !== "[DELETED_ON_SERVER]" && (
-                <Text color={THEME.dim} wrap="truncate-end">
-                  labels: {current.labels}
+                <Text color={THEME.dim} wrap="truncate-end">labels {current.labels}</Text>
+              )}
+              {baseUrl && (
+                <Text color={THEME.subtle} wrap="truncate-end">
+                  {baseUrl.replace(/\/+$/, "")}/computer/{encodeURIComponent(current.name)}/
                 </Text>
               )}
-              {current.description ? (
-                <Text color={THEME.dim} wrap="truncate-end">
-                  {current.description}
-                </Text>
-              ) : null}
             </Box>
           )}
         </Box>
