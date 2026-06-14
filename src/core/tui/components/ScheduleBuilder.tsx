@@ -33,6 +33,8 @@ export interface ScheduleBuilderProps {
   onResult: (cron: string | null) => void;
   /** Mark the overlay as owning input (suspends shell global keys). */
   setInputCaptured: (captured: boolean) => void;
+  /** Optional job name shown in the modal title. */
+  jobName?: string;
 }
 
 const FREQUENCIES: Frequency[] = ["off", "hourly", "daily", "weekly", "monthly", "custom"];
@@ -73,6 +75,7 @@ export const ScheduleBuilder: FC<ScheduleBuilderProps> = ({
   initial,
   onResult,
   setInputCaptured,
+  jobName,
 }) => {
   const [spec, setSpec] = useState<ScheduleSpec>(initial);
   const [cursor, setCursor] = useState(0);
@@ -204,7 +207,7 @@ export const ScheduleBuilder: FC<ScheduleBuilderProps> = ({
   };
 
   return (
-    <Modal title={`${SYM.gear} Schedule Builder`}>
+    <Modal title={`${SYM.gear} Schedule Builder${jobName ? ` — ${jobName}` : ""}`}>
       {rows.map((kind, idx) => renderRow(kind, idx))}
       <Box marginTop={1} flexDirection="column">
         <Text color={THEME.dim}>{describeSchedule(spec)}</Text>
@@ -214,7 +217,7 @@ export const ScheduleBuilder: FC<ScheduleBuilderProps> = ({
         </Text>
       </Box>
       <Box marginTop={1}>
-        <Text color={THEME.dim}>↑↓ move · ←→ change · Enter save · Esc cancel</Text>
+        <Text color={THEME.dim}>↑↓ move · ←→ change{row === "custom" ? " · type cron (min hr dom mon dow)" : ""} · Enter save · Esc cancel</Text>
       </Box>
     </Modal>
   );

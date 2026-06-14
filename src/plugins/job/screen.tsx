@@ -295,12 +295,11 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
         )}
       </Box>
       {/* Scroll position hint */}
-      {totalLines > logRows && (
-        <Text color={THEME.dim}>
-          {" "}lines {effectiveTop + 1}–{Math.min(effectiveTop + logRows, totalLines)}/{totalLines}
-          {scrollTop < 0 ? " [bottom]" : ""} · j/k scroll · g/G top/bottom
-        </Text>
-      )}
+      <Text color={THEME.dim}>
+        {totalLines > logRows
+          ? ` lines ${effectiveTop + 1}–${Math.min(effectiveTop + logRows, totalLines)}/${totalLines}${scrollTop < 0 ? " [bottom]" : ""} · `
+          : " "}j/k scroll · g/G top/bottom · Esc close
+      </Text>
     </Box>
   );
 };
@@ -847,6 +846,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     return (
       <ScheduleBuilder
         initial={parseCron(scheduleJob.cron)}
+        jobName={scheduleJob.name}
         setInputCaptured={ctx.setInputCaptured}
         onResult={(cron) => {
           const name = scheduleJob.name;
