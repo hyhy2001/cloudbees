@@ -332,6 +332,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Whether the email-ext plugin is installed on the server. Checked once per
   // login session; fails open (true) when the API returns 403 or errors.
   const [emailExtAvailable, setEmailExtAvailable] = useState(true);
+  // When true, the cursor is "locked" on the current job — extra action hints
+  // (p/t/m/e/r/s/d) are shown and Enter opens the log. Esc exits select mode.
+  const [jobSelected, setJobSelected] = useState(false);
 
   // Inline "/" search box (client-side filter; no refetch). Disabled while the
   // log overlay is open.
@@ -451,8 +454,13 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   // ── Stable cursor: keep selection on the same job across refresh/filter ──
   const rowKeys = useMemo(() => jobs.map((j) => j.name), [jobs]);
-  const { cursor, setCursor } = useStableCursor(rowKeys);
+  const { cursor, setCursor: _setCursor } = useStableCursor(rowKeys);
   const current = jobs[cursor];
+  // Moving the cursor exits select mode — the new job has not been "entered".
+  const setCursor = useCallback((next: number) => {
+    setJobSelected(false);
+    _setCursor(next);
+  }, [_setCursor]);
 
   // Pre-build DataTable cell rows once per jobs/trackedNames change.
   // With 1000+ jobs, jobs.map() inside JSX runs on every keystroke (cursor move
@@ -750,15 +758,18 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const canUntrack = hasRow && current !== undefined && trackedNames.has(current.name);
   const bindings = useMemo<KeyBinding[]>(
     () => [
-      { key: "Enter", label: "log", group: "action", when: () => current !== undefined, run: () => { if (current) setLogJob(current.name); } },
-      { key: "r", label: "run", when: () => hasRow, run: () => { if (current) void runJob(current.name); } },
-      { key: "s", label: "stop", when: () => hasRow, run: () => { if (current) void stopJob(current); } },
-      { key: "l", label: "log", hidden: true, when: () => current !== undefined, run: () => { if (current) setLogJob(current.name); } },
-      { key: "n", label: "new", run: () => void newJob() },
-      { key: "e", label: "edit", when: () => hasRow, run: () => { if (current) void editJob(current); } },
-      { key: "p", label: "params", when: () => hasRow, run: () => { if (current) setParamJob(current.name); } },
-      { key: "t", label: "schedule", when: () => hasRow, run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); } },
-      { key: "m", label: "email", when: () => hasRow, run: () => {
+      // Enter: first press selects job (shows extra hints); second press opens log.
+      { key: "Enter", label: "select", group: "action", when: () => current !== undefined && !jobSelected, run: () => setJobSelected(true) },
+      { key: "Enter", label: "log",    group: "action", when: () => current !== undefined && jobSelected,  run: () => { if (current) setLogJob(current.name); } },
+      { key: "Esc",   label: "back",   group: "nav",    when: () => jobSelected, run: () => setJobSelected(false) },
+      { key: "l", label: "log",     hidden: true, when: () => current !== undefined, run: () => { if (current) setLogJob(current.name); } },
+      { key: "r", label: "run",     when: () => hasRow && jobSelected, run: () => { if (current) void runJob(current.name); } },
+      { key: "s", label: "stop",    when: () => hasRow && jobSelected, run: () => { if (current) void stopJob(current); } },
+      { key: "n", label: "new",     run: () => void newJob() },
+      { key: "e", label: "edit",    when: () => hasRow && jobSelected, run: () => { if (current) void editJob(current); } },
+      { key: "p", label: "params",  when: () => hasRow && jobSelected, run: () => { if (current) setParamJob(current.name); } },
+      { key: "t", label: "schedule", when: () => hasRow && jobSelected, run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); } },
+      { key: "m", label: "email",   when: () => hasRow && jobSelected, run: () => {
         if (!current) return;
         const s = summary;
         const hasEmail = s?.email && s.email !== "-";
@@ -773,18 +784,18 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           },
         });
       } },
-      { key: "i", label: "import", when: () => canImport, run: () => { if (current) doImport(current.name); } },
-      { key: "u", label: "unimport", when: () => canUntrack, run: () => { if (current) { untrackResource("job", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
-      { key: "d", label: "del", when: () => hasRow, run: () => { if (current) void removeJob(current.name); } },
+      { key: "i", label: "import",  when: () => canImport && jobSelected, run: () => { if (current) doImport(current.name); } },
+      { key: "u", label: "unimport", when: () => canUntrack && jobSelected, run: () => { if (current) { untrackResource("job", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
+      { key: "d", label: "del",     when: () => hasRow && jobSelected, run: () => { if (current) void removeJob(current.name); } },
       { key: "a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("job", nv, ctx.dbPath); return nv; }) },
       { key: "f", label: recursive ? "flat" : "recursive", run: () => setRecursive((v) => !v) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
       // Esc clears an active query (only shown/handled when one is set).
-      { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
+      { key: "Esc", label: "clear", hidden: true, when: () => search.active && !jobSelected, run: () => search.clear() },
       { key: "R", label: "refresh", run: () => void refetch() },
     ],
-    [current, hasRow, canImport, canUntrack, baseUrl, summary, recursive, runJob, stopJob, newJob, editJob, doImport, removeJob, refetch, search],
+    [current, hasRow, jobSelected, canImport, canUntrack, baseUrl, summary, recursive, runJob, stopJob, newJob, editJob, doImport, removeJob, refetch, search],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
@@ -1016,6 +1027,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           {current && (
             <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} marginTop={1}>
               <Text>
+                {jobSelected ? <Text color={THEME.active}>{SYM.arrow} </Text> : "  "}
                 <Text bold>{current.name}</Text>
                 {"   "}
                 <Text color={THEME.dim}>type:</Text> {current.jobType || "-"}
