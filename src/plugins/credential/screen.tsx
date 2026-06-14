@@ -453,7 +453,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             columns={[
               { header: "", width: 2 },
               { header: "ID", width: 28, flex: true },
-              { header: "Type", width: 22 },
+              { header: "Type", width: 24 },
               { header: "Scope", width: 10 },
               { header: "Description", width: 34, flex: true },
             ]}
@@ -464,7 +464,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 { text: mine ? SYM.tracked : "", color: THEME.success },
                 { text: c.id },
                 {
-                  text: isDeleted ? "[DELETED_ON_SERVER]" : c.typeName.slice(0, 22),
+                  text: isDeleted ? "[DELETED_ON_SERVER]" : c.typeName.slice(0, 23),
                   color: isDeleted ? THEME.error : undefined,
                   dim: isDeleted,
                 },
