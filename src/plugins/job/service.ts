@@ -134,6 +134,34 @@ export async function listJobs(client: CloudBeesClient): Promise<JobDTO[]> {
 }
 
 /**
+ * List jobs inside a specific folder (one level deep, not recursive).
+ * folderPath is the qualified name like "myFolder" or "a/b".
+ * Returns jobs with names qualified as "folderPath/jobName".
+ */
+export async function listJobsInFolder(client: CloudBeesClient, folderPath: string): Promise<JobDTO[]> {
+  const urlPath = `/job/${jobPathSegments(folderPath)}`;
+  const all: JobDTO[] = [];
+  let start = 0;
+
+  while (true) {
+    const end = start + LIST_PAGE_SIZE;
+    const endpoint = `${urlPath}/api/json?tree=${_JOB_TREE}{${start},${end}}`;
+    const cacheKey = start === 0 ? `jobs.list.${client.baseUrl}.${folderPath}` : undefined;
+    const data = await client.get<Record<string, unknown>>(endpoint, cacheKey ? { cacheKey } : undefined);
+    const page = (data?.["jobs"] as Record<string, unknown>[] | undefined) ?? [];
+    for (const j of page) {
+      const dto = jobFromDict(j);
+      dto.name = `${folderPath}/${dto.name}`;
+      all.push(dto);
+    }
+    if (page.length < LIST_PAGE_SIZE) break;
+    start = end;
+  }
+
+  return all;
+}
+
+/**
  * Looks up a job by name. First confirms existence via `/job/<name>/api/json`, then fetches
  * full detail from the list endpoint. Returns a minimal DTO if the job exists but isn't in
  * the list (e.g. inside a folder), or `null` on 404.
@@ -361,6 +389,7 @@ export async function createFreestyleJob(
   client: CloudBeesClient,
   name: string,
   opts: CreateFreestyleOpts = {},
+  folder: string | null = null,
 ): Promise<void> {
   const {
     desc = "",
@@ -392,7 +421,8 @@ export async function createFreestyleJob(
     emailRegex: regex,
     params: params ?? undefined,
   });
-  await client.postXml(`/createItem?name=${encodeURIComponent(name)}`, xml, {
+  const base = folder ? `/job/${jobSeg(folder)}` : "";
+  await client.postXml(`${base}/createItem?name=${encodeURIComponent(name)}`, xml, {
     invalidate: "jobs.",
   });
 }
@@ -402,9 +432,11 @@ export async function createFolder(
   client: CloudBeesClient,
   name: string,
   desc = "",
+  folder: string | null = null,
 ): Promise<void> {
   const xml = buildFolderXml(desc);
-  await client.postXml(`/createItem?name=${encodeURIComponent(name)}`, xml, {
+  const base = folder ? `/job/${jobSeg(folder)}` : "";
+  await client.postXml(`${base}/createItem?name=${encodeURIComponent(name)}`, xml, {
     invalidate: "jobs.",
   });
 }

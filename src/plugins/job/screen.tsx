@@ -32,7 +32,7 @@ import { getTtl } from "../../core/cache/policy";
 import type { JobDTO } from "../../core/dtos/job";
 import {
   listJobs,
-  listJobsRecursive,
+  listJobsInFolder,
   getJobConfigSummary,
   triggerJob,
   triggerJobWithParams,
@@ -306,8 +306,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Mine/All is now a pure client-side filter — no refetch on toggle (P6).
   // Initial scope is persisted per resource-type (Q10).
   const [showAll, setShowAll] = useState(() => getScopeShowAll("job", ctx.dbPath));
-  // Recursive folder traversal — off by default, toggled with `f` in TUI.
-  const [recursive, setRecursive] = useState(false);
+  // Folder navigation stack — empty = root, each entry is a folder name (qualified).
+  const [folderStack, setFolderStack] = useState<string[]>([]);
   // Live terminal width for auto-scaling the table (Q4).
   const { columns: termCols } = useDimensions();
   // Opt-in auto-refresh (legacy P13): OFF by default, toggled with `f`.
@@ -358,7 +358,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   }, [ctx]);
 
   // ── Read pipeline: list jobs via the ResourceStore (TTL, dedup, stale) ──
-  const cacheKey = `jobs.list.${baseUrl ?? "?"}.${recursive ? "recursive" : "flat"}`;
+  const currentFolder = folderStack[folderStack.length - 1] ?? null;
+  const cacheKey = `jobs.list.${baseUrl ?? "?"}.${currentFolder ?? "root"}`;
   const {
     data: allJobs,
     status,
@@ -369,7 +370,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     cacheKey,
     async () => {
       const client = await ctx.getClient({ useController: true });
-      return recursive ? listJobsRecursive(client) : listJobs(client);
+      return currentFolder ? listJobsInFolder(client, currentFolder) : listJobs(client);
     },
     { ttlMs: getTtl("jobs.list") * 1000, enabled: ctx.loggedIn && baseUrl !== null },
   );
@@ -412,9 +413,14 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       filters: { tracked: (j: JobDTO) => trackedNames.has(j.name) },
       activeFilters: ["tracked"],
     });
-    // Tracked-but-missing-on-server → synthetic placeholder rows.
+    // Tracked-but-missing-on-server → synthetic placeholder rows. Only synthesize
+    // for tracked names that live at the current folder level (parent path matches
+    // currentFolder), so drilling into a folder doesn't surface root/sibling jobs.
     const deleted: JobDTO[] = [];
     for (const name of trackedNames) {
+      const lastSlash = name.lastIndexOf("/");
+      const parent = lastSlash >= 0 ? name.slice(0, lastSlash) : null;
+      if (parent !== currentFolder) continue;
       if (!serverNames.has(name)) {
         deleted.push({
           id: name,
@@ -431,7 +437,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       }
     }
     return [...mine, ...deleted];
-  }, [allJobs, showAll, trackedNames]);
+  }, [allJobs, showAll, trackedNames, currentFolder]);
 
   // Pre-compute lowercase search index once per scoped change (not per keystroke).
   // computeView's inner loop calls searchText(item).toLowerCase() for every item on
@@ -465,16 +471,23 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         const st = statusCell(j.color);
         const tp = typeLabel(j.jobType);
         const mine = trackedNames.has(j.name);
+        // Display only the leaf name (strip the folder prefix shown in the breadcrumb).
+        const leaf = currentFolder && j.name.startsWith(`${currentFolder}/`)
+          ? j.name.slice(currentFolder.length + 1)
+          : j.name;
+        // Folders get a trailing "/" + arrow so they read as drillable.
+        const isFolderRow = j.jobType === "FD";
+        const nameText = isFolderRow ? `${leaf}/ ${SYM.arrow}` : leaf;
         return [
           { text: mine ? SYM.tracked : "", color: THEME.success },
           { text: st.text, color: st.color, dim: st.dim },
           { text: tp.text, color: tp.color, dim: (tp as { dim?: boolean }).dim },
-          { text: j.name },
+          { text: nameText, color: isFolderRow ? THEME.yellow : undefined },
           { text: j.lastBuildNumber ? `#${j.lastBuildNumber}` : "—" },
           { text: j.description ?? "" },
         ];
       }),
-    [jobs, trackedNames],
+    [jobs, trackedNames, currentFolder],
   );
 
   // Detail panel (config summary for the highlighted job).
@@ -619,7 +632,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       id: "create-job",
       render: (resolve) => (
         <FormModal
-          title={`${SYM.gear} Create New Job`}
+          title={`${SYM.gear} Create New Job${currentFolder ? ` in /${currentFolder}` : ""}`}
           fields={[
             { name: "name", label: "Job Name", required: true, hint: "unique id" },
             { name: "job_type", label: "Type", options: ["freestyle", "folder"], initial: "freestyle", hint: "freestyle/folder" },
@@ -636,30 +649,32 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     try {
       const client = await ctx.getClient({ useController: true });
       const jobType = (result.job_type || "freestyle").toLowerCase();
+      // Qualified name = folder path + leaf, used for tracking + command log.
+      const qualified = currentFolder ? `${currentFolder}/${result.name}` : result.name;
       if (jobType === "folder") {
-        await createFolder(client, result.name, result.desc ?? "");
+        await createFolder(client, result.name, result.desc ?? "", currentFolder);
       } else {
         await createFreestyleJob(client, result.name, {
             desc: result.desc ?? "",
             shellCmd: result.shell_cmd || "echo hello",
             chdir: result.chdir || null,
             node: result.node && result.node !== NONE_OPTION ? result.node : null,
-          });
+          }, currentFolder);
       }
-      trackResource("job", result.name, ctx.profile, client.baseUrl, ctx.dbPath);
+      trackResource("job", qualified, ctx.profile, client.baseUrl, ctx.dbPath);
       if (jobType === "freestyle" && (!result.node || result.node === NONE_OPTION)) {
         ctx.notify(`${SYM.warn} Job created with no node assigned — will run on any available agent`, "warning");
       } else {
-        ctx.notify(`${SYM.ok} Created ${jobType}: ${result.name}`, "success");
+        ctx.notify(`${SYM.ok} Created ${jobType}: ${qualified}`, "success");
       }
       ctx.logCommand(jobType === "folder"
-        ? `bee job create folder ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}`
-        : `bee job create freestyle ${result.name}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node "${result.node}"` : ""}`);
+        ? `bee job create folder ${qualified}${result.desc ? ` --description "${result.desc}"` : ""}`
+        : `bee job create freestyle ${qualified}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node "${result.node}"` : ""}`);
       void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
     }
-  }, [ctx, refetch]);
+  }, [ctx, refetch, currentFolder]);
 
   const editJob = useCallback(
     async (job: JobDTO): Promise<false | void> => {
@@ -773,6 +788,21 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [selected, current, ctx, refetch]);
 
+  // Folder navigation: Enter on a folder row descends into it; Backspace pops
+  // back up one level. The cursor/selection reset on level change so the user
+  // starts at the top of the new listing.
+  const isFolder = current !== undefined && current.jobType === "FD";
+  const drillIn = useCallback((folderName: string) => {
+    setFolderStack((prev) => [...prev, folderName]);
+    setSelected(new Set());
+    setCursor(0);
+  }, [setCursor]);
+  const goUp = useCallback(() => {
+    setFolderStack((prev) => prev.slice(0, -1));
+    setSelected(new Set());
+    setCursor(0);
+  }, [setCursor]);
+
   // Declarative keymap — the single source for both dispatch and footer hints.
   // `F` (not `f`) toggles auto-refresh so it can't collide with the table's
   // Ctrl+f paging.
@@ -814,19 +844,20 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const bindings = useMemo<KeyBinding[]>(
     () => [
-      { key: "Enter", label: "menu", group: "action", when: () => current !== undefined && !menuOpen, run: () => setMenuOpen(true) },
+      // Enter opens a folder (drill-in) or the action menu for a leaf job.
+      { key: "Enter", label: isFolder ? "open" : "menu", group: "action", when: () => current !== undefined && !menuOpen, run: () => { if (isFolder && current) drillIn(current.name); else setMenuOpen(true); } },
+      { key: "Backspace", label: "up", group: "nav", when: () => folderStack.length > 0, run: () => goUp() },
       { key: "ctrl+d", label: selected.size > 0 ? `delete ${selected.size}` : "delete", group: "action",
         when: () => (selected.size > 0 || current !== undefined) && !menuOpen,
         run: () => void bulkRemoveJobs() },
       { key: "ctrl+n", label: "new",      run: () => void newJob() },
       { key: "ctrl+a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("job", nv, ctx.dbPath); return nv; }) },
-      { key: "ctrl+r", label: recursive ? "flat" : "recursive", run: () => setRecursive((v) => !v) },
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "r", label: "refresh", run: () => void refetch() },
     ],
-    [current, menuOpen, selected, bulkRemoveJobs, newJob, recursive, search, refetch, ctx],
+    [current, menuOpen, selected, bulkRemoveJobs, newJob, isFolder, drillIn, goUp, folderStack, search, refetch, ctx],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
@@ -1001,7 +1032,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         {showAll
           ? <Text color={THEME.yellow} bold>[ALL]</Text>
           : <Text color={THEME.success} bold>[MINE]</Text>}
-        {recursive ? <Text color={THEME.yellow}>  [rec]</Text> : null}
+        {folderStack.length > 0 ? (
+          <Text color={THEME.yellow}>  {SYM.arrow} /{folderStack.join("/")}</Text>
+        ) : null}
         {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
         {status === "stale" ? <Text color={THEME.subtle}>  ⟳</Text> : null}
       </Box>
