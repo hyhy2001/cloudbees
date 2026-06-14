@@ -12,7 +12,7 @@ import type { ReactNode } from "react";
 import type { TuiContext as ITuiContext, ModalSpec, NotifyLevel, GetClientOptions } from "../../registry/types";
 import type { CloudBeesClient } from "../api/types";
 import { getClient as coreGetClient, loginSession, getActiveController } from "../client-factory";
-import { loadSession, getActiveProfileName, switchProfile as coreSwitchProfile } from "../session/session";
+import { loadSession, getActiveProfileName, switchProfile as coreSwitchProfile, clearSession } from "../session/session";
 import type { ToastMessage } from "./components/Toast";
 
 interface ActiveModal {
@@ -120,6 +120,13 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
     [dbPath],
   );
 
+  // Clear the active session and drop back to the logged-out state. The header,
+  // footer, and every screen re-render as not-logged-in immediately.
+  const logout = useCallback(() => {
+    clearSession(undefined, dbPath);
+    setSession({ username: "", activeController: null, loggedIn: false, profile: getActiveProfileName(dbPath) });
+  }, [dbPath]);
+
   // Switch the active profile via core; on success, refresh the in-memory
   // session so every screen re-renders against the newly-active profile.
   const switchProfile = useCallback(
@@ -174,12 +181,13 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
       setActiveKeyHints,
       setInputCaptured,
       login,
+      logout,
       activeKeyHints,
       inputCaptured,
       commandLog,
       logCommand,
     }),
-    [getClient, session, switchProfile, refreshController, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, login, activeKeyHints, inputCaptured, commandLog, logCommand],
+    [getClient, session, switchProfile, refreshController, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, login, logout, activeKeyHints, inputCaptured, commandLog, logCommand],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

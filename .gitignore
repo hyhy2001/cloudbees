@@ -3,6 +3,8 @@ dist/
 legacy/
 makefile_vars
 data/*.db
+data/*.db-shm
+data/*.db-wal
 *.tsbuildinfo
 
 # session secret (never commit)
@@ -11,6 +13,7 @@ data/.bee_secret
 
 # local tooling state (not part of the project)
 .claude/
+.claudeignore
 .atlas/
 CLAUDE.md
 

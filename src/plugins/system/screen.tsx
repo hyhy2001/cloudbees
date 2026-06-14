@@ -105,7 +105,9 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {/* ── Compact header ── */}
       <Box>
         <Text color={THEME.dim}>{SYM.gear} Info</Text>
-        {status === "stale" ? <Text color={THEME.subtle}>  ⟳</Text> : null}
+        {status === "loading" || status === "stale" ? (
+          <Text color={THEME.active}>  ⟳ refreshing…</Text>
+        ) : null}
       </Box>
 
       {/* Body */}

@@ -3,7 +3,7 @@
  * schedule visually instead of typing raw cron. Rendered in place of a screen
  * (like LogViewer / ParamListEditor) and owns all input via ctx.setInputCaptured.
  *
- *   ↑/↓ (or j/k) move between rows · ←/→ change the focused value
+ *   ↑/↓ move between rows · ←/→ change the focused value
  *   on the Custom row, type the raw cron · Enter save · Esc cancel
  *
  * Returns the composed cron string ("" for "off"). The cron build/parse logic

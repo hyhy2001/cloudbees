@@ -2,7 +2,7 @@
  * FormModal — a sequential multi-field text form rendered as a modal.
  * Port of the create-job / create-node / create-credential / login modals.
  *
- * ↑/↓ / j/k / Tab navigate between fields. Enter submits the form from any
+ * ↑/↓ / Tab navigate between fields. Enter submits the form from any
  * field. Esc cancels. A field marked `password` renders its value masked.
  * A field with `options` cycles with ←/→; if `searchable` is also set,
  * Enter/typing opens an inline filtered dropdown (Enter there selects, not
