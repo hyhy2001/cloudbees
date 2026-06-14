@@ -499,6 +499,20 @@ export async function getJobConfigSummary(
         const configuredTriggers = extMail["configuredTriggers"] as
           | Record<string, unknown>
           | undefined;
+        // Presend script / filter metadata — read before cond so we can detect "custom".
+        const presendScript = extMail["presendScript"];
+        let _hasMeta = false;
+        if (typeof presendScript === "string") {
+          const meta = parseEmailFilterMetadata(presendScript);
+          if (meta) {
+            _hasMeta = true;
+            const kws = normalizeKeywords(meta.keywords);
+            const rx = normalizeRegex(meta.regex);
+            if (kws.length > 0) summary.email_keywords = kws.join(", ");
+            if (rx) summary.email_regex = rx;
+          }
+        }
+
         if (configuredTriggers) {
           const hasFailure = Boolean(
             configuredTriggers["hudson.plugins.emailext.plugins.trigger.FailureTrigger"],
@@ -506,21 +520,10 @@ export async function getJobConfigSummary(
           const hasSuccess = Boolean(
             configuredTriggers["hudson.plugins.emailext.plugins.trigger.SuccessTrigger"],
           );
-          if (hasFailure && hasSuccess) summary.email_cond = "always";
+          if (hasFailure && hasSuccess && _hasMeta) summary.email_cond = "custom";
+          else if (hasFailure && hasSuccess) summary.email_cond = "always";
           else if (hasSuccess) summary.email_cond = "success";
           else summary.email_cond = "failed";
-        }
-
-        // Presend script / filter metadata
-        const presendScript = extMail["presendScript"];
-        if (typeof presendScript === "string") {
-          const meta = parseEmailFilterMetadata(presendScript);
-          if (meta) {
-            const kws = normalizeKeywords(meta.keywords);
-            const rx = normalizeRegex(meta.regex);
-            if (kws.length > 0) summary.email_keywords = kws.join(", ");
-            if (rx) summary.email_regex = rx;
-          }
         }
       } else {
         // Built-in Mailer fallback
@@ -664,6 +667,7 @@ export async function updateJobFreestyle(
 
   // Infer current condition from trigger DOM nodes instead of regex-scanning the
   // raw string (robust against element ordering and whitespace variation).
+  // "custom" = both triggers present AND a filter presend script is set.
   const _configuredTriggers = (_extMail?.["configuredTriggers"] ?? {}) as Record<string, unknown>;
   const _hasFailureTrigger = Boolean(
     _configuredTriggers["hudson.plugins.emailext.plugins.trigger.FailureTrigger"],
@@ -671,7 +675,10 @@ export async function updateJobFreestyle(
   const _hasSuccessTrigger = Boolean(
     _configuredTriggers["hudson.plugins.emailext.plugins.trigger.SuccessTrigger"],
   );
-  const _currentCond: string = _hasFailureTrigger && _hasSuccessTrigger
+  const _hasFilterScript = Boolean(_currentMeta);
+  const _currentCond: string = _hasFailureTrigger && _hasSuccessTrigger && _hasFilterScript
+    ? "custom"
+    : _hasFailureTrigger && _hasSuccessTrigger
     ? "always"
     : _hasSuccessTrigger
       ? "success"

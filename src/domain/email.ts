@@ -260,7 +260,8 @@ export function buildEmailPublisherBlock(
   const i2 = baseIndent + "  ";
 
   const triggerLines: string[] = [];
-  if (emailCond === "failed" || emailCond === "always") {
+  // "custom" fires on both failure and success — the presend script handles filtering.
+  if (emailCond === "failed" || emailCond === "always" || emailCond === "custom") {
     triggerLines.push(
       emailTriggerBlock(
         "hudson.plugins.emailext.plugins.trigger.FailureTrigger",
@@ -268,7 +269,7 @@ export function buildEmailPublisherBlock(
       ),
     );
   }
-  if (emailCond === "success" || emailCond === "always") {
+  if (emailCond === "success" || emailCond === "always" || emailCond === "custom") {
     triggerLines.push(
       emailTriggerBlock(
         "hudson.plugins.emailext.plugins.trigger.SuccessTrigger",
