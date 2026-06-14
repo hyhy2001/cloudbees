@@ -36,6 +36,53 @@ export async function healthCheck(client: CloudBeesClient): Promise<SystemHealth
   }
 }
 
+export interface PluginInfo {
+  shortName: string;
+  longName: string;
+  version: string;
+  active: boolean;
+  enabled: boolean;
+}
+
+/**
+ * Fetch installed plugins from /pluginManager/api/json.
+ * Returns empty array on 403 (insufficient permissions) or any error.
+ */
+export async function getInstalledPlugins(client: CloudBeesClient): Promise<PluginInfo[]> {
+  try {
+    const data = (await client.get(
+      "/pluginManager/api/json?tree=plugins[shortName,longName,version,active,enabled]",
+      { cacheKey: "system.plugins" },
+    )) as Record<string, unknown> | null;
+    const raw = (data?.["plugins"] as unknown[]) ?? [];
+    return raw.map((p) => {
+      const r = p as Record<string, unknown>;
+      return {
+        shortName: String(r["shortName"] ?? ""),
+        longName: String(r["longName"] ?? ""),
+        version: String(r["version"] ?? ""),
+        active: Boolean(r["active"]),
+        enabled: Boolean(r["enabled"]),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Check if a specific plugin is installed and active.
+ * Fails open (returns true) on permission errors — caller should not block UX
+ * if we can't verify.
+ */
+export async function hasPlugin(client: CloudBeesClient, shortName: string): Promise<boolean> {
+  const plugins = await getInstalledPlugins(client);
+  // Empty list could mean 403/error (fail-open) or genuinely no plugins.
+  // We treat empty as unknown → true to avoid false negatives.
+  if (plugins.length === 0) return true;
+  return plugins.some((p) => p.shortName === shortName && p.active);
+}
+
 /** Return CloudBees server version string. Mirrors Python get_version(). */
 export async function getVersion(client: CloudBeesClient): Promise<string> {
   try {
