@@ -771,13 +771,19 @@ export async function updateJobFreestyle(
   }
 
   // 5. Email publisher
+  // Always rebuild the publisher block when a filter script is present — this
+  // migrates old presend scripts to the current version on any update, even if
+  // the caller only changed desc/shell/node.
+  const hasExistingEmail = Boolean(_currentEmail);
+  const hasExistingFilter = Boolean(_currentMeta);
   const shouldUpdateEmail =
     email != null ||
     emailCond != null ||
     emailKeywords != null ||
     emailRegex != null ||
     clearEmailKeywords ||
-    clearEmailRegex;
+    clearEmailRegex ||
+    (hasExistingEmail && hasExistingFilter);
 
   if (shouldUpdateEmail) {
     // Use the DOM-read values computed at the top of the function (xmlParser parse).
