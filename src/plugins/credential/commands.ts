@@ -289,7 +289,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
     .option("--username <username>", "New username value")
     .option("--password <password>", "New password")
     .option("--description <desc>", "New description")
-    .option("--store <store>", "Which store (default: system)", "system")
+    .option("--store <store>", "Credential store: 'system' or 'user'", "system")
     .description("Update an existing credential")
     .action(
       async (

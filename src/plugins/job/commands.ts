@@ -192,7 +192,7 @@ export function registerJobCommands(ctx: PluginContext): void {
     .option("--email <emails>", "Comma-separated emails to notify")
     .option(
       "--email-cond <cond>",
-      "When to send email (success|failed|always)",
+      "When to send email: failed | success | always | custom (custom = keyword/regex filter)",
       "failed",
     )
     .option(
@@ -602,7 +602,7 @@ export function registerJobCommands(ctx: PluginContext): void {
     .option("--email <emails>", "Comma-separated emails to notify, or '' to remove")
     .option(
       "--email-cond <cond>",
-      "When to send email (success|failed|always)",
+      "When to send email: failed | success | always | custom (custom = keyword/regex filter)",
     )
     .option(
       "--email-keyword <kw>",

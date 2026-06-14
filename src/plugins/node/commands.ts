@@ -106,47 +106,49 @@ export function registerNodeCommands(ctx: PluginContext): void {
   grp
     .command("create")
     .description("Create a Permanent Agent (SSH or JNLP launcher)")
-    .requiredOption("--name <name>", "Node name")
+    .argument("<name>", "Node name")
     .requiredOption("--remote-dir <dir>", "Remote work directory (e.g. /home/jenkins)")
     .option("--executors <n>", "Number of executors", "1")
     .option("--labels <labels>", "Space-separated labels", "")
     .option("--description <desc>", "Description", "")
-    .option("--host <host>", "SSH Host IP/Hostname (if omitted, creates JNLP/Inbound agent)", "")
-    .option("--port <port>", "SSH Port", "22")
+    .option("--host <host>", "SSH host IP/hostname (omit to create JNLP/Inbound agent)", "")
+    .option("--port <port>", "SSH port (default 22)", "22")
     .option("--cred-id <id>", "Credential ID for SSH connection", "")
-    .option("--java-path <path>", "Path to Java executable", DEFAULT_JAVA_PATH)
+    .option("--java-path <path>", "Path to Java executable on agent", DEFAULT_JAVA_PATH)
     .option("--availability <mode>", "Retention strategy: always | demand", "always")
     .option("--in-demand-delay <min>", "Minutes of demand before going online (demand only)", "0")
     .option("--idle-delay <min>", "Minutes idle before going offline (demand only)", "1")
     .action(
-      async (opts: {
-        name: string;
-        remoteDir: string;
-        executors: string;
-        labels: string;
-        description: string;
-        host: string;
-        port: string;
-        credId: string;
-        javaPath: string;
-        availability: string;
-        inDemandDelay: string;
-        idleDelay: string;
-      }) => {
+      async (
+        name: string,
+        opts: {
+          remoteDir: string;
+          executors: string;
+          labels: string;
+          description: string;
+          host: string;
+          port: string;
+          credId: string;
+          javaPath: string;
+          availability: string;
+          inDemandDelay: string;
+          idleDelay: string;
+        },
+      ) => {
         try {
           const client = await ctx.getClient({ useController: true });
 
           // Skip if the node already exists (mirrors Python's pre-check).
           try {
-            await getNode(client, opts.name);
-            printInfo(`INFO Node '${opts.name}' already exists.`);
+            await getNode(client, name);
+            printInfo(`INFO Node '${name}' already exists.`);
             return;
           } catch (e) {
             if (!(e instanceof NotFoundError)) throw e;
           }
 
           await createPermanentNode(client, {
-            name: opts.name,
+            name,
             remoteDir: opts.remoteDir,
             numExecutors: Number(opts.executors),
             labels: opts.labels,
@@ -162,17 +164,17 @@ export function registerNodeCommands(ctx: PluginContext): void {
           if (opts.availability !== "demand" && opts.availability !== "always") {
             printWarning(`WARN Unknown --availability '${opts.availability}'; defaulted to 'always'. Valid values: always | demand`);
           }
-          trackResource("node", opts.name, profile, client.baseUrl, dbPath);
+          trackResource("node", name, profile, client.baseUrl, dbPath);
 
-          printSuccess(`OK Node '${opts.name}' created.`);
-          printMessage(`  Link: ${client.baseUrl.replace(/\/+$/, "")}/computer/${opts.name}/`);
+          printSuccess(`OK Node '${name}' created.`);
+          printMessage(`  Link: ${client.baseUrl.replace(/\/+$/, "")}/computer/${name}/`);
           if (opts.host) {
             printMessage(`  SSH Node will auto-connect to ${opts.host}:${opts.port} using cred: '${opts.credId || "None"}'`);
             if (!opts.credId) {
               printWarning(`WARN No SSH credential set — ensure key-based auth is configured on the agent.`);
             }
           } else {
-            printMessage(`  Connect it via: Manage Jenkins -> Nodes -> ${opts.name} -> Agent command`);
+            printMessage(`  Connect it via: Manage Jenkins -> Nodes -> ${name} -> Agent command`);
           }
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
@@ -298,18 +300,18 @@ export function registerNodeCommands(ctx: PluginContext): void {
   grp
     .command("update")
     .argument("<name>")
-    .option("--description <desc>", "Node description")
+    .option("--description <desc>", "Description")
     .option("--remote-dir <dir>", "Remote root directory (e.g. /home/jenkins)")
     .option("--executors <n>", "Number of executors")
-    .option("--labels <labels>", "Labels (space separated)")
-    .option("--launcher <type>", "Launch method: ssh or jnlp")
-    .option("--host <host>", "SSH host (ssh launcher)")
+    .option("--labels <labels>", "Space-separated labels")
+    .option("--launcher <type>", "Launch method: ssh | jnlp")
+    .option("--host <host>", "SSH host IP/hostname (ssh launcher)")
     .option("--port <n>", "SSH port (ssh launcher, default 22)")
-    .option("--cred-id <id>", "SSH credentials ID (ssh launcher)")
-    .option("--java-path <path>", "Java path (ssh launcher)")
-    .option("--availability <mode>", "Availability: always or demand")
-    .option("--in-demand-delay <n>", "Minutes of demand before going online (demand)")
-    .option("--idle-delay <n>", "Minutes idle before going offline (demand)")
+    .option("--cred-id <id>", "Credential ID for SSH connection (ssh launcher)")
+    .option("--java-path <path>", "Path to Java executable on agent (ssh launcher)")
+    .option("--availability <mode>", "Retention strategy: always | demand")
+    .option("--in-demand-delay <min>", "Minutes of demand before going online (demand only)")
+    .option("--idle-delay <min>", "Minutes idle before going offline (demand only)")
     .description("Update a node's configuration")
     .action(
       async (
