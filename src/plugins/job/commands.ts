@@ -380,7 +380,10 @@ export function registerJobCommands(ctx: PluginContext): void {
         try {
           const client = await ctx.getClient({ useController: true });
           const parsedTimeout = parseInt(opts.timeout, 10);
-          const timeout = Number.isFinite(parsedTimeout) ? parsedTimeout : 120;
+          const timeout = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 120;
+          if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0) {
+            printWarning(`WARN Invalid --timeout '${opts.timeout}'; defaulted to 120s.`);
+          }
 
           let before = 0;
           if (opts.wait) {
@@ -465,8 +468,8 @@ export function registerJobCommands(ctx: PluginContext): void {
     .action(async (name: string, buildNumberStr: string) => {
       try {
         const buildNumber = parseInt(buildNumberStr, 10);
-        if (!Number.isInteger(buildNumber)) {
-          printError(`Invalid build number: '${buildNumberStr}'`);
+        if (!Number.isInteger(buildNumber) || String(buildNumber) !== buildNumberStr.trim()) {
+          printError(`Invalid build number: '${buildNumberStr}' — must be a positive integer`);
           process.exit(1);
         }
         const client = await ctx.getClient({ useController: true });
@@ -505,7 +508,7 @@ export function registerJobCommands(ctx: PluginContext): void {
                 return;
               }
             } catch (e) {
-              console.error(`[ERROR] Could not get last build number: ${e instanceof Error ? e.message : e}`);
+              printError(`Could not get last build number: ${e instanceof Error ? e.message : e}`);
               process.exit(1);
             }
           }
@@ -537,7 +540,7 @@ export function registerJobCommands(ctx: PluginContext): void {
             const result = lastBuild.result ?? "UNKNOWN";
             printMessage(`\n  Build #${buildNumber} result: ${result}`);
           } catch (e) {
-            console.error(`[ERROR] Could not get build log: ${e instanceof Error ? e.message : e}`);
+            printError(`Could not get build log: ${e instanceof Error ? e.message : e}`);
             process.exit(1);
           }
         } catch (err) {
@@ -649,6 +652,9 @@ export function registerJobCommands(ctx: PluginContext): void {
           // --chdir folds into the shell command (the service has no chdir slot):
           // "cd <dir> && <cmd>". Only meaningful alongside --shell; without --shell
           // there's nothing to prepend to, so chdir alone is a no-op.
+          if (opts.chdir && !opts.shell) {
+            printWarning("WARN --chdir has no effect without --shell; ignored.");
+          }
           const shellInput =
             opts.shell != null && opts.chdir
               ? `cd ${opts.chdir} && ${opts.shell}`

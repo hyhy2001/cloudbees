@@ -159,6 +159,9 @@ export function registerNodeCommands(ctx: PluginContext): void {
             inDemandDelay: Number(opts.inDemandDelay),
             idleDelay: Number(opts.idleDelay),
           });
+          if (opts.availability !== "demand" && opts.availability !== "always") {
+            printWarning(`WARN Unknown --availability '${opts.availability}'; defaulted to 'always'. Valid values: always | demand`);
+          }
           trackResource("node", opts.name, profile, client.baseUrl, dbPath);
 
           printSuccess(`OK Node '${opts.name}' created.`);
@@ -330,10 +333,16 @@ export function registerNodeCommands(ctx: PluginContext): void {
           const client = await ctx.getClient({ useController: true });
           const launcherType =
             opts.launcher === "ssh" || opts.launcher === "jnlp" ? opts.launcher : undefined;
+          if (opts.launcher !== undefined && launcherType === undefined) {
+            printWarning(`WARN Unknown --launcher '${opts.launcher}'; ignored. Valid values: ssh | jnlp`);
+          }
           const availability =
             opts.availability === "always" || opts.availability === "demand"
               ? opts.availability
               : undefined;
+          if (opts.availability !== undefined && availability === undefined) {
+            printWarning(`WARN Unknown --availability '${opts.availability}'; ignored. Valid values: always | demand`);
+          }
           await updateNode(client, name, {
             desc: opts.description,
             remoteDir: opts.remoteDir,

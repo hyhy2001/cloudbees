@@ -286,7 +286,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   grp
     .command("update")
     .argument("<cred_id>")
-    .option("--username-cred <username>", "New username or ID")
+    .option("--username <username>", "New username value")
     .option("--password <password>", "New password")
     .option("--description <desc>", "New description")
     .option("--store <store>", "Which store (default: system)", "system")
@@ -294,7 +294,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
     .action(
       async (
         credId: string,
-        opts: { usernameCred?: string; password?: string; description?: string; store: string },
+        opts: { username?: string; password?: string; description?: string; store: string },
       ) => {
         try {
           validateStore(opts.store);
@@ -303,7 +303,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
           await updateCredential(
             client,
             credId,
-            opts.usernameCred,
+            opts.username,
             opts.password,
             opts.description,
             sessionUsername(dbPath),
