@@ -790,9 +790,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Publish hints to the shell footer while this tab is the active one.
   useEffect(() => {
     if (!active) return;
-    if (logJob || paramJob || scheduleJob || emailJob) ctx.setActiveKeyHints([]);
+    if (logJob || paramJob || scheduleJob || emailJob || menuOpen) ctx.setActiveKeyHints([]);
     else ctx.setActiveKeyHints(bindingsToHints(bindings));
-  }, [active, logJob, paramJob, scheduleJob, emailJob, bindings, ctx]);
+  }, [active, logJob, paramJob, scheduleJob, emailJob, menuOpen, bindings, ctx]);
 
   if (logJob) {
     return <LogViewer ctx={ctx} jobName={logJob} onClose={() => setLogJob(null)} />;

@@ -58,12 +58,11 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const doClearCache = useCallback(async () => {
     try {
       clearAll(ctx.dbPath);
-      ctx.notify("Cache cleared", "success");
-      void refetch();
+      ctx.notify("Cache cleared — refresh each tab with r to reload", "success");
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
     }
-  }, [ctx, refetch]);
+  }, [ctx]);
 
   const plugins = info?.plugins ?? [];
 

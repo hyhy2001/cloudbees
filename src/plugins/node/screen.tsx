@@ -434,7 +434,11 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [current, menuOpen, createNode, search, refetch, ctx],
   );
   useKeymap(bindings, { isActive: active && !menuOpen && !search.editing });
-  useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
+  useEffect(() => {
+    if (!active) return;
+    if (menuOpen) ctx.setActiveKeyHints([]);
+    else ctx.setActiveKeyHints(bindingsToHints(bindings));
+  }, [active, menuOpen, bindings, ctx]);
 
   if (menuOpen && current) {
     return (
