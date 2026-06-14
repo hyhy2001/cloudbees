@@ -43,10 +43,17 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     cacheKey,
     async () => {
       const client = await ctx.getClient({ useController: false });
+      // Plugins live on the controller, not the OC root — fetch them with a
+      // controller-scoped client. The OC root returns 403 for /pluginManager,
+      // which getInstalledPlugins swallows into [] and renders as a misleading
+      // "admin permission" notice. Skip when no controller is selected.
+      const pluginsPromise = ctx.activeController
+        ? ctx.getClient({ useController: true }).then(getInstalledPlugins, () => [])
+        : Promise.resolve<PluginInfo[]>([]);
       const [version, health, plugins] = await Promise.all([
         getVersion(client),
         healthCheck(client),
-        getInstalledPlugins(client),
+        pluginsPromise,
       ]);
       return { version, health, plugins };
     },

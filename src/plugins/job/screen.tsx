@@ -846,7 +846,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     () => [
       // Enter opens a folder (drill-in) or the action menu for a leaf job.
       { key: "Enter", label: isFolder ? "open" : "menu", group: "action", when: () => current !== undefined && !menuOpen, run: () => { if (isFolder && current) drillIn(current.name); else setMenuOpen(true); } },
-      { key: "Backspace", label: "up", group: "nav", when: () => folderStack.length > 0, run: () => goUp() },
+      { key: "backspace", label: "up", group: "nav", when: () => folderStack.length > 0, run: () => goUp() },
       { key: "ctrl+d", label: selected.size > 0 ? `delete ${selected.size}` : "delete", group: "action",
         when: () => (selected.size > 0 || current !== undefined) && !menuOpen,
         run: () => void bulkRemoveJobs() },
