@@ -27,6 +27,8 @@ export interface EmailBuilderProps {
   initial: EmailSpec;
   onResult: (spec: EmailSpec | null) => void;
   setInputCaptured: (captured: boolean) => void;
+  /** False when email-ext plugin is not detected on the server. Disables keywords/regex rows. */
+  groovyAvailable?: boolean;
 }
 
 type RowKind = "enabled" | "email" | "cond" | "keywords" | "regex";
@@ -65,6 +67,7 @@ export const EmailBuilder: FC<EmailBuilderProps> = ({
   initial,
   onResult,
   setInputCaptured,
+  groovyAvailable = true,
 }) => {
   const [spec, setSpec] = useState<EmailSpec>(initial);
   const [cursor, setCursor] = useState(0);
@@ -120,7 +123,11 @@ export const EmailBuilder: FC<EmailBuilderProps> = ({
     // --- nav mode ---
     if (key.escape) { onResult(null); return; }
     if (key.return) {
-      if (row === "email" || row === "keywords" || row === "regex") {
+      if (row === "email") {
+        startEdit(row);
+        return;
+      }
+      if ((row === "keywords" || row === "regex") && groovyAvailable) {
         startEdit(row);
         return;
       }
@@ -171,13 +178,21 @@ export const EmailBuilder: FC<EmailBuilderProps> = ({
       value = COND_LABEL[spec.emailCond as Cond] ?? spec.emailCond;
     } else if (kind === "keywords") {
       isEditing = editing === "keywords";
-      value = isEditing ? `${editBuf}_` : (spec.emailKeywords || "(none)");
+      value = !groovyAvailable
+        ? "(unavailable — email-ext plugin not installed)"
+        : isEditing ? `${editBuf}_` : (spec.emailKeywords || "(none)");
     } else if (kind === "regex") {
       isEditing = editing === "regex";
-      value = isEditing ? `${editBuf}_` : (spec.emailRegex || "(none)");
+      value = !groovyAvailable
+        ? "(unavailable — email-ext plugin not installed)"
+        : isEditing ? `${editBuf}_` : (spec.emailRegex || "(none)");
     }
 
+    const unavailable = !groovyAvailable && (kind === "keywords" || kind === "regex");
     const cycler = kind === "cond" || kind === "enabled";
+    const rowHint = unavailable
+      ? "requires email-ext plugin on the CloudBees server"
+      : ROW_HINT[kind];
 
     return (
       <Box key={kind} flexDirection="column">
@@ -185,15 +200,15 @@ export const EmailBuilder: FC<EmailBuilderProps> = ({
           <Text color={on ? THEME.active : THEME.dim}>
             {on ? SYM.arrow : " "} {label.padEnd(16)}
           </Text>
-          <Text color={isEditing ? THEME.normal : (on ? THEME.normal : THEME.dim)}>
+          <Text color={unavailable ? THEME.dim : isEditing ? THEME.normal : (on ? THEME.normal : THEME.dim)}>
             {cycler && on ? `${SYM.arrow} ` : ""}
             {value}
             {cycler && on ? ` ${SYM.arrow}` : ""}
           </Text>
         </Box>
         {on && (
-          <Text color={THEME.dim}>
-            {"                   "}{ROW_HINT[kind]}
+          <Text color={unavailable ? THEME.warning : THEME.dim}>
+            {"                   "}{rowHint}
           </Text>
         )}
       </Box>

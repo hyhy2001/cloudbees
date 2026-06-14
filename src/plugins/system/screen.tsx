@@ -5,7 +5,7 @@
  * No DataTable — just an info panel with key bindings.
  */
 
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps } from "../../registry/types";
@@ -15,8 +15,8 @@ import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
 import { useResource } from "../../core/tui/data/use-resource";
 import { clearAll } from "../../core/cache/manager";
-import { healthCheck, getVersion } from "./service";
-import type { SystemHealth } from "./service";
+import { healthCheck, getVersion, getInstalledPlugins } from "./service";
+import type { SystemHealth, PluginInfo } from "./service";
 
 // Replicate the build-time version guard from main.ts
 declare const BEE_VERSION: string | undefined;
@@ -25,6 +25,7 @@ const CLI_VERSION = typeof BEE_VERSION !== "undefined" ? BEE_VERSION : "0.3.0";
 interface SystemInfo {
   version: string;
   health: SystemHealth;
+  plugins: PluginInfo[];
 }
 
 // ─── Settings screen ─────────────────────────────────────────────────────────
@@ -42,14 +43,17 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     cacheKey,
     async () => {
       const client = await ctx.getClient({ useController: false });
-      const [version, health] = await Promise.all([
+      const [version, health, plugins] = await Promise.all([
         getVersion(client),
         healthCheck(client),
+        getInstalledPlugins(client),
       ]);
-      return { version, health };
+      return { version, health, plugins };
     },
     { ttlMs: 30_000, enabled: ctx.loggedIn },
   );
+
+  const [pluginCursor, setPluginCursor] = useState(0);
 
   const doClearCache = useCallback(async () => {
     try {
@@ -61,12 +65,28 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [ctx, refetch]);
 
+  const plugins = info?.plugins ?? [];
+
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "c", label: "clear cache", run: () => void doClearCache() },
       { key: "R", label: "refresh", run: () => void refetch() },
+      {
+        key: "j",
+        label: "down",
+        hidden: true,
+        when: () => plugins.length > 0,
+        run: () => setPluginCursor((c) => Math.min(plugins.length - 1, c + 1)),
+      },
+      {
+        key: "k",
+        label: "up",
+        hidden: true,
+        when: () => plugins.length > 0,
+        run: () => setPluginCursor((c) => Math.max(0, c - 1)),
+      },
     ],
-    [doClearCache, refetch],
+    [doClearCache, refetch, plugins.length],
   );
   useKeymap(bindings, { isActive: active });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
@@ -79,7 +99,7 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {/* Header */}
       <Text>
         {" "}
-        {SYM.gear} Settings
+        {SYM.gear} Info
       </Text>
       <Text>
         {" "}
@@ -168,6 +188,45 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               </>
             ) : null}
           </Box>
+
+          {/* Plugin list */}
+          {ctx.loggedIn && plugins.length > 0 && (
+            <Box flexDirection="column" marginTop={1}>
+              <Text>
+                {" "}
+                {SYM.arrow} Plugins ({plugins.length})
+                <Text color={THEME.dim}> · j/k navigate</Text>
+              </Text>
+              <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} marginTop={0}>
+                {plugins.slice(Math.max(0, pluginCursor - 8), pluginCursor + 9).map((p, relIdx) => {
+                  const absIdx = Math.max(0, pluginCursor - 8) + relIdx;
+                  const on = absIdx === pluginCursor;
+                  const statusColor = p.active ? THEME.success : THEME.dim;
+                  const statusText = p.active ? "active" : p.enabled ? "enabled" : "disabled";
+                  return (
+                    <Box key={p.shortName}>
+                      <Text color={on ? THEME.active : THEME.dim}>{on ? SYM.arrow : " "} </Text>
+                      <Text color={on ? THEME.normal : THEME.dim} bold={on}>
+                        {p.shortName.padEnd(40)}
+                      </Text>
+                      <Text color={THEME.dim}>{p.version.padEnd(12)}</Text>
+                      <Text color={statusColor}>{statusText}</Text>
+                    </Box>
+                  );
+                })}
+              </Box>
+              {plugins[pluginCursor] && (
+                <Text color={THEME.dim} wrap="truncate-end">
+                  {" "}{plugins[pluginCursor]!.longName}
+                </Text>
+              )}
+            </Box>
+          )}
+          {ctx.loggedIn && info && plugins.length === 0 && (
+            <Box marginTop={1}>
+              <Text color={THEME.dim}>{SYM.warn} Plugin list unavailable (insufficient permissions)</Text>
+            </Box>
+          )}
         </Box>
       )}
     </Box>
@@ -178,7 +237,7 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 export function systemScreen(): TuiScreen {
   return {
     id: "settings",
-    title: "Settings",
+    title: "Info",
     order: 6,
     icon: SYM.gear,
     Component: SettingsScreen,

@@ -49,6 +49,7 @@ import { getTrackedResources, trackResource, untrackResource } from "../../core/
 import { getScopeShowAll, setScopeShowAll } from "../../core/db/repositories/scope-repo";
 import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
 import { listNodes } from "../node/service";
+import { hasPlugin } from "../system/service";
 import { ScheduleBuilder } from "../../core/tui/components/ScheduleBuilder";
 import { EmailBuilder, type EmailSpec } from "../../core/tui/components/EmailBuilder";
 import { parseCron } from "../../domain/schedule";
@@ -329,12 +330,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [scheduleJob, setScheduleJob] = useState<{ name: string; cron: string } | null>(null);
   // Job whose email config is being edited (EmailBuilder overlay).
   const [emailJob, setEmailJob] = useState<{ name: string; spec: EmailSpec } | null>(null);
+  // Whether the email-ext plugin is installed on the server. Checked once per
+  // login session; fails open (true) when the API returns 403 or errors.
+  const [emailExtAvailable, setEmailExtAvailable] = useState(true);
 
   // Inline "/" search box (client-side filter; no refetch). Disabled while the
   // log overlay is open.
   const search = useSearch({ isActive: active && logJob === null && emailJob === null, onEditingChange: ctx.setInputCaptured });
 
   // Resolve the controller base url once (cheap; client-factory caches session).
+  // Also checks for email-ext plugin availability in the same pass.
   useEffect(() => {
     let cancelled = false;
     if (!ctx.loggedIn) return;
@@ -342,6 +347,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       try {
         const client = await ctx.getClient({ useController: true });
         if (!cancelled) setBaseUrl(client.baseUrl);
+        const available = await hasPlugin(client, "email-ext");
+        if (!cancelled) setEmailExtAvailable(available);
       } catch {
         /* surfaced via the resource error below */
       }
@@ -871,6 +878,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     return (
       <EmailBuilder
         initial={emailJob.spec}
+        groovyAvailable={emailExtAvailable}
         setInputCaptured={ctx.setInputCaptured}
         onResult={(spec) => {
           const name = emailJob.name;
