@@ -2,10 +2,11 @@
  * FormModal — a sequential multi-field text form rendered as a modal.
  * Port of the create-job / create-node / create-credential / login modals.
  *
- * Fields are filled top to bottom. Tab / Enter moves to the next field;
- * on the last field, Enter submits. Esc cancels. A field marked `password`
- * renders its value masked. A field with `options` cycles with ←/→; if
- * `searchable` is also set, Enter/typing opens an inline filtered dropdown.
+ * ↑/↓ / j/k / Tab navigate between fields. Enter submits the form from any
+ * field. Esc cancels. A field marked `password` renders its value masked.
+ * A field with `options` cycles with ←/→; if `searchable` is also set,
+ * Enter/typing opens an inline filtered dropdown (Enter there selects, not
+ * submits — Esc closes dropdown back to normal nav).
  * Free-text fields support Home/End to jump cursor to start/end.
  * Path fields show a vertical candidate list on Tab; ↑/↓ navigate and fill.
  * Fields with `visible` returning false are skipped in nav and not rendered.
@@ -209,17 +210,16 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
     }
 
     // ── Field navigation ───────────────────────────────────────────────────
-    if (key.tab || key.downArrow) {
+    if (key.tab || key.downArrow || (!field.options && !key.ctrl && !key.meta && input === "j")) {
       moveTo(Math.min(cursor + 1, visibleFields.length - 1));
       return;
     }
-    if (key.upArrow) {
+    if (key.upArrow || (!field.options && !key.ctrl && !key.meta && input === "k")) {
       moveTo(Math.max(cursor - 1, 0));
       return;
     }
     if (key.return) {
-      if (cursor < visibleFields.length - 1) { moveTo(cursor + 1); }
-      else { submit(); }
+      submit();
       return;
     }
 
@@ -377,13 +377,13 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
           {dropdownOpen
             ? "type filter · ↑↓ move · Enter select · Esc close"
             : candidates.length > 0 && field?.path
-            ? "↑↓ select candidate · Tab complete again · Enter next/submit · Esc cancel"
+            ? "↑↓ select candidate · Tab complete again · Enter submit · Esc cancel"
             : field?.path
-            ? "Tab complete · ↑↓ move"
+            ? "Tab complete · ↑↓/j/k move · Enter submit"
             : field?.options && field.searchable
-            ? "Enter/type to search · ←→ cycle · ↑↓ move"
-            : "↑↓/Tab move"}{" "}
-          {dropdownOpen ? "" : `· ←→${field?.options ? " cycle" : " cursor"} · Home/End · Enter next/submit · Esc cancel`}
+            ? "Enter/type to search · ←→ cycle · ↑↓/j/k move · Enter submit"
+            : "↑↓/j/k/Tab move · Enter submit"}{" "}
+          {dropdownOpen ? "" : `· ←→${field?.options ? " cycle" : " cursor"} · Home/End · Esc cancel`}
         </Text>
       </Box>
     </Modal>
