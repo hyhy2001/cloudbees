@@ -125,6 +125,7 @@ export function buildEmailFilterPresendScript(
     "    _bee_log_readable = true",
     "  }",
     "} catch (Throwable _bee_ignore) {",
+    "  logger.println('[bee] log fetch error: ' + _bee_ignore.message)",
     "}",
     "if (!_bee_log_readable) {",
     "  logger.println('[bee] cannot read build log; skip content filter')",
