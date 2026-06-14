@@ -3,10 +3,10 @@
  * Ports the DataTable + VimNavMixin behaviour from the Textual TUI.
  *
  * Navigation (only when `active`):
- *   j / ↓        cursor down
- *   k / ↑        cursor up
- *   g            jump to first row
- *   G            jump to last row
+ *   ↓            cursor down
+ *   ↑            cursor up
+ *   Home         jump to first row
+ *   End          jump to last row
  *   Ctrl+f       page down (10 rows)
  *   Ctrl+b       page up (10 rows)
  *
@@ -49,7 +49,7 @@ export interface Cell {
  * `onCursorChange` to update it. The table fires navigation callbacks but
  * never mutates cursor state itself.
  *
- * Nav keys (j/k/g/G/Ctrl+f/Ctrl+b) are only handled when `active` is true
+ * Nav keys (↑/↓/Home/End/Ctrl+f/Ctrl+b) are only handled when `active` is true
  * (owning tab is focused and no modal overlay is open). Enter is intentionally
  * NOT handled here — it is owned by the screen keymap to avoid double-fire.
  *

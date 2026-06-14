@@ -153,6 +153,8 @@ export interface TuiContext {
    * logged-in state. Used by the login modal. Throws on invalid credentials.
    */
   login(serverUrl: string, username: string, token: string): Promise<void>;
+  /** Clear the active profile's session and refresh the TUI to logged-out state. */
+  logout(): void;
   /** Append a CLI-equivalent command string to the command log pane. */
   logCommand(cmd: string): void;
 }

@@ -131,7 +131,9 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           ? <Text color={THEME.success} bold>[{ctx.activeController}]</Text>
           : <Text color={THEME.dim}>[none]</Text>}
         {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
-        {status === "stale" ? <Text color={THEME.subtle}>  ⟳</Text> : null}
+        {status === "loading" || status === "stale" ? (
+          <Text color={THEME.active}>  ⟳ refreshing…</Text>
+        ) : null}
       </Box>
 
       {/* Body */}

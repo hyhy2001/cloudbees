@@ -2,7 +2,7 @@
  * EmailBuilder — a full-screen overlay for editing a job's email-ext config.
  * Rendered in place of a screen (like ScheduleBuilder / ParamListEditor).
  *
- *   ↑/↓ (or j/k) move rows · ←/→ toggle boolean rows · Enter edit text row
+ *   ↑/↓ move rows · ←/→ toggle boolean rows · Enter edit text row
  *   Enter on the last row saves · Esc cancel
  *
  * Returns EmailSpec on confirm, or null on cancel.

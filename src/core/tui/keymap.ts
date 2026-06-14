@@ -58,7 +58,8 @@ export interface KeyHint {
  *   - ctrl:           "ctrl+<char>"      e.g. ctrl+f
  *   - named keys:     "Enter" | "Esc" | "tab" | "shift+tab" |
  *                     "up" | "down" | "left" | "right" |
- *                     "pageup" | "pagedown" | "backspace" | "delete"
+ *                     "pageup" | "pagedown" | "Home" | "End" |
+ *                     "backspace" | "delete"
  *   - printable char: the char verbatim (case-sensitive: "r" ≠ "R")
  *
  * Case matters for plain chars so we can distinguish `a` from `A`/`F` from `f`.
@@ -77,6 +78,8 @@ export function normalizeKey(input: string, key: Key): string {
   if (key.rightArrow) return "right";
   if (key.pageUp) return "pageup";
   if (key.pageDown) return "pagedown";
+  if (key.home) return "Home";
+  if (key.end) return "End";
   if (key.backspace) return "backspace";
   if (key.delete) return "delete";
 

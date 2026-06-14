@@ -8,6 +8,7 @@ import { Toast } from "./components/Toast";
 import { StatusBar } from "./components/StatusBar";
 import { CommandLog } from "./components/CommandLog";
 import { FormModal } from "./components/FormModal";
+import { ConfirmModal } from "./components/ConfirmModal";
 import { useKeymap, type KeyBinding } from "./keymap";
 import { useDimensions } from "./data/use-dimensions";
 import { listProfiles } from "../db/repositories/profile-repo";
@@ -102,6 +103,27 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
           } else {
             tui.notify(`No session for profile '${name}'`, "error");
           }
+        });
+      },
+    },
+    {
+      key: "ctrl+o",
+      label: "logout",
+      group: "global",
+      when: () => tui.loggedIn,
+      run: () => {
+        void tui.openModal<boolean>({
+          id: "confirm-logout",
+          render: (resolve) => (
+            <ConfirmModal
+              message={`Log out${tui.username ? ` ${tui.username}` : ""}? You'll need your API token to log back in.`}
+              onResult={resolve}
+            />
+          ),
+        }).then((ok) => {
+          if (!ok) return;
+          tui.logout();
+          tui.notify(`${SYM.ok} Logged out`, "success");
         });
       },
     },
@@ -212,12 +234,16 @@ const HelpScreen: React.FC<{ screens: TuiScreen[] }> = ({ screens }) => (
       <Text color={THEME.dim}>  Tab / ← →   switch tabs</Text>
       <Text color={THEME.dim}>  1–{screens.length}         jump to tab</Text>
       <Text color={THEME.dim}>  L            toggle command log</Text>
+      <Text color={THEME.dim}>  Ctrl+l       login (when logged out)</Text>
+      <Text color={THEME.dim}>  Ctrl+o       logout (when logged in)</Text>
+      <Text color={THEME.dim}>  Shift+P      switch profile</Text>
       <Text color={THEME.dim}>  ?            this help</Text>
       <Text color={THEME.dim}>  Ctrl+q       quit</Text>
       <Text color={THEME.dim}> </Text>
       <Text color={THEME.active} bold>Tables</Text>
-      <Text color={THEME.dim}>  ↑/↓ / j/k   navigate rows</Text>
+      <Text color={THEME.dim}>  ↑/↓         navigate rows</Text>
       <Text color={THEME.dim}>  Ctrl+f/b     page down/up</Text>
+      <Text color={THEME.dim}>  Home/End     first/last row</Text>
       <Text color={THEME.dim}>  Enter        open action menu</Text>
       <Text color={THEME.dim}>  /            search/filter</Text>
       <Text color={THEME.dim}>  r            refresh</Text>

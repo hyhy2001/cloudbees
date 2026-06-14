@@ -77,10 +77,13 @@ bee --ui                             # or drive everything from the TUI
 Global options:
 
 ```bash
-bee --version        # print version
+bee --version        # print version (also -V)
 bee --debug          # enable debug logging and full stack traces
 bee --ui             # launch the interactive TUI
+bee --install        # self-install: create bee.csh wrapper + symlink ~/.local/bin/bee
 ```
+
+Running `bee` with no subcommand prints help.
 
 ### Auth & Profiles (`bee auth`)
 
@@ -122,7 +125,7 @@ bee controller current         # show active controller
 
 ```bash
 # List tracked jobs (or all jobs on the controller)
-bee job list [--all]
+bee job list [--all] [--recursive]
 
 # Show job details + config summary
 bee job get <name>
@@ -175,6 +178,7 @@ Update jobs (partial — only the flags you pass change):
 bee job update freestyle <name> \
   [--description <text>] \
   [--shell <command>] \
+  [--chdir <directory>] \
   [--node <label_or_node>] \
   [--schedule "<cron_expr>|''"] \
   [--param-def NAME=default ...] \
@@ -213,18 +217,19 @@ bee cred get <cred_id> [--store system|user]
 # Track an existing server credential as yours
 bee cred import <cred_id> [--store system|user]
 
-# Create a Username/Password credential
+# Create a credential — Username+Password OR SecretText (mutually exclusive)
 bee cred create \
-  --username <username> \
-  [--id <cred_id>] \
-  [--password <password>] \
+  --username <username> \           # Username+Password type
+  [--password <password>] \         # prompted if omitted
+  [--secret-text <secret>] \        # SecretText type instead (no --username)
+  [--id <cred_id>] \                # auto-generated (UUID) if omitted
   [--description <text>] \
   [--scope GLOBAL|SYSTEM] \
   [--store system|user]
 
 # Update a credential (partial)
 bee cred update <cred_id> \
-  [--username-cred <new_username>] \
+  [--username <new_username>] \
   [--password <new_password>] \
   [--description <new_description>] \
   [--store system|user]
@@ -246,8 +251,7 @@ bee node get <name>
 bee node import <name>
 
 # Create a node (SSH if --host is given, otherwise JNLP/Inbound)
-bee node create \
-  --name <node_name> \
+bee node create <node_name> \
   --remote-dir </path/to/workdir> \
   [--executors 1] \
   [--labels "<space-separated labels>"] \
@@ -305,7 +309,40 @@ A SQLite TTL cache backs GET calls (controllers, jobs, nodes, credentials — mo
 
 `bee --ui` launches the interactive terminal UI. It requires an interactive terminal (a TTY) and shares the CLI's session/cache/tracked-resource state. The layout auto-scales to the terminal width. On quit, only the TUI's last frame is cleared — your prior scrollback is left intact.
 
-Tabs (one per plugin, contributed via the plugin's optional `screen()`): **Controllers · Nodes · Jobs · Credentials · Settings**.
+Tabs (one per plugin, contributed via the plugin's optional `screen()`), in order: **Controllers · Nodes · Jobs · Credentials · Info**.
+
+### Layout
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│ 🐝  1:Controllers  2:Nodes  3:Jobs ▾  4:Credentials  5:Info   user@ctrl │  ← tab bar + session
+├───────────────────────────────────────────────────────────────────────┤
+│ ⚙ Jobs  [MINE]  › /my-folder            ⟳ refreshing…                   │  ← screen header
+│ / search…                                                               │  ← search bar (when "/")
+│    Status      T   Name              Build#   Description               │
+│  ─────────────────────────────────────────────────────────────────────│
+│  ▶ ✓  OK       FS  build-api         #42      api service              │  ← cursor row
+│    ✗ FAIL      FS  build-web         #17      web bundle               │
+│    ◆           FD  my-folder/ ›      —        (drill in with Enter)    │  ← selected (Space)
+│                                       3/12  › more below                │
+│  ┌─ build-api  #42 ───────────────────────────────────────────────────┐│
+│  │ type FS   schedule H 8 * * *   node linux                          ││  ← detail panel
+│  └────────────────────────────────────────────────────────────────────┘│
+│ ✓  Triggered: build-api                                                 │  ← toast (transient)
+├───────────────────────────────────────────────────────────────────────┤
+│ [Enter] menu  [ctrl+n] new  [ctrl+d] delete  [/] search  [r] refresh  …  │  ← footer hints
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+`Enter` on a row opens a numbered **action menu**; the menu is where Run/Edit/Delete/etc. live, so the table itself only needs cursor + Enter:
+
+```
+  list ──Enter──▶ ContextMenu ──pick──▶ action
+                       │                   ├─▶ ConfirmModal   (Delete, Stop, Logout)
+                       │                   ├─▶ FormModal      (Edit, Run-with-params)
+                       └──Esc──▶ list      ├─▶ ParamListEditor / ScheduleBuilder / EmailBuilder
+                                           └─▶ LogViewer
+```
 
 ### Global keys
 
@@ -313,48 +350,154 @@ Tabs (one per plugin, contributed via the plugin's optional `screen()`): **Contr
 |---|---|
 | `Tab` / `Shift+Tab` | Next / previous tab |
 | `←` / `→` | Previous / next tab |
-| `l` | Login (when logged out) |
-| `P` | Switch active profile (when more than one) |
+| `1`–`9` | Jump straight to tab N |
+| `Ctrl+l` | Login (when logged out) |
+| `Ctrl+o` | Logout (when logged in; asks to confirm) |
+| `Shift+P` | Switch active profile (when more than one) |
+| `Shift+L` | Toggle the CLI-equivalent command log pane |
 | `?` | Toggle help |
-| `q` | Quit |
+| `Ctrl+q` | Quit |
 
 ### Navigation (in any table)
 
 | Key | Action |
 |---|---|
-| `j` / `k` (or `↓`/`↑`) | Move cursor down / up |
-| `g` / `G` | Jump to first / last row |
+| `↑` / `↓` | Move cursor up / down |
+| `Home` / `End` | Jump to first / last row |
 | `Ctrl+f` / `Ctrl+b` | Page down / up |
+| `Space` | Toggle multi-select on the cursor row (where supported) |
 | `/` | Search (filter the list); `Esc` clears |
+| `Enter` | Open the row's action menu (folders: drill in) |
 
 ### Common per-tab keys
 
 | Key | Action |
 |---|---|
-| `n` | Create a new resource |
-| `e` | Edit the selected resource |
-| `i` | Import (track an existing server resource into Mine) |
-| `u` | Unimport (remove from Mine) |
-| `d` | Delete the selected resource |
-| `a` | Toggle Mine / All (remembered across launches) |
-| `F` | Toggle auto-refresh |
-| `R` | Refresh now |
+| `Ctrl+n` | Create a new resource |
+| `Ctrl+d` | Delete — the multi-selected rows, or the cursor row |
+| `Ctrl+a` | Toggle Mine / All (remembered across launches) |
+| `Shift+F` | Toggle auto-refresh |
+| `r` | Refresh now |
+
+Edit / Import / Unimport live inside the `Enter` action menu, not as standalone keys.
 
 ### Tab-specific keys
 
 | Tab | Key | Action |
 |---|---|---|
-| Jobs | `Enter` / `l` | Open build-log viewer (`q`/`b`/`Esc` to return) |
-| Jobs | `r` / `s` | Run / stop the selected job |
-| Jobs | `p` | Edit String parameters (dedicated editor) |
-| Jobs | `t` | Edit schedule (visual cron builder) |
-| Nodes | `o` | Toggle offline/online |
-| Credentials | `S` | Toggle system / user store |
-| Controllers | `Enter` / `s` | Select the active controller |
+| Jobs | `Enter` | On a folder: drill in. On a job: open the action menu |
+| Jobs | `Backspace` | Go up one folder level |
+| Nodes | `Enter` | Action menu (Toggle Offline · Edit · Import · Unimport · Delete) |
+| Credentials | `Shift+S` | Toggle system / user store (a real refetch) |
+| Credentials | `Enter` | Action menu (Edit · Import · Unimport · Delete) |
+| Controllers | `Enter` | Select the active controller |
+| Info | `Ctrl+x` | Clear the local cache |
+
+The Jobs action menu carries: View Log · Run · Stop · Edit · Params · Schedule · Email · Import/Unimport · Delete. Inside the menu, `1`–`9` pick directly, `↑`/`↓` move, `Enter` runs, `Esc` backs out to the list.
+
+### Log viewer
+
+`Enter → View Log` on a job opens a live, streaming log pane:
+
+| Key | Action |
+|---|---|
+| `↑` / `↓` | Scroll one line |
+| `Ctrl+f` / `Ctrl+b` | Page down / up |
+| `Home` / `End` | Jump to top / bottom (bottom re-pins to live tail) |
+| `[` / `]` | Older / newer build |
+| `Esc` | Back to the job list |
+
+Capitalised shortcuts (`Shift+P`, `Shift+L`, `Shift+F`, `Shift+S`) take Shift on purpose — it keeps them clear of the lowercase/`Ctrl` keys (e.g. `Shift+F` auto-refresh vs the table's `Ctrl+f` paging). The footer shows them as `[F]`, `[S]`, etc.
 
 Form fields show a short hint on the right. Fields that take a filesystem path (Remote Dir, Working Dir) **Tab-complete against the local machine's filesystem** — this is a convenience for agents on the same host; the typed value is always what gets sent.
 
 Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful on terminals with limited glyph support).
+
+## Architecture & Internals
+
+`bee` is a single TypeScript codebase compiled to one standalone binary. It is built in strict layers — each layer may only import from the ones below it, never sideways or up:
+
+```
+  main.ts            entry: initDb → initPlugins → parse argv (or --ui → launchTui)
+      │
+  registry/          plugin contract + BUILTIN_PLUGINS list + formatter registry
+      │
+  plugins/           auth · controller · job · node · credential · system
+      │   per plugin: commands.ts (CLI) + service.ts (logic), plus screen.tsx (TUI tab)
+      │   and xml-builder.ts (config.xml) where that plugin needs them
+      ▼
+  core/              stable engine — NEVER imports plugins/
+   ├── api/          HTTP client, CSRF crumb, retry, typed errors
+   ├── session/      AES-256-GCM token crypto + per-profile session
+   ├── cache/        SQLite TTL cache + per-key TTL policy
+   ├── db/           SQLite connection + schema + repositories
+   ├── dtos/         server JSON → typed DTO factories
+   ├── cli/          output formatters (table/json/kv)
+   └── tui/          Ink framework (app, context, keymap, components, data hooks)
+      │
+  domain/            pure leaf logic — imports NOTHING from core/ or plugins/
+                     xml.ts (escaping) · email.ts (presend filter) · schedule.ts (cron)
+```
+
+The same `service.ts` layer backs both the CLI command and the TUI screen for each plugin, so the two front-ends can never drift in behaviour — only in presentation.
+
+### HTTP client (`core/api/client.ts`)
+
+`CloudBeesClientImpl` wraps Bun's global `fetch` and is the single chokepoint for every server call:
+
+- **Auth** — every request carries `Authorization: Basic <base64(user:token)>`.
+- **CSRF crumb** — write requests (`POST`/`DELETE`/`postXml`) fetch a Jenkins crumb from `/crumbIssuer/api/json` (cached 5 min, keyed by base URL) and attach it. A `403` invalidates the crumb and retries once with a fresh one.
+- **Retry** — GETs retry on 5xx/timeout with exponential backoff `[0, 1, 2, 4]s` (4 attempts), bounded by a **total deadline budget** so retries + sleeps never exceed the client timeout (default 30s) in aggregate.
+- **Status mapping** — `401 → AuthError`, `403 → AuthError`, `404 → NotFoundError`, other non-2xx → `APIError`, network failure → `CBConnectionError`. All extend `CBError`; `ValidationError`/`ConfigError` cover bad input and broken local env.
+- **Progressive log** — `getProgressiveText()` reads Jenkins' `logText/progressiveText` byte-offset endpoint (`X-Text-Size` / `X-More-Data` headers) so `--follow` and the TUI log viewer stream new bytes instead of re-downloading the whole log.
+
+### Session crypto (`core/session/crypto.ts`)
+
+Tokens are sealed with **AES-256-GCM**. Layout (base64): `[ iv(12) | authTag(16) | ciphertext ]`. The key is `scrypt(secretFile, "bee:" + uid)` — the random 32-byte secret lives in `.bee_secret` (mode `0600`, beside the DB), and the derived key is cached per-process since scrypt is deliberately slow. GCM's auth tag gives integrity, not just confidentiality. See [Security](#security) for the threat model.
+
+### Cache & TTL policy (`core/cache/`)
+
+A SQLite-backed TTL cache fronts GET calls. TTLs are resource-specific (prefix-matched in `policy.ts`), tuned so TUI tab-switches don't refetch needlessly:
+
+| Key prefix | TTL |
+|---|---|
+| `jobs.list` | 15s |
+| `jobs.detail` | 20s |
+| `controllers.list` / `.detail` | 60s |
+| `controllers.capabilities` | 300s |
+| `nodes.*` / `credentials.*` | 30s |
+| (default) | 15s |
+
+Writes call `invalidatePrefix(...)` so a create/update/delete drops the stale list entry immediately.
+
+### Plugin contract (`registry/`)
+
+Plugins are registered at **compile time** (no dynamic loading) in `BUILTIN_PLUGINS`. Each `Plugin` exposes:
+
+- `meta` — name, description, version, category.
+- `register(ctx)` — attaches commander subcommands and/or formatters. `ctx` hands over the commander `program`, a `getClient()` factory, and the formatter registry — nothing else; plugins import their own services/DTOs directly.
+- `screen?()` — optional; returns a `TuiScreen` (id, title, order, icon, Component). Built-in and third-party tabs use the identical contract — there is no privileged path. The TUI collects every `screen()`, sorts by `order`, and renders one tab each.
+
+### Job/Node/Credential config XML
+
+CloudBees/Jenkins configures jobs, nodes, and credentials via `config.xml` POSTs, not a JSON API. Each plugin owns an `xml-builder.ts` that emits the `config.xml` payload; all dynamic values pass through `domain/xml.ts`'s escaper to prevent XML injection. Freestyle email filtering is a Groovy *presend script* embedded in the job XML (`domain/email.ts`); cron schedules become a `TimerTrigger` (`domain/schedule.ts`).
+
+### Database schema (`core/db/schema.sql`)
+
+Four tables, created lazily on first run:
+
+| Table | Holds |
+|---|---|
+| `profiles` | name, server URL, username, is_default (one row per login profile) |
+| `cache` | key → value + `expires_at` (the TTL cache; indexed on `expires_at` for purge) |
+| `settings` | key → value (active profile/controller pointers, per-type Mine/All scope) |
+| `user_resources` | tracked "Mine" resources, keyed by (type, name, profile, controller) |
+
+Encrypted session tokens live in `settings`, not in a column of their own — the ciphertext is opaque and the secret is outside the DB.
+
+### Build pipeline (`build.ts`)
+
+`bun build --compile` targets `bun-linux-x64-baseline` (no AVX2 requirement → runs on older CPUs / RHEL 8). The version string is injected via `--define BEE_VERSION`. Two non-obvious constraints: bytecode is **off** (Ink's yoga-layout flexbox engine won't compile with it), and the JSX runtime is pinned to production (`jsx`/`jsxs`, not `jsxDEV`) — a dev-runtime build crashes at first render in the compiled binary.
 
 ## Security
 

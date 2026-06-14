@@ -460,7 +460,9 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         <Text color={THEME.dim}>{"  "}</Text>
         <Text color={store === "system" ? THEME.blue : THEME.yellow}>[{store}]</Text>
         {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
-        {status === "stale" ? <Text color={THEME.subtle}>  ⟳</Text> : null}
+        {status === "loading" || status === "stale" ? (
+          <Text color={THEME.active}>  ⟳ refreshing…</Text>
+        ) : null}
       </Box>
 
       {/* Body */}
