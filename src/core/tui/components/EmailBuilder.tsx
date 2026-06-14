@@ -33,18 +33,20 @@ export interface EmailBuilderProps {
 
 type RowKind = "enabled" | "email" | "cond" | "keywords" | "regex";
 
-const COND_OPTIONS = ["failed", "success", "always"] as const;
+const COND_OPTIONS = ["failed", "success", "always", "custom"] as const;
 type Cond = (typeof COND_OPTIONS)[number];
 
 const COND_LABEL: Record<Cond, string> = {
   failed: "On failure",
   success: "On success",
   always: "Always",
+  custom: "Custom (keyword/regex)",
 };
 
 function activeRows(spec: EmailSpec): RowKind[] {
   if (!spec.enabled) return ["enabled"];
-  return ["enabled", "email", "cond", "keywords", "regex"];
+  if (spec.emailCond === "custom") return ["enabled", "email", "cond", "keywords", "regex"];
+  return ["enabled", "email", "cond"];
 }
 
 const ROW_LABEL: Record<RowKind, string> = {
@@ -58,7 +60,7 @@ const ROW_LABEL: Record<RowKind, string> = {
 const ROW_HINT: Record<RowKind, string> = {
   enabled: "toggle with ←/→",
   email: "Enter to edit",
-  cond: "←/→ cycle · keywords/regex filter log content before sending",
+  cond: "←/→ cycle · choose Custom to filter by keyword/regex",
   keywords: "Enter to edit · comma-separated",
   regex: "Enter to edit · Java regex",
 };
