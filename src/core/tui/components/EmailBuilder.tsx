@@ -142,11 +142,11 @@ export const EmailBuilder: FC<EmailBuilderProps> = ({
       onResult(spec);
       return;
     }
-    if (key.upArrow || input === "k") {
+    if (key.upArrow) {
       setCursor((c) => Math.max(0, c - 1));
       return;
     }
-    if (key.downArrow || input === "j") {
+    if (key.downArrow) {
       setCursor((c) => Math.min(rows.length - 1, c + 1));
       return;
     }
@@ -154,14 +154,10 @@ export const EmailBuilder: FC<EmailBuilderProps> = ({
       const dir = key.rightArrow ? 1 : -1;
       if (row === "enabled") {
         setSpec((s) => ({ ...s, enabled: !s.enabled }));
-        if (!spec.enabled) setCursor(0); // collapse back to top when disabling
+        if (spec.enabled) setCursor(0); // collapse back to top when disabling
       } else if (row === "cond") {
         cycleCond(dir);
       }
-    }
-    // s = save shortcut
-    if (input === "s" && editing === null) {
-      onResult(spec);
     }
   });
 
@@ -219,7 +215,7 @@ export const EmailBuilder: FC<EmailBuilderProps> = ({
 
   const hint = editing !== null
     ? "Enter save · Esc cancel edit"
-    : "↑↓/jk move · ←→ toggle · Enter edit/save · s save · Esc cancel";
+    : "↑↓ move · ←→ toggle · Enter edit/save · Esc cancel";
 
   return (
     <Modal title={`${SYM.gear} Email Settings`}>

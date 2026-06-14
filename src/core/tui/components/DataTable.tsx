@@ -83,6 +83,10 @@ export interface DataTableProps {
    * after fixed columns. When absent, every column uses its declared `width`.
    */
   tableWidth?: number;
+  /** Set of selected rowKeys. When provided, renders selection markers. */
+  selected?: Set<string>;
+  /** Called when Space is pressed on the cursor row. Parent toggles the key. */
+  onToggleSelect?: (key: string) => void;
 }
 
 /**
@@ -124,6 +128,8 @@ export const DataTable: React.FC<DataTableProps> = ({
   emptyText = "(no rows)",
   rowKeys,
   tableWidth,
+  selected,
+  onToggleSelect,
 }) => {
   const clamp = useCallback(
     (i: number) => Math.max(0, Math.min(rows.length - 1, i)),
@@ -137,6 +143,11 @@ export const DataTable: React.FC<DataTableProps> = ({
   const handleInput = useCallback(
     (input: string, key: { downArrow: boolean; upArrow: boolean; ctrl: boolean }) => {
       if (rows.length === 0) return;
+      if (input === " " && onToggleSelect) {
+        const key = rowKeys?.[cursor];
+        if (key) onToggleSelect(key);
+        return;
+      }
       if (key.downArrow) onCursorChange(clamp(cursor + 1));
       else if (key.upArrow) onCursorChange(clamp(cursor - 1));
       else if ((key as { home?: boolean }).home) onCursorChange(0);
@@ -144,7 +155,7 @@ export const DataTable: React.FC<DataTableProps> = ({
       else if (key.ctrl && input === "f") onCursorChange(clamp(cursor + PAGE));
       else if (key.ctrl && input === "b") onCursorChange(clamp(cursor - PAGE));
     },
-    [cursor, rows.length, onCursorChange, clamp],
+    [cursor, rows.length, onCursorChange, onToggleSelect, rowKeys, clamp],
   );
   useInput(handleInput, { isActive: active });
 
@@ -180,9 +191,19 @@ export const DataTable: React.FC<DataTableProps> = ({
         const rowIndex = start + vi;
         const isCursor = rowIndex === cursor;
         const rowKey = rowKeys?.[rowIndex] ?? rowIndex;
+        const isSelected = typeof rowKey === "string" && (selected?.has(rowKey) ?? false);
+        // Selection marker: ◆ if selected, ◇ if selectable-but-not-selected, cursor ▶ overrides
+        const indicator = isCursor
+          ? SYM.selected
+          : isSelected
+            ? SYM.iconCheck
+            : onToggleSelect
+              ? "◇"
+              : " ";
+        const indicatorColor = isCursor ? THEME.active : isSelected ? THEME.keyhint : THEME.dim;
         return (
           <Box key={rowKey}>
-            <Text color={isCursor ? THEME.active : THEME.dim}>{isCursor ? SYM.selected : " "}</Text>
+            <Text color={indicatorColor}>{indicator}</Text>
             <Text color={THEME.subtle}> </Text>
             {row.map((cell, ci) => {
               const width = colWidths[ci] ?? columns[ci]?.width ?? 10;

@@ -210,11 +210,11 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
     }
 
     // ── Field navigation ───────────────────────────────────────────────────
-    if (key.tab || key.downArrow || (!field.options && !key.ctrl && !key.meta && input === "j")) {
+    if (key.tab || key.downArrow) {
       moveTo(Math.min(cursor + 1, visibleFields.length - 1));
       return;
     }
-    if (key.upArrow || (!field.options && !key.ctrl && !key.meta && input === "k")) {
+    if (key.upArrow) {
       moveTo(Math.max(cursor - 1, 0));
       return;
     }
@@ -379,10 +379,10 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
             : candidates.length > 0 && field?.path
             ? "↑↓ select candidate · Tab complete again · Enter submit · Esc cancel"
             : field?.path
-            ? "Tab complete · ↑↓/j/k move · Enter submit"
+            ? "Tab complete · ↑↓ move · Enter submit"
             : field?.options && field.searchable
-            ? "Enter/type to search · ←→ cycle · ↑↓/j/k move · Enter submit"
-            : "↑↓/j/k/Tab move · Enter submit"}{" "}
+            ? "Enter/type to search · ←→ cycle · ↑↓ move · Enter submit"
+            : "↑↓/Tab move · Enter submit"}{" "}
           {dropdownOpen ? "" : `· ←→${field?.options ? " cycle" : " cursor"} · Home/End · Esc cancel`}
         </Text>
       </Box>

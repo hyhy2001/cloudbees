@@ -134,6 +134,14 @@ export const ScheduleBuilder: FC<ScheduleBuilderProps> = ({
       setCursor((c) => Math.min(rows.length - 1, c + 1));
       return;
     }
+    if ((key as { home?: boolean }).home) {
+      setCursor(0);
+      return;
+    }
+    if ((key as { end?: boolean }).end) {
+      setCursor(rows.length - 1);
+      return;
+    }
     // On the custom row, printable input edits the raw cron string.
     if (row === "custom") {
       if (key.backspace || key.delete) {
@@ -153,9 +161,7 @@ export const ScheduleBuilder: FC<ScheduleBuilderProps> = ({
       change(1);
       return;
     }
-    // j/k move between rows (safe: never reached on the custom text row above).
-    if (input === "k") setCursor((c) => Math.max(0, c - 1));
-    else if (input === "j") setCursor((c) => Math.min(rows.length - 1, c + 1));
+    // ↑/↓ already handled above; nothing else to do here.
   });
 
   const cron = buildCron(spec);

@@ -58,6 +58,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [credConfig, setCredConfig] = useState<{ username: string; description: string } | null>(null);
   const credConfigCache = useRef<Map<string, { username: string; description: string }>>(new Map());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Inline "/" search box (client-side filter; no refetch).
   const search = useSearch({ isActive: active, onEditingChange: ctx.setInputCaptured });
@@ -352,6 +353,47 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [baseUrl, store, ctx, refetch],
   );
 
+  const toggleSelect = useCallback((key: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const bulkRemoveCreds = useCallback(async (): Promise<false | void> => {
+    const targets = selected.size > 0
+      ? [...selected]
+      : current ? [current.id] : [];
+    if (targets.length === 0) return false;
+    const preview = targets.slice(0, 5).join(", ");
+    const suffix = targets.length > 5 ? `, +${targets.length - 5} more` : "";
+    const msg = targets.length === 1
+      ? `Delete credential '${targets[0]}'? This cannot be undone.`
+      : `Delete ${targets.length} credentials: ${preview}${suffix}\n\nThis cannot be undone.`;
+    const ok = await ctx.openModal<boolean>({
+      id: "confirm-bulk-delete-creds",
+      render: (resolve) => <ConfirmModal message={msg} onResult={resolve} />,
+    });
+    if (!ok) return false;
+    const client = await ctx.getClient({ useController: true });
+    let deletedCount = 0;
+    for (const id of targets) {
+      try {
+        await deleteCredential(client, id, ctx.username, store);
+        untrackResource("credential", id, ctx.profile, `${client.baseUrl}.${store}`, ctx.dbPath);
+        deletedCount++;
+      } catch (err) {
+        ctx.notify(`Failed: ${id} — ${err instanceof Error ? err.message : String(err)}`, "error");
+      }
+    }
+    setSelected(new Set());
+    if (deletedCount > 0) {
+      ctx.notify(`${SYM.ok} Deleted ${deletedCount} credential(s)`, "success");
+      void refetch();
+    }
+  }, [selected, current, ctx, store, refetch]);
+
   // ── Declarative keymap ────────────────────────────────────────────────────
   const hasRow = current !== undefined && current.typeName !== "[DELETED_ON_SERVER]";
   // Importable = a real server row not yet in the Mine list (most useful in All view).
@@ -372,6 +414,9 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "Enter", label: "menu", group: "action", when: () => current !== undefined && !menuOpen, run: () => setMenuOpen(true) },
+      { key: "ctrl+d", label: selected.size > 0 ? `delete ${selected.size}` : "delete", group: "action",
+        when: () => (selected.size > 0 || current !== undefined) && !menuOpen,
+        run: () => void bulkRemoveCreds() },
       { key: "ctrl+n", label: "new", run: () => void createCred() },
       { key: "S", label: "store", run: () => setStore((s) => (s === "system" ? "user" : "system")) },
       { key: "ctrl+a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("credential", nv, ctx.dbPath); return nv; }) },
@@ -380,7 +425,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "r", label: "refresh", run: () => void refetch() },
     ],
-    [current, menuOpen, createCred, search, refetch, ctx],
+    [current, menuOpen, selected, bulkRemoveCreds, createCred, search, refetch, ctx],
   );
   useKeymap(bindings, { isActive: active && !menuOpen && !search.editing });
   useEffect(() => {
@@ -477,6 +522,8 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             onCursorChange={setCursor}
             active={active && !search.editing}
             emptyText="No credentials. Press Ctrl+n to create one."
+            selected={selected}
+            onToggleSelect={toggleSelect}
           />
 
           {/* Detail panel */}

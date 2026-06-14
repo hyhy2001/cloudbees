@@ -5,7 +5,7 @@ import { BeeApp } from "../src/core/tui/app";
 import { TuiProvider } from "../src/core/tui/context";
 import { collectScreens } from "../src/registry/tui";
 
-test("logged-out shell shows the login hint and opens the login modal on 'l'", async () => {
+test("logged-out shell shows the login hint and opens the login modal on 'ctrl+l'", async () => {
   const screens = collectScreens();
   const { lastFrame, stdin } = render(
     <TuiProvider initialSession={{ username: "", activeController: null, loggedIn: false, profile: "default" }}>
@@ -15,8 +15,8 @@ test("logged-out shell shows the login hint and opens the login modal on 'l'", a
   // footer advertises login while logged out
   expect(lastFrame() ?? "").toContain("login");
 
-  // press 'l' → login modal with the three fields
-  stdin.write("l");
+  // press ctrl+l → login modal with the three fields
+  stdin.write("\x0c"); // Ctrl+L = ASCII 12
   await new Promise((r) => setTimeout(r, 50));
   const frame = lastFrame() ?? "";
   expect(frame).toContain("Login to CloudBees");

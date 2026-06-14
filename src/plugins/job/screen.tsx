@@ -315,6 +315,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // The screen's HTTP base url, captured once a client is available. Used both
   // as the resource cache key and for tracked-resource lookups.
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
+  // Multi-select state — set of job names selected via Space.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Overlays local to this tab.
   const [logJob, setLogJob] = useState<string | null>(null);
@@ -730,6 +732,47 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [baseUrl, ctx, refetch],
   );
 
+  const toggleSelect = useCallback((key: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const bulkRemoveJobs = useCallback(async (): Promise<false | void> => {
+    const targets = selected.size > 0
+      ? [...selected]
+      : current ? [current.name] : [];
+    if (targets.length === 0) return false;
+    const preview = targets.slice(0, 5).join(", ");
+    const suffix = targets.length > 5 ? `, +${targets.length - 5} more` : "";
+    const msg = targets.length === 1
+      ? `Delete job '${targets[0]}'? This cannot be undone.`
+      : `Delete ${targets.length} jobs: ${preview}${suffix}\n\nThis cannot be undone.`;
+    const ok = await ctx.openModal<boolean>({
+      id: "confirm-bulk-delete-jobs",
+      render: (resolve) => <ConfirmModal message={msg} onResult={resolve} />,
+    });
+    if (!ok) return false;
+    const client = await ctx.getClient({ useController: true });
+    let deletedCount = 0;
+    for (const name of targets) {
+      try {
+        await deleteJob(client, name);
+        untrackResource("job", name, ctx.profile, client.baseUrl, ctx.dbPath);
+        deletedCount++;
+      } catch (err) {
+        ctx.notify(`Failed: ${name} — ${err instanceof Error ? err.message : String(err)}`, "error");
+      }
+    }
+    setSelected(new Set());
+    if (deletedCount > 0) {
+      ctx.notify(`${SYM.ok} Deleted ${deletedCount} job(s)`, "success");
+      void refetch();
+    }
+  }, [selected, current, ctx, refetch]);
+
   // Declarative keymap — the single source for both dispatch and footer hints.
   // `F` (not `f`) toggles auto-refresh so it can't collide with the table's
   // Ctrl+f paging.
@@ -772,6 +815,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "Enter", label: "menu", group: "action", when: () => current !== undefined && !menuOpen, run: () => setMenuOpen(true) },
+      { key: "ctrl+d", label: selected.size > 0 ? `delete ${selected.size}` : "delete", group: "action",
+        when: () => (selected.size > 0 || current !== undefined) && !menuOpen,
+        run: () => void bulkRemoveJobs() },
       { key: "ctrl+n", label: "new",      run: () => void newJob() },
       { key: "ctrl+a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("job", nv, ctx.dbPath); return nv; }) },
       { key: "ctrl+r", label: recursive ? "flat" : "recursive", run: () => setRecursive((v) => !v) },
@@ -780,7 +826,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
       { key: "r", label: "refresh", run: () => void refetch() },
     ],
-    [current, menuOpen, newJob, recursive, search, refetch, ctx],
+    [current, menuOpen, selected, bulkRemoveJobs, newJob, recursive, search, refetch, ctx],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
@@ -1008,6 +1054,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             onCursorChange={setCursor}
             active={active && !search.editing}
             emptyText="No jobs. Press Ctrl+n to create one."
+            selected={selected}
+            onToggleSelect={toggleSelect}
           />
 
           {/* Detail panel */}

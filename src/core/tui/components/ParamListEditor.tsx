@@ -4,14 +4,14 @@
  * it owns all input via ctx.setInputCaptured so the shell's global keys don't
  * fire while the user is editing.
  *
- *   list mode:  j/k move · i add row · d delete row · e edit row · Enter done · Esc cancel
+ *   list mode:  ↑/↓ move · Enter edit row · Ctrl+n add row · Ctrl+d delete row · Esc cancel
  *   edit mode:  a 3-field FormModal (name / default / description) for one row
  *
  * The list mutations are the pure helpers in data/param-list.ts; this component
  * is the thin interactive shell around a StringParamDef[] in state.
  */
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { FC } from "react";
 import { Modal } from "./Modal";
@@ -62,18 +62,30 @@ export const ParamListEditor: FC<ParamListEditorProps> = ({
         return;
       }
       if (key.return) {
-        onResult(finalizeParams(params));
+        if (params.length > 0) openEdit(cursor);
         return;
       }
-      if (input === "j" || key.downArrow) {
+      if (key.downArrow) {
         setCursor((c) => clampCursor(c + 1, params.length));
         return;
       }
-      if (input === "k" || key.upArrow) {
+      if (key.upArrow) {
         setCursor((c) => clampCursor(c - 1, params.length));
         return;
       }
-      if (input === "i") {
+      if ((key as { home?: boolean }).home) {
+        setCursor(0);
+        return;
+      }
+      if ((key as { end?: boolean }).end) {
+        setCursor(clampCursor(params.length - 1, params.length));
+        return;
+      }
+      if (key.ctrl && input === "s") {
+        onResult(finalizeParams(params));
+        return;
+      }
+      if (key.ctrl && input === "n") {
         // Add a blank row and immediately open its editor.
         const next = addParam(params);
         setParams(next);
@@ -81,15 +93,11 @@ export const ParamListEditor: FC<ParamListEditorProps> = ({
         setCursor(next.length - 1);
         return;
       }
-      if (input === "d") {
+      if (key.ctrl && input === "d") {
         if (params.length === 0) return;
         const next = removeParam(params, cursor);
         setParams(next);
         setCursor((c) => clampCursor(c, next.length));
-        return;
-      }
-      if (input === "e") {
-        if (params.length > 0) openEdit(cursor);
         return;
       }
     },
@@ -127,7 +135,7 @@ export const ParamListEditor: FC<ParamListEditorProps> = ({
   return (
     <Modal title={`${SYM.gear} Edit Build Parameters`}>
       {params.length === 0 ? (
-        <Text color={THEME.dim}>No parameters. Press i to add one.</Text>
+        <Text color={THEME.dim}>No parameters. Press Ctrl+n to add one.</Text>
       ) : (
         params.map((p, i) => {
           const on = i === cursor;
@@ -149,7 +157,7 @@ export const ParamListEditor: FC<ParamListEditorProps> = ({
       )}
       <Box marginTop={1}>
         <Text color={THEME.dim}>
-          j/k move · i add · e edit · d delete · Enter save · Esc cancel
+          ↑/↓ move · Enter edit · Ctrl+n add · Ctrl+d delete · Ctrl+s save · Esc cancel
         </Text>
       </Box>
     </Modal>
