@@ -105,7 +105,7 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
       { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
-      { key: "R", label: "refresh", run: () => void refetch() },
+      { key: "r", label: "refresh", run: () => void refetch() },
     ],
     [current, doSelectController, refetch, search],
   );

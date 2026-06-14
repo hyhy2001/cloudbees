@@ -70,7 +70,7 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "ctrl+x", label: "clear cache", run: () => void doClearCache() },
-      { key: "R", label: "refresh", run: () => void refetch() },
+      { key: "r", label: "refresh", run: () => void refetch() },
       {
         key: "down",
         label: "↓",
@@ -201,9 +201,9 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                     <Box key={p.shortName}>
                       <Text color={on ? THEME.active : THEME.dim}>{on ? SYM.arrow : " "} </Text>
                       <Text color={on ? THEME.normal : THEME.dim} bold={on}>
-                        {p.shortName.padEnd(40)}
+                        {p.shortName.padEnd(36)}
                       </Text>
-                      <Text color={THEME.dim}>{p.version.padEnd(12)}</Text>
+                      <Text color={THEME.dim}>{"  "}{p.version.padEnd(12)}{"  "}</Text>
                       <Text color={statusColor}>{statusText}</Text>
                     </Box>
                   );
@@ -218,7 +218,7 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           )}
           {ctx.loggedIn && info && plugins.length === 0 && (
             <Box marginTop={1}>
-              <Text color={THEME.dim}>{SYM.warn} Plugin list unavailable (insufficient permissions)</Text>
+              <Text color={THEME.dim}>{SYM.warn} Plugin list requires admin/manage permissions on the Jenkins server</Text>
             </Box>
           )}
         </Box>

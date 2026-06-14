@@ -217,6 +217,7 @@ const HelpScreen: React.FC<{ screens: TuiScreen[] }> = ({ screens }) => (
       <Text color={THEME.dim}>  Ctrl+f/b     page down/up</Text>
       <Text color={THEME.dim}>  Enter        open action menu</Text>
       <Text color={THEME.dim}>  /            search/filter</Text>
+      <Text color={THEME.dim}>  r            refresh</Text>
       <Text color={THEME.dim}> </Text>
       <Text color={THEME.active} bold>Tabs</Text>
       {screens.map((s, i) => (
