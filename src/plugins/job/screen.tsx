@@ -94,6 +94,12 @@ function typeLabel(jobType: string | undefined): { text: string; color?: string 
   }
 }
 
+// Container types hold child jobs and are drillable (Enter descends into them):
+// FD = Folder, MB = MultiBranch / Organization Folder.
+function isContainer(jobType: string | undefined): boolean {
+  return jobType === "FD" || jobType === "MB";
+}
+
 // ─── Log viewer overlay (port of log_screen.py streaming) ────────────────────
 
 interface LogViewerProps {
@@ -476,7 +482,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           ? j.name.slice(currentFolder.length + 1)
           : j.name;
         // Folders get a trailing "/" + arrow so they read as drillable.
-        const isFolderRow = j.jobType === "FD";
+        const isFolderRow = isContainer(j.jobType);
         const nameText = isFolderRow ? `${leaf}/ ${SYM.arrow}` : leaf;
         return [
           { text: mine ? SYM.tracked : "", color: THEME.success },
@@ -791,7 +797,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Folder navigation: Enter on a folder row descends into it; Backspace pops
   // back up one level. The cursor/selection reset on level change so the user
   // starts at the top of the new listing.
-  const isFolder = current !== undefined && current.jobType === "FD";
+  const isFolder = current !== undefined && isContainer(current.jobType);
   const drillIn = useCallback((folderName: string) => {
     setFolderStack((prev) => [...prev, folderName]);
     setSelected(new Set());
@@ -814,12 +820,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const menuActions = useMemo(
     () => [
-      { label: "View Log",   icon: SYM.iconLog,      run: () => { if (current) setLogJob(current.name); } },
-      { label: "Run",        icon: SYM.iconPlay,      run: async () => { if (!current) return false; await runJob(current.name); } },
-      { label: "Stop",       icon: SYM.iconStop,      run: async () => { if (!current) return false; await stopJob(current); } },
-      { label: "Edit",       icon: SYM.iconEdit,      run: async () => { if (!current) return false; await editJob(current); } },
-      { label: "Params",     icon: SYM.iconParams,    run: () => { if (current) setParamJob(current.name); } },
-      { label: "Schedule",   icon: SYM.iconSchedule,  run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); } },
+      // Every action returns false so menuOpen stays true. Overlay actions
+      // (ViewLog/Params/Schedule/Email) set their own state, which early-returns
+      // the overlay ahead of the menu render; closing the overlay re-renders with
+      // menuOpen still set, so Esc lands back on the menu, not the bare list.
+      { label: "View Log",   icon: SYM.iconLog,      run: () => { if (current) setLogJob(current.name); return false as const; } },
+      { label: "Run",        icon: SYM.iconPlay,      run: async () => { if (!current) return false as const; return await runJob(current.name); } },
+      { label: "Stop",       icon: SYM.iconStop,      run: async () => { if (!current) return false as const; return await stopJob(current); } },
+      { label: "Edit",       icon: SYM.iconEdit,      run: async () => { if (!current) return false as const; return await editJob(current); } },
+      { label: "Params",     icon: SYM.iconParams,    run: () => { if (current) setParamJob(current.name); return false as const; } },
+      { label: "Schedule",   icon: SYM.iconSchedule,  run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); return false as const; } },
       { label: "Email",      icon: SYM.iconEmail,     run: () => {
         if (!current) return false as const;
         const s = summary;
@@ -834,6 +844,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             emailRegex: (s?.email_regex && s.email_regex !== "-") ? s.email_regex : "",
           },
         });
+        return false as const;
       } },
       { label: "Import",     icon: SYM.iconImport,    when: () => canImport, run: () => { if (current) doImport(current.name); } },
       { label: "Unimport",   icon: SYM.iconImport,    when: () => canUntrack, run: () => { if (current) { untrackResource("job", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
@@ -1036,7 +1047,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           <Text color={THEME.yellow}>  {SYM.arrow} /{folderStack.join("/")}</Text>
         ) : null}
         {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
-        {status === "stale" ? <Text color={THEME.subtle}>  ⟳</Text> : null}
+        {status === "loading" || status === "stale" ? (
+          <Text color={THEME.active}>  ⟳ refreshing…</Text>
+        ) : null}
       </Box>
 
       {/* Body */}
