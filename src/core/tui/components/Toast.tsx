@@ -38,7 +38,7 @@ export const Toast: React.FC<{ message: ToastMessage | null }> = ({ message }) =
   return (
     <Box paddingY={0} marginTop={1}>
       <Text color={LEVEL_COLOR[message.level]} bold>
-        {LEVEL_ICON[message.level]}{"  "}{message.text}
+        {`${LEVEL_ICON[message.level]}  ${message.text}`}
       </Text>
     </Box>
   );

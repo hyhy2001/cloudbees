@@ -207,14 +207,10 @@ export const DataTable: React.FC<DataTableProps> = ({
       {/* Scroll position — only shown when content overflows */}
       {rows.length > height && (
         <Box marginTop={0}>
-          <Text color={THEME.subtle}>
-            {"  "}
-            <Text color={THEME.dim}>
-              {cursor + 1}/{rows.length}
-            </Text>
-            {"  "}
-            {start > 0 ? <Text color={THEME.dim}>{SYM.arrow} scroll up</Text> : null}
-            {start + height < rows.length ? <Text color={THEME.dim}>{start > 0 ? "  " : ""}{SYM.arrow} more below</Text> : null}
+          <Text color={THEME.dim}>
+            {"  "}{cursor + 1}/{rows.length}
+            {start > 0 ? `  ${SYM.arrowLeft} scroll up` : ""}
+            {start + height < rows.length ? `  ${SYM.arrow} more below` : ""}
           </Text>
         </Box>
       )}

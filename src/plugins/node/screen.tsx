@@ -558,12 +558,11 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               {/* Title + status */}
               <Box>
                 <Text bold color={THEME.normal}>{current.displayName || current.name}</Text>
-                {"  "}
+                <Text color={THEME.dim}>{"  "}</Text>
                 {current.offline
                   ? <Text color={THEME.warning}>{SYM.offline} offline</Text>
                   : <Text color={THEME.success}>{SYM.online} online</Text>}
-                <Text color={THEME.dim}>{"  "}exec </Text>
-                <Text color={THEME.normal}>{current.numExecutors}</Text>
+                <Text color={THEME.dim}>{"  "}exec {current.numExecutors}</Text>
               </Box>
               {/* Config fields */}
               {nodeConfig && (

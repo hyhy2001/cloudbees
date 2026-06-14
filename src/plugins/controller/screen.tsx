@@ -193,12 +193,12 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} marginTop={1}>
               <Box>
                 <Text bold color={THEME.normal}>{current.name}</Text>
-                {"  "}
+                <Text color={THEME.dim}>{"  "}</Text>
                 {current.online
                   ? <Text color={THEME.success}>{SYM.online} online</Text>
                   : <Text color={THEME.warning}>{SYM.offline} offline</Text>}
                 {current.name === ctx.activeController
-                  ? <Text color={THEME.active}>{"  "}{SYM.selected} active</Text>
+                  ? <Text color={THEME.active}>{`  ${SYM.selected} active`}</Text>
                   : null}
               </Box>
               <Box>

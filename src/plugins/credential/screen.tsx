@@ -411,7 +411,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         {showAll
           ? <Text color={THEME.yellow} bold>[ALL]</Text>
           : <Text color={THEME.success} bold>[MINE]</Text>}
-        {"  "}
+        <Text color={THEME.dim}>{"  "}</Text>
         <Text color={store === "system" ? THEME.blue : THEME.yellow}>[{store}]</Text>
         {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
         {status === "stale" ? <Text color={THEME.subtle}>  ⟳</Text> : null}
@@ -489,7 +489,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             >
               <Box>
                 <Text bold color={THEME.normal}>{current.id}</Text>
-                {"  "}
+                <Text color={THEME.dim}>{"  "}</Text>
                 <Text color={THEME.blue}>{current.typeName || "—"}</Text>
               </Box>
               <Box>

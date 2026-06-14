@@ -21,8 +21,8 @@ export const CommandLog: React.FC<{ entries: string[] }> = ({ entries }) => {
       marginTop={0}
     >
       <Text color={THEME.dim}>
-        {SYM.iconLog}{"  "}Command Log
-        <Text color={THEME.subtle}>{"  "}{entries.length > 0 ? `(${entries.length})` : ""}</Text>
+        {`${SYM.iconLog}  Command Log`}
+        {entries.length > 0 ? <Text color={THEME.subtle}>{`  (${entries.length})`}</Text> : null}
       </Text>
       {tail.length === 0 ? (
         <Text color={THEME.subtle}>{"  "}—</Text>
