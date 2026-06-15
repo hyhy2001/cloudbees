@@ -496,10 +496,17 @@ export async function authorizeAgentToken(
   tokenId: string,
   grantId: string,
 ): Promise<string> {
+  // authorizeSubmit calls request.getSubmittedForm(), so the field must be carried
+  // in the `json` param (Stapler maps `_.salt` → JSON key `salt`); without it the
+  // POST is rejected with HTTP 400 "This page expects a form submission".
   const html = await client.post<string>(
     `/computer/${nodeSeg(nodeName)}/security-tokens/tokensById/${encodeURIComponent(tokenId)}/authorizeSubmit`,
     {
-      body: formEncode({ "_.salt": grantId, Submit: "Authorize" }),
+      body: formEncode({
+        "_.salt": grantId,
+        json: JSON.stringify({ salt: grantId }),
+        Submit: "Authorize",
+      }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     },
   );
@@ -517,10 +524,17 @@ export async function authorizeFolderGrant(
   requestSecret: string,
 ): Promise<void> {
   const folderPath = folderName.split("/").map(encodeURIComponent).join("/job/");
+  // Same Stapler getSubmittedForm() requirement as step 3 — the salt/hash fields
+  // must also be carried in the `json` param, not just as `_.` form params.
   await client.post(
     `/job/${folderPath}/controlled-slaves/grantsById/${encodeURIComponent(grantId)}/authorizeSubmit`,
     {
-      body: formEncode({ "_.salt": grantId, "_.hash": requestSecret, Submit: "Authorize" }),
+      body: formEncode({
+        "_.salt": grantId,
+        "_.hash": requestSecret,
+        json: JSON.stringify({ salt: grantId, hash: requestSecret }),
+        Submit: "Authorize",
+      }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     },
   );
