@@ -579,7 +579,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { label: "Edit",             icon: SYM.iconEdit,     run: async () => { if (!current) return false as const; return await editNode(current); } },
       { label: "Approve Folder",   icon: SYM.iconSchedule, run: () => { if (!current) return false as const; return doApproveFolder(current); } },
       { label: "Import",           icon: SYM.iconImport,   when: () => canImport, run: () => { if (current) doImport(current.name); } },
-      { label: "Unimport", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); ctx.logCommand(`bee node unimport ${current.name}`); void refetch(); } } },
+      { label: "Unimport", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
       { label: "Delete",           icon: SYM.iconDelete,   danger: true, run: async () => { if (!current) return false as const; return await removeNode(current.name); } },
     ],
     [current, canImport, canUntrack, baseUrl, editNode, doImport, removeNode, doToggleOffline, doApproveFolder, refetch, ctx],

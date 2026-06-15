@@ -823,7 +823,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         const initShell = s?.shell_cmd || "";
         const initChdir = s?.chdir || "";
         const initNode = s?.node && s.node !== "-" ? s.node : NONE_OPTION;
-        const parts = [`bee job update ${job.name}`];
+        const parts = [`bee job update freestyle ${job.name}`];
         if (result.desc !== initDesc) parts.push(`--description "${result.desc}"`);
         if (result.shell_cmd !== initShell || result.chdir !== initChdir) {
           if (finalShell) parts.push(`--shell "${finalShell}"`);
@@ -941,7 +941,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     for (const name of toRemove) untrackResource("job", name, ctx.profile, baseUrl, ctx.dbPath);
     setSelected(new Set());
     ctx.notify(`${SYM.ok} Removed ${toRemove.length} job(s) from Mine`, "success");
-    ctx.logCommand(toRemove.map((n) => `bee job unimport ${n}`).join("\n"));
+    void refetch();
     void refetch();
   }, [baseUrl, selected, trackedNames, ctx, refetch]);
 
@@ -1097,9 +1097,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               ctx.notify(`${SYM.ok} Updated parameters: ${name}`, "success");
               invalidateSummary(name);
               if (params.length === 0) {
-                ctx.logCommand(`bee job update ${name} --clear-params`);
+                ctx.logCommand(`bee job update freestyle ${name} --clear-params`);
               } else {
-                const pp = [`bee job update ${name}`];
+                const pp = [`bee job update freestyle ${name}`];
                 for (const p of params) {
                   pp.push(`--param-def "${p.name}=${p.defaultValue ?? ""}"`);
                 }
@@ -1134,8 +1134,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               ctx.notify(`${SYM.ok} Updated schedule: ${name}`, "success");
               invalidateSummary(name);
               ctx.logCommand(cron
-                ? `bee job update ${name} --schedule "${cron}"`
-                : `bee job update ${name} --schedule ""`
+                ? `bee job update freestyle ${name} --schedule "${cron}"`
+                : `bee job update freestyle ${name} --schedule ""`
               );
               void refetch();
             } catch (err) {
@@ -1185,9 +1185,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               ctx.notify(`${SYM.ok} Updated email: ${name}`, "success");
               invalidateSummary(name);
               if (!spec.enabled) {
-                ctx.logCommand(`bee job update ${name} --email ""`);
+                ctx.logCommand(`bee job update freestyle ${name} --email ""`);
               } else {
-                const ep = [`bee job update ${name}`];
+                const ep = [`bee job update freestyle ${name}`];
                 if (spec.email) ep.push(`--email "${spec.email}"`);
                 if (spec.emailCond) ep.push(`--email-cond "${spec.emailCond}"`);
                 // --email-keyword is repeatable (one flag per keyword), matching CLI behaviour.

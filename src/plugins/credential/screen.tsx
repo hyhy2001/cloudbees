@@ -390,6 +390,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     setSelected(new Set());
     if (deletedCount > 0) {
       ctx.notify(`${SYM.ok} Deleted ${deletedCount} credential(s)`, "success");
+      ctx.logCommand(targets.map((id) => `bee cred delete ${id} --yes${store !== "system" ? ` --store ${store}` : ""}`).join("\n"));
       void refetch();
     }
   }, [selected, current, ctx, store, refetch]);
