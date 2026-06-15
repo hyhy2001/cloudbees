@@ -627,6 +627,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       const client = await ctx.getClient({ useController: true });
       await removeControlledAgentGrant(client, agentsFolder, item.id);
       ctx.notify(`${SYM.ok} Agent removed from '${agentsFolder}'`, "success");
+      ctx.logCommand(`bee job remove-agent ${agentsFolder} ${item.label}`);
       void fetchAgentGrants(agentsFolder);
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -876,6 +877,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     setSelected(new Set());
     if (deletedCount > 0) {
       ctx.notify(`${SYM.ok} Deleted ${deletedCount} job(s)`, "success");
+      ctx.logCommand(targets.map((n) => `bee job delete ${n} --yes`).join("\n"));
       void refetch();
     }
   }, [selected, current, ctx, refetch]);
@@ -925,6 +927,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     for (const name of toAdd) trackResource("job", name, ctx.profile, baseUrl, ctx.dbPath);
     setSelected(new Set());
     ctx.notify(`${SYM.ok} Imported ${toAdd.length} job(s) into Mine`, "success");
+    ctx.logCommand(toAdd.map((n) => `bee job import ${n}`).join("\n"));
     void refetch();
   }, [baseUrl, selected, trackedNames, ctx, refetch]);
 
@@ -938,6 +941,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     for (const name of toRemove) untrackResource("job", name, ctx.profile, baseUrl, ctx.dbPath);
     setSelected(new Set());
     ctx.notify(`${SYM.ok} Removed ${toRemove.length} job(s) from Mine`, "success");
+    ctx.logCommand(toRemove.map((n) => `bee job unimport ${n}`).join("\n"));
     void refetch();
   }, [baseUrl, selected, trackedNames, ctx, refetch]);
 

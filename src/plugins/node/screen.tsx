@@ -517,6 +517,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         { body: "Submit=Yes", headers: { "Content-Type": "application/x-www-form-urlencoded" } },
       );
       ctx.notify(`${SYM.ok} Token revoked`, "success");
+      ctx.logCommand(`bee job remove-agent ${item.label} --agent ${foldersAgent}`);
       void fetchApprovedFolders(foldersAgent);
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -560,6 +561,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     setSelected(new Set());
     if (deletedCount > 0) {
       ctx.notify(`${SYM.ok} Deleted ${deletedCount} node(s)`, "success");
+      ctx.logCommand(targets.map((n) => `bee node delete ${n} --yes`).join("\n"));
       void refetch();
     }
   }, [selected, current, ctx, refetch]);
@@ -577,7 +579,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { label: "Edit",             icon: SYM.iconEdit,     run: async () => { if (!current) return false as const; return await editNode(current); } },
       { label: "Approve Folder",   icon: SYM.iconSchedule, run: () => { if (!current) return false as const; return doApproveFolder(current); } },
       { label: "Import",           icon: SYM.iconImport,   when: () => canImport, run: () => { if (current) doImport(current.name); } },
-      { label: "Unimport",         icon: SYM.iconImport,   when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
+      { label: "Unimport", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); ctx.logCommand(`bee node unimport ${current.name}`); void refetch(); } } },
       { label: "Delete",           icon: SYM.iconDelete,   danger: true, run: async () => { if (!current) return false as const; return await removeNode(current.name); } },
     ],
     [current, canImport, canUntrack, baseUrl, editNode, doImport, removeNode, doToggleOffline, doApproveFolder, refetch, ctx],
