@@ -1023,6 +1023,11 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         when: () => multi && !menuOpen, run: () => bulkImport() },
       { key: "u", label: "unimport", group: "action", hidden: !multi,
         when: () => multi && !menuOpen, run: () => bulkUnimport() },
+      { key: "A", label: "agents", group: "action", hidden: multi || current?.jobType !== "FD", when: () => !multi && current?.jobType === "FD" && !menuOpen, run: (): false => {
+        if (!current) return false;
+        setAgentsFolder(current.name);
+        return false;
+      } },
       { key: "ctrl+a", label: "mine/all", hidden: multi, when: () => !multi, run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("job", nv, ctx.dbPath); return nv; }) },
       { key: "F", label: "auto", hidden: multi, when: () => !multi, run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
