@@ -279,11 +279,10 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       } else {
         ctx.notify(`${SYM.ok} Created node: ${result.name}`, "success");
       }
-      const ncp = [`bee node create --name "${result.name}"`, `--remote-dir "${result.remoteDir}"`];
+      const ncp = [`bee node create "${result.name}"`, `--remote-dir "${result.remoteDir}"`];
       if (result.numExecutors && result.numExecutors !== "1") ncp.push(`--executors ${result.numExecutors}`);
       if (result.labels) ncp.push(`--labels "${result.labels}"`);
       if (result.desc) ncp.push(`--description "${result.desc}"`);
-      ncp.push(`--launcher ${result.launcher}`);
       if (isSsh) {
         if (result.host) ncp.push(`--host "${result.host}"`);
         if (result.port && result.port !== "22") ncp.push(`--port ${result.port}`);
@@ -430,6 +429,8 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           if (result.inDemandDelay !== String(cfg.inDemandDelay)) np.push(`--in-demand-delay ${result.inDemandDelay}`);
           if (result.idleDelay !== String(cfg.idleDelay)) np.push(`--idle-delay ${result.idleDelay}`);
         }
+        const prevControlled = cfg.controlledAgent ? "yes" : "no";
+        if (result.controlled !== prevControlled) np.push(`--controlled-agent ${result.controlled === "yes" ? "true" : "false"}`);
         ctx.logCommand(np.join(" "));
         void refetch();
       } catch (err) {
@@ -517,7 +518,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         { body: "Submit=Yes", headers: { "Content-Type": "application/x-www-form-urlencoded" } },
       );
       ctx.notify(`${SYM.ok} Token revoked`, "success");
-      ctx.logCommand(`bee job remove-agent ${item.label} ${foldersAgent}`);
+      ctx.logCommand(`bee job remove-agent ${foldersAgent} ${item.label}`);
       void fetchApprovedFolders(foldersAgent);
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -579,7 +580,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { label: "Edit",             icon: SYM.iconEdit,     run: async () => { if (!current) return false as const; return await editNode(current); } },
       { label: "Approve Folder",   icon: SYM.iconSchedule, run: () => { if (!current) return false as const; return doApproveFolder(current); } },
       { label: "Import",           icon: SYM.iconImport,   when: () => canImport, run: () => { if (current) doImport(current.name); } },
-      { label: "Unimport", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
+      { label: "Unimport", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); ctx.logCommand(`bee node unimport ${current.name}`); void refetch(); } } },
       { label: "Delete",           icon: SYM.iconDelete,   danger: true, run: async () => { if (!current) return false as const; return await removeNode(current.name); } },
     ],
     [current, canImport, canUntrack, baseUrl, editNode, doImport, removeNode, doToggleOffline, doApproveFolder, refetch, ctx],
@@ -767,7 +768,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               {current.labels && current.labels !== "[DELETED_ON_SERVER]" && (
                 <Text color={THEME.dim} wrap="truncate-end">labels {current.labels}</Text>
               )}
-              {baseUrl && (
+              {baseUrl && current.labels !== "[DELETED_ON_SERVER]" && (
                 <Text color={THEME.subtle} wrap="truncate-end">
                   {baseUrl.replace(/\/+$/, "")}/computer/{encodeURIComponent(current.name)}/
                 </Text>

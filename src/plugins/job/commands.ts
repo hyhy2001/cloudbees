@@ -369,6 +369,27 @@ export function registerJobCommands(ctx: PluginContext): void {
       }
     });
 
+  // ── unimport ─────────────────────────────────────────────────────────────────
+  grp
+    .command("unimport")
+    .description("Remove a job from Mine (stops tracking it locally; does not delete from server)")
+    .argument("<name>", "Job name as it appears on the server")
+    .action(async (name: string) => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        const tracked = getTrackedResources("job", profile, client.baseUrl, dbPath);
+        if (!tracked.includes(name)) {
+          printInfo(`INFO Job '${name}' is not in Mine.`);
+          return;
+        }
+        untrackResource("job", name, profile, client.baseUrl, dbPath);
+        printSuccess(`OK Removed job '${name}' from Mine.`);
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
   // ── run ───────────────────────────────────────────────────────────────────
   grp
     .command("run")

@@ -295,6 +295,27 @@ export function registerNodeCommands(ctx: PluginContext): void {
       }
     });
 
+  // ── unimport ─────────────────────────────────────────────────────────────────
+  grp
+    .command("unimport")
+    .argument("<name>")
+    .description("Remove a node from Mine (stops tracking it locally; does not delete from server)")
+    .action(async (name: string) => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        const tracked = getTrackedResources("node", profile, client.baseUrl, dbPath);
+        if (!tracked.includes(name)) {
+          printInfo(`INFO Node '${name}' is not in Mine.`);
+          return;
+        }
+        untrackResource("node", name, profile, client.baseUrl, dbPath);
+        printSuccess(`OK Removed node '${name}' from Mine.`);
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
   // ── update ──────────────────────────────────────────────────────────────────
   grp
     .command("update")

@@ -260,6 +260,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const editCred = useCallback(
     async (cred: CredentialDTO): Promise<false | void> => {
+      const isSecret = cred.typeName.toLowerCase().includes("string") || cred.typeName.toLowerCase().includes("secret");
       let prefill = { username: "", description: cred.description ?? "" };
       try {
         const cfgClient = await ctx.getClient({ useController: true });
@@ -270,17 +271,27 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       }
       const result = await ctx.openModal<Record<string, string>>({
         id: "edit-credential",
-        render: (resolve) => (
-          <FormModal
-            title={`${SYM.dot} Edit Credential: ${cred.id}`}
-            fields={[
-              { name: "username", label: "Username", initial: prefill.username, hint: "login user" },
-              { name: "password", label: "Password", password: true, hint: "blank = keep current" },
-              { name: "desc", label: "Description", initial: prefill.description, hint: "optional" },
-            ]}
-            onResult={resolve}
-          />
-        ),
+        render: (resolve) =>
+          isSecret ? (
+            <FormModal
+              title={`${SYM.dot} Edit Credential: ${cred.id}`}
+              fields={[
+                { name: "secret", label: "Secret", password: true, hint: "blank = keep current" },
+                { name: "desc", label: "Description", initial: prefill.description, hint: "optional" },
+              ]}
+              onResult={resolve}
+            />
+          ) : (
+            <FormModal
+              title={`${SYM.dot} Edit Credential: ${cred.id}`}
+              fields={[
+                { name: "username", label: "Username", initial: prefill.username, hint: "login user" },
+                { name: "password", label: "Password", password: true, hint: "blank = keep current" },
+                { name: "desc", label: "Description", initial: prefill.description, hint: "optional" },
+              ]}
+              onResult={resolve}
+            />
+          ),
       });
       if (!result) return false;
       try {
@@ -288,16 +299,20 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         await updateCredential(
           client,
           cred.id,
-          result.username || undefined,
-          result.password || undefined,
+          isSecret ? undefined : (result.username || undefined),
+          isSecret ? (result.secret || undefined) : (result.password || undefined),
           result.desc,
           ctx.username,
           store,
         );
         ctx.notify(`${SYM.ok} Updated credential: ${cred.id}`, "success");
         const cp = [`bee cred update ${cred.id}`];
-        if (result.username !== prefill.username) cp.push(`--username "${result.username}"`);
-        if (result.password) cp.push(`--password "***"`);
+        if (isSecret) {
+          if (result.secret) cp.push(`--secret-text "***"`);
+        } else {
+          if (result.username !== prefill.username) cp.push(`--username "${result.username}"`);
+          if (result.password) cp.push(`--password "***"`);
+        }
         if (result.desc !== prefill.description) cp.push(`--description "${result.desc}"`);
         if (store !== "system") cp.push(`--store ${store}`);
         ctx.logCommand(cp.join(" "));
@@ -406,7 +421,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     () => [
       { label: "Edit",     icon: SYM.iconEdit,   run: async () => { if (!current) return false as const; return await editCred(current); } },
       { label: "Import",   icon: SYM.iconImport, when: () => canImport, run: () => { if (current) doImport(current.id); } },
-      { label: "Unimport", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("credential", current.id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.id}' from Mine`, "success"); void refetch(); } } },
+      { label: "Unimport", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("credential", current.id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.id}' from Mine`, "success"); ctx.logCommand(`bee cred unimport ${current.id}${store !== "system" ? ` --store ${store}` : ""}`); void refetch(); } } },
       { label: "Delete",   icon: SYM.iconDelete, danger: true, run: async () => { if (!current) return false as const; return await removeCred(current.id); } },
     ],
     [current, canImport, canUntrack, baseUrl, store, editCred, doImport, removeCred, refetch, ctx],
@@ -560,7 +575,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               {current.displayName && current.displayName !== current.id && (
                 <Text color={THEME.dim} wrap="truncate-end">{current.displayName}</Text>
               )}
-              {baseUrl && (
+              {baseUrl && current.typeName !== "[DELETED_ON_SERVER]" && (
                 <Text color={THEME.subtle} wrap="truncate-end">
                   {store === "user"
                     ? `${baseUrl.replace(/\/+$/, "")}/user/${ctx.username}/credentials/store/user/domain/_/credential/${current.id}/`

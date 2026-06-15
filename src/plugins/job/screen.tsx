@@ -772,9 +772,10 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       } else {
         ctx.notify(`${SYM.ok} Created ${jobType}: ${qualified}`, "success");
       }
+      const leaf = currentFolder ? qualified.slice(currentFolder.length + 1) : qualified;
       ctx.logCommand(jobType === "folder"
-        ? `bee job create folder ${qualified}${result.desc ? ` --description "${result.desc}"` : ""}`
-        : `bee job create freestyle ${qualified}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node "${result.node}"` : ""}`);
+        ? `bee job create folder ${leaf}${currentFolder ? ` --folder "${currentFolder}"` : ""}${result.desc ? ` --description "${result.desc}"` : ""}`
+        : `bee job create freestyle ${leaf}${currentFolder ? ` --folder "${currentFolder}"` : ""}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node "${result.node}"` : ""}`);
       void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -941,7 +942,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     for (const name of toRemove) untrackResource("job", name, ctx.profile, baseUrl, ctx.dbPath);
     setSelected(new Set());
     ctx.notify(`${SYM.ok} Removed ${toRemove.length} job(s) from Mine`, "success");
-    void refetch();
+    ctx.logCommand(toRemove.map((n) => `bee job unimport ${n}`).join("\n"));
     void refetch();
   }, [baseUrl, selected, trackedNames, ctx, refetch]);
 

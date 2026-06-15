@@ -81,7 +81,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
 
         let creds = allCreds;
         if (!opts.all) {
-          const tracked = getTrackedResources("credential", profile, client.baseUrl, dbPath);
+          const tracked = getTrackedResources("credential", profile, `${client.baseUrl}.${opts.store}`, dbPath);
           const trackedSet = new Set(tracked);
           const serverIds = new Set(allCreds.map((c) => c.id));
           creds = allCreds.filter((c) => trackedSet.has(c.id));
@@ -202,7 +202,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
               opts.store,
             );
           }
-          trackResource("credential", credId, profile, client.baseUrl, dbPath);
+          trackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
 
           printSuccess(`OK Credential '${credId}' created in ${opts.store} store.`);
           const base = client.baseUrl.replace(/\/+$/, "");
@@ -238,7 +238,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
         }
         const client = await ctx.getClient({ useController: true });
         await deleteCredential(client, credId, sessionUsername(dbPath), opts.store);
-        untrackResource("credential", credId, profile, client.baseUrl, dbPath);
+        untrackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
         printSuccess(`OK Credential '${credId}' deleted from ${opts.store} store.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
@@ -269,12 +269,12 @@ export function registerCredentialCommands(ctx: PluginContext): void {
           }
           process.exit(1);
         }
-        const tracked = getTrackedResources("credential", profile, client.baseUrl, dbPath);
+        const tracked = getTrackedResources("credential", profile, `${client.baseUrl}.${opts.store}`, dbPath);
         if (tracked.includes(credId)) {
           printInfo(`INFO Credential '${credId}' is already imported.`);
           return;
         }
-        trackResource("credential", credId, profile, client.baseUrl, dbPath);
+        trackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
         printSuccess(`OK Imported '${credId}' into Mine.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
@@ -287,24 +287,28 @@ export function registerCredentialCommands(ctx: PluginContext): void {
     .command("update")
     .argument("<cred_id>")
     .option("--username <username>", "New username value")
-    .option("--password <password>", "New password")
+    .option("--password <password>", "New password (Username+Password credentials)")
+    .option("--secret-text <secret>", "New secret value (SecretText credentials)")
     .option("--description <desc>", "New description")
     .option("--store <store>", "Credential store: 'system' or 'user'", "system")
     .description("Update an existing credential")
     .action(
       async (
         credId: string,
-        opts: { username?: string; password?: string; description?: string; store: string },
+        opts: { username?: string; password?: string; secretText?: string; description?: string; store: string },
       ) => {
         try {
           validateStore(opts.store);
           warnUserStoreFallback(opts.store, dbPath);
+          if (opts.password !== undefined && opts.secretText !== undefined) {
+            throw new ValidationError("--password and --secret-text are mutually exclusive.");
+          }
           const client = await ctx.getClient({ useController: true });
           await updateCredential(
             client,
             credId,
             opts.username,
-            opts.password,
+            opts.password ?? opts.secretText,
             opts.description,
             sessionUsername(dbPath),
             opts.store,
@@ -316,4 +320,27 @@ export function registerCredentialCommands(ctx: PluginContext): void {
         }
       },
     );
+
+  // ── unimport ─────────────────────────────────────────────────────────────────
+  grp
+    .command("unimport")
+    .argument("<cred_id>")
+    .option("--store <store>", "Credential store: 'system' or 'user'", "system")
+    .description("Remove a credential from Mine (stops tracking it locally; does not delete from server)")
+    .action(async (credId: string, opts: { store: string }) => {
+      try {
+        validateStore(opts.store);
+        const client = await ctx.getClient({ useController: true });
+        const tracked = getTrackedResources("credential", profile, `${client.baseUrl}.${opts.store}`, dbPath);
+        if (!tracked.includes(credId)) {
+          printInfo(`INFO Credential '${credId}' is not in Mine.`);
+          return;
+        }
+        untrackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
+        printSuccess(`OK Removed '${credId}' from Mine.`);
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
 }
