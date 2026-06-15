@@ -517,7 +517,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         { body: "Submit=Yes", headers: { "Content-Type": "application/x-www-form-urlencoded" } },
       );
       ctx.notify(`${SYM.ok} Token revoked`, "success");
-      ctx.logCommand(`bee job remove-agent ${item.label} --agent ${foldersAgent}`);
+      ctx.logCommand(`bee job remove-agent ${item.label} ${foldersAgent}`);
       void fetchApprovedFolders(foldersAgent);
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
