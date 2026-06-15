@@ -942,6 +942,10 @@ export async function listControlledAgents(
 
   const grants: ControlledAgentGrant[] = [];
 
+  // DEBUG: dump raw HTML to stderr
+  process.stderr.write(`[DEBUG listControlledAgents] html length=${html.length}\n`);
+  process.stderr.write(`[DEBUG listControlledAgents] first 2000 chars:\n${html.slice(0, 2000)}\n`);
+
   // Each row: agent link OR "Unassigned" text, plus a delete link containing the grantId.
   // Pattern: href="...grantsById/{id}/doDelete" and nearby agent link or "Unassigned" text.
   const rowRe = /href="[^"]*\/grantsById\/([^/"]+)\/doDelete"/g;
