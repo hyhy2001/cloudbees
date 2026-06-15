@@ -566,7 +566,7 @@ export async function listApprovedFolders(
   const rows = html.split(/<tr[^>]*>/i).slice(1); // skip before first <tr>
   for (const row of rows) {
     // tokenId from the delete link in this row
-    const tokenMatch = row.match(/href="tokensById\/([^/"]+)\/delete"/);
+    const tokenMatch = row.match(/href="tokensById\/([^/"]+)\/doDelete"/);
     if (!tokenMatch) continue;
     const tokenId = tokenMatch[1]!;
 

@@ -943,8 +943,8 @@ export async function listControlledAgents(
   const grants: ControlledAgentGrant[] = [];
 
   // Each row: agent link OR "Unassigned" text, plus a delete link containing the grantId.
-  // Pattern: href="grantsById/{id}/delete" and nearby agent link or "Unassigned" text.
-  const rowRe = /href="grantsById\/([^/"]+)\/delete"/g;
+  // Pattern: href="grantsById/{id}/doDelete" and nearby agent link or "Unassigned" text.
+  const rowRe = /href="grantsById\/([^/"]+)\/doDelete"/g;
   let m: RegExpExecArray | null;
   while ((m = rowRe.exec(html)) !== null) {
     const grantId = m[1]!;
