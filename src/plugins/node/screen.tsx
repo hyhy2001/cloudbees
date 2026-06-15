@@ -500,7 +500,6 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const doRevokeApprovedFolder = useCallback(async (item: GrantItem) => {
     if (!foldersAgent) return;
-    ctx.notify(`Revoking '${item.label}' (id=${item.id.slice(0, 8)}…)`, "info");
     const ok = await ctx.openModal<boolean>({
       id: "revoke-folder-confirm",
       render: (resolve) => (
@@ -513,7 +512,10 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     if (!ok) return;
     try {
       const client = await ctx.getClient({ useController: true });
-      await client.post(`/computer/${encodeURIComponent(foldersAgent)}/security-tokens/tokensById/${encodeURIComponent(item.id)}/delete`);
+      await client.post(
+        `/computer/${encodeURIComponent(foldersAgent)}/security-tokens/tokensById/${encodeURIComponent(item.id)}/doDelete`,
+        { body: "Submit=Yes", headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+      );
       ctx.notify(`${SYM.ok} Token revoked`, "success");
       void fetchApprovedFolders(foldersAgent);
     } catch (err) {

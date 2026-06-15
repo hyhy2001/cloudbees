@@ -1008,5 +1008,8 @@ export async function removeControlledAgentGrant(
   grantId: string,
 ): Promise<void> {
   const folderPath = folderName.split("/").map((s) => `job/${encodeURIComponent(s)}`).join("/");
-  await client.post(`/${folderPath}/controlled-slaves/grantsById/${encodeURIComponent(grantId)}/delete`);
+  await client.post(
+    `/${folderPath}/controlled-slaves/grantsById/${encodeURIComponent(grantId)}/doDelete`,
+    { body: "Submit=Yes", headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+  );
 }
