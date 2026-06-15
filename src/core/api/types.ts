@@ -41,9 +41,26 @@ export interface CloudBeesClient {
   /** POST an XML payload (config.xml for jobs/nodes/credentials), with crumb + 403 retry. */
   postXml(path: string, xml: string, opts?: { invalidate?: string }): Promise<string | null>;
 
+  /**
+   * POST with CSRF crumb but WITHOUT following redirects; returns the `Location`
+   * header on a 3xx response, else null. Used by the Folders Plus handshake,
+   * where Jenkins returns the new grant/token id only in the redirect target
+   * (the 302 body is empty and the landed page may not echo the id).
+   */
+  postRedirect(
+    path: string,
+    opts?: { body?: RequestBody; headers?: Record<string, string> },
+  ): Promise<string | null>;
+
   /** DELETE with CSRF crumb injection. `invalidate` clears the given cache prefix on success. */
   delete<T = unknown>(path: string, opts?: { invalidate?: string }): Promise<T>;
 
   /** GET without following redirects; returns the Location header for 3xx, else null. */
   resolveRedirect(path: string): Promise<string | null>;
+
+  /** POST without following redirects (with CSRF crumb); returns the Location header for 3xx. Throws on non-3xx. */
+  postRedirect(
+    path: string,
+    opts?: { body?: RequestBody; headers?: Record<string, string>; invalidate?: string },
+  ): Promise<string | null>;
 }

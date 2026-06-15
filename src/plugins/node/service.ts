@@ -444,16 +444,17 @@ export async function createFolderRequest(
   folderName: string,
 ): Promise<string> {
   const folderPath = folderName.split("/").map(encodeURIComponent).join("/job/");
-  const html = await client.post<string>(
+  // Jenkins 302-redirects to grantsById/{id} with an empty body; the id lives in
+  // the Location header, not the page. Read it directly instead of following the
+  // redirect and scraping the landed HTML.
+  const location = await client.postRedirect(
     `/job/${folderPath}/controlled-slaves/requestSubmit`,
     {
       body: formEncode({ Submit: "Yes" }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     },
   );
-  // Jenkins 302-redirects to grantsById/{id}; fetch follows so html is the landed page.
-  // The href may be relative (grantsById/{id}) or absolute (/job/.../controlled-slaves/grantsById/{id}).
-  const m = html?.match(/grantsById\/([^/"'?#\s]+)/);
+  const m = location?.match(/grantsById\/([^/"'?#\s]+)/);
   if (!m?.[1]) throw new Error("Could not extract grantId from folder request response");
   return m[1];
 }
@@ -466,15 +467,16 @@ export async function createAgentToken(
   client: CloudBeesClient,
   nodeName: string,
 ): Promise<string> {
-  const html = await client.post<string>(
+  // Jenkins 302-redirects to tokensById/{id} with an empty body; the id lives in
+  // the Location header, not the page.
+  const location = await client.postRedirect(
     `/computer/${nodeSeg(nodeName)}/security-tokens/createSubmit`,
     {
       body: formEncode({ Submit: "Yes" }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     },
   );
-  // href may be relative (tokensById/{id}) or absolute (/computer/.../security-tokens/tokensById/{id}).
-  const m = html?.match(/tokensById\/([^/"'?#\s]+)/);
+  const m = location?.match(/tokensById\/([^/"'?#\s]+)/);
   if (!m?.[1]) throw new Error("Could not extract tokenId from create-token response");
   return m[1];
 }

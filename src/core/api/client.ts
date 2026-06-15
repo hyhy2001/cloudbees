@@ -320,4 +320,57 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
     }
     return null;
   }
+
+  async postRedirect(
+    path: string,
+    opts?: { body?: RequestBody; headers?: Record<string, string>; invalidate?: string },
+  ): Promise<string | null> {
+    const url =
+      path.startsWith("http://") || path.startsWith("https://")
+        ? path
+        : `${this.baseUrl}${path}`;
+
+    // Inject CSRF crumb the same way _writeRequest does — Jenkins rejects
+    // unsafe POSTs without it. Retry once on 403 with a fresh crumb.
+    const send = async (): Promise<Response> => {
+      const crumb = await getCrumb(this);
+      const headers: Record<string, string> = {
+        ...this._headers(),
+        ...(opts?.headers ?? {}),
+        ...(crumb ? { [crumb.field]: crumb.value } : {}),
+      };
+      return fetch(url, {
+        method: "POST",
+        headers,
+        body: opts?.body,
+        redirect: "manual",
+        signal: AbortSignal.timeout(this._timeout * 1000),
+        tls: { rejectUnauthorized: false },
+      });
+    };
+
+    let resp: Response;
+    try {
+      resp = await send();
+      if (resp.status === 403) {
+        invalidateCrumb(this.baseUrl);
+        resp = await send();
+      }
+    } catch (err: unknown) {
+      throw new CBConnectionError(err instanceof Error ? err.message : String(err));
+    }
+
+    if (resp.status === 401 || resp.status === 403) {
+      throw new AuthError(resp.status, "Access denied — check permissions or CSRF crumb.");
+    }
+    if (![301, 302, 303, 307, 308].includes(resp.status)) {
+      const body = await resp.text();
+      throw new APIError(resp.status, body.slice(0, 300));
+    }
+
+    if (opts?.invalidate) {
+      invalidatePrefix(opts.invalidate, this._dbPath);
+    }
+    return resp.headers.get("Location");
+  }
 }
