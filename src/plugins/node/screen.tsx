@@ -6,6 +6,7 @@
  *   useResource → computeView → useStableCursor → DataTable
  */
 
+import os from "node:os";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text } from "ink";
 import type { FC } from "react";
@@ -19,6 +20,7 @@ import { SearchBar } from "../../core/tui/components/SearchBar";
 import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
 import { ContextMenu } from "../../core/tui/components/ContextMenu";
+import { GrantListOverlay, type GrantItem } from "../../core/tui/components/GrantListOverlay";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
 import { useSearch } from "../../core/tui/data/use-search";
@@ -35,7 +37,9 @@ import {
   deleteNode,
   toggleOffline,
   parseNodeConfig,
+  listApprovedFolders,
 } from "./service";
+import { approveFolder } from "../foldersplus/service";
 import { listCredentials } from "../credential/service";
 import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
 import { useDimensions } from "../../core/tui/data/use-dimensions";
@@ -48,6 +52,18 @@ import {
 
 // ─── Nodes screen ─────────────────────────────────────────────────────────────
 
+// First non-internal IPv4 of the machine running the CLI — a sane default for
+// the SSH Host field (correct only when the CLI runs on the agent itself; the
+// user can still edit it).
+function detectLocalHost(): string {
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const a of addrs ?? []) {
+      if (a.family === "IPv4" && !a.internal) return a.address;
+    }
+  }
+  return "";
+}
+
 const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [showAll, setShowAll] = useState(() => getScopeShowAll("node", ctx.dbPath));
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -57,9 +73,37 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const configCache = useRef<Map<string, NodeConfig>>(new Map());
   const { columns: termCols } = useDimensions();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Approved-folders overlay: the agent whose grants are being viewed (null = closed).
+  const [foldersAgent, setFoldersAgent] = useState<string | null>(null);
+  // Items fetched for the overlay — null = loading.
+  const [approvedFolderItems, setApprovedFolderItems] = useState<GrantItem[] | null>(null);
 
-  // Inline "/" search box (client-side filter; no refetch).
-  const search = useSearch({ isActive: active, onEditingChange: ctx.setInputCaptured });
+  // Fetch approved folders whenever the overlay opens or is refreshed.
+  const fetchApprovedFolders = useCallback(async (agentName: string) => {
+    setApprovedFolderItems(null);
+    try {
+      const client = await ctx.getClient({ useController: true });
+      const grants = await listApprovedFolders(client, agentName);
+      setApprovedFolderItems(
+        grants.map((g) => ({
+          label: g.folderName ?? "",
+          id: g.tokenId,
+          pending: g.folderName === null,
+        })),
+      );
+    } catch {
+      setApprovedFolderItems([]);
+    }
+  }, [ctx]);
+
+  useEffect(() => {
+    if (foldersAgent) void fetchApprovedFolders(foldersAgent);
+    else setApprovedFolderItems(null);
+  }, [foldersAgent, fetchApprovedFolders]);
+
+  // Inline "/" search box (client-side filter; no refetch). Suspended while the
+  // approved-folders overlay is open.
+  const search = useSearch({ isActive: active && foldersAgent === null, onEditingChange: ctx.setInputCaptured });
 
   // Resolve the controller base url once (cheap; client-factory caches session).
   useEffect(() => {
@@ -198,7 +242,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               { name: "labels", label: "Labels", hint: "space-separated" },
               { name: "desc", label: "Description", hint: "optional" },
               { name: "launcher", label: "Launch method", options: ["ssh", "jnlp"], initial: "ssh" },
-              { name: "host", label: "SSH Host", hint: "hostname or IP", visible: (v) => v["launcher"] !== "jnlp" },
+              { name: "host", label: "SSH Host", initial: detectLocalHost(), hint: "hostname or IP (auto-detected, editable)", visible: (v) => v["launcher"] !== "jnlp" },
               { name: "port", label: "SSH Port", placeholder: "22", hint: "default 22", visible: (v) => v["launcher"] !== "jnlp" },
               { name: "credentialsId", label: "SSH Credential", options: credentialOptions.length > 0 ? credentialOptions : [NONE_OPTION], searchable: true, visible: (v) => v["launcher"] !== "jnlp" },
               { name: "availability", label: "Availability", options: ["always", "demand"], initial: "always" },
@@ -341,6 +385,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               { name: "availability", label: "Availability", options: ["always", "demand"], initial: cfg.availability },
               { name: "inDemandDelay", label: "In-demand Delay", initial: String(cfg.inDemandDelay), hint: "minutes", visible: (v) => v["availability"] === "demand" },
               { name: "idleDelay", label: "Idle Delay", initial: String(cfg.idleDelay), hint: "minutes", visible: (v) => v["availability"] === "demand" },
+              { name: "controlled", label: "Controlled Agent", options: ["no", "yes"], initial: cfg.controlledAgent ? "yes" : "no", hint: "Folders Plus: restrict to approved folders" },
             ]}
             onResult={resolve}
           />
@@ -362,6 +407,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           availability: result.availability === "demand" ? "demand" : "always",
           inDemandDelay: result.inDemandDelay ? parseInt(result.inDemandDelay, 10) : undefined,
           idleDelay: result.idleDelay ? parseInt(result.idleDelay, 10) : undefined,
+          controlledAgent: result.controlled === "yes",
         });
         ctx.notify(`${SYM.ok} Updated node: ${node.name}`, "success");
         if (launcherType === "ssh" && credId === "") {
@@ -403,6 +449,60 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     },
     [baseUrl, ctx, refetch],
   );
+
+  const doApproveFolder = useCallback(
+    (node: NodeDTO): false => {
+      setFoldersAgent(node.name);
+      return false;
+    },
+    [],
+  );
+
+  const doAddApprovedFolder = useCallback(async () => {
+    if (!foldersAgent) return;
+    const result = await ctx.openModal<Record<string, string>>({
+      id: "approve-folder-input",
+      render: (resolve) => (
+        <FormModal
+          title={`${SYM.gear} Approve Folder on '${foldersAgent}'`}
+          fields={[{ name: "folder", label: "Folder Path", required: true, hint: "e.g. team or team/backend" }]}
+          onResult={resolve}
+        />
+      ),
+    });
+    if (!result?.folder) return;
+    try {
+      const client = await ctx.getClient({ useController: true });
+      await approveFolder(client, foldersAgent, result.folder);
+      ctx.notify(`${SYM.ok} Approved folder '${result.folder}' on '${foldersAgent}'`, "success");
+      ctx.logCommand(`bee job approve-agent ${result.folder} ${foldersAgent}`);
+      void fetchApprovedFolders(foldersAgent);
+    } catch (err) {
+      ctx.notify(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [foldersAgent, ctx, approveFolder, fetchApprovedFolders]);
+
+  const doRevokeApprovedFolder = useCallback(async (item: GrantItem) => {
+    if (!foldersAgent) return;
+    const ok = await ctx.openModal<boolean>({
+      id: "revoke-folder-confirm",
+      render: (resolve) => (
+        <ConfirmModal
+          message={`Revoke token for '${item.label}' on agent '${foldersAgent}'?`}
+          onResult={resolve}
+        />
+      ),
+    });
+    if (!ok) return;
+    try {
+      const client = await ctx.getClient({ useController: true });
+      await client.post(`/computer/${encodeURIComponent(foldersAgent)}/security-tokens/tokensById/${encodeURIComponent(item.id)}/delete`);
+      ctx.notify(`${SYM.ok} Token revoked`, "success");
+      void fetchApprovedFolders(foldersAgent);
+    } catch (err) {
+      ctx.notify(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [foldersAgent, ctx, fetchApprovedFolders]);
 
   const toggleSelect = useCallback((key: string) => {
     setSelected((prev) => {
@@ -454,13 +554,14 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const menuActions = useMemo(
     () => [
-      { label: "Toggle Offline", icon: SYM.iconToggle, run: async () => { if (!current) return false as const; return await doToggleOffline(current); } },
-      { label: "Edit",           icon: SYM.iconEdit,   run: async () => { if (!current) return false as const; return await editNode(current); } },
-      { label: "Import",         icon: SYM.iconImport, when: () => canImport, run: () => { if (current) doImport(current.name); } },
-      { label: "Unimport",       icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
-      { label: "Delete",         icon: SYM.iconDelete, danger: true, run: async () => { if (!current) return false as const; return await removeNode(current.name); } },
+      { label: "Toggle Offline",   icon: SYM.iconToggle,   run: async () => { if (!current) return false as const; return await doToggleOffline(current); } },
+      { label: "Edit",             icon: SYM.iconEdit,     run: async () => { if (!current) return false as const; return await editNode(current); } },
+      { label: "Approve Folder",   icon: SYM.iconSchedule, run: () => { if (!current) return false as const; return doApproveFolder(current); } },
+      { label: "Import",           icon: SYM.iconImport,   when: () => canImport, run: () => { if (current) doImport(current.name); } },
+      { label: "Unimport",         icon: SYM.iconImport,   when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
+      { label: "Delete",           icon: SYM.iconDelete,   danger: true, run: async () => { if (!current) return false as const; return await removeNode(current.name); } },
     ],
-    [current, canImport, canUntrack, baseUrl, editNode, doImport, removeNode, doToggleOffline, refetch, ctx],
+    [current, canImport, canUntrack, baseUrl, editNode, doImport, removeNode, doToggleOffline, doApproveFolder, refetch, ctx],
   );
 
   const bindings = useMemo<KeyBinding[]>(
@@ -478,12 +579,30 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     ],
     [current, menuOpen, selected, bulkRemoveNodes, createNode, search, refetch, ctx],
   );
-  useKeymap(bindings, { isActive: active && !menuOpen && !search.editing });
+  useKeymap(bindings, { isActive: active && !menuOpen && !foldersAgent && !search.editing });
   useEffect(() => {
     if (!active) return;
-    if (menuOpen) ctx.setActiveKeyHints([]);
+    if (menuOpen || foldersAgent) ctx.setActiveKeyHints([]);
     else ctx.setActiveKeyHints(bindingsToHints(bindings));
-  }, [active, menuOpen, bindings, ctx]);
+  }, [active, menuOpen, foldersAgent, bindings, ctx]);
+
+  if (foldersAgent) {
+    return (
+      <GrantListOverlay
+        title={`Approved Folders — ${foldersAgent}`}
+        subtitle="Folders this agent is allowed to run builds from"
+        itemHeader="Folder"
+        items={approvedFolderItems}
+        emptyText="No approved folders (controlled-agent may not be enabled)."
+        addHint="approve folder"
+        onAdd={() => void doAddApprovedFolder()}
+        onRevoke={(item) => void doRevokeApprovedFolder(item)}
+        onRefresh={() => void fetchApprovedFolders(foldersAgent)}
+        onClose={() => { setFoldersAgent(null); setMenuOpen(false); }}
+        isActive={!ctx.modalActive}
+      />
+    );
+  }
 
   if (menuOpen && current) {
     return (

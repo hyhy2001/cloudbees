@@ -14,7 +14,7 @@
 - Controller discovery and active-controller selection (remembered per profile)
 - Job lifecycle: list / get / create / update / delete / run / stop / log / status / copy / import, plus String build parameters and an email anti-spam content filter
 - Credential lifecycle: list / get / create / update / delete / import (system & user stores)
-- Node lifecycle: list / get / create / update / delete / offline / online / copy / import (SSH and JNLP/Inbound launchers, Always/On-demand availability)
+- Node lifecycle: list / get / create / update / delete / offline / online / copy / import (SSH and JNLP/Inbound launchers, Always/On-demand availability), plus CloudBees Folders Plus controlled-agent approval
 
 ## Requirements
 
@@ -161,6 +161,7 @@ bee job create freestyle <name> \
   [--shell <command>] \
   [--chdir <directory>] \
   [--node <label_or_node>] \
+  [--folder <parent_folder>] \
   [--schedule "<cron_expr>"] \
   [--param-def NAME=default ...] \
   [--email "a@x.com,b@y.com"] \
@@ -169,7 +170,7 @@ bee job create freestyle <name> \
   [--email-regex "<regex>"]
 
 # Folder
-bee job create folder <name> [--description <text>]
+bee job create folder <name> [--description <text>] [--folder <parent_folder>]
 ```
 
 Update jobs (partial — only the flags you pass change):
@@ -296,6 +297,39 @@ Availability:
 - `demand` — bring online when there's demand, take offline when idle. `--in-demand-delay` / `--idle-delay` (minutes) tune the thresholds.
 
 > Note: the CLI exposes `--java-path` for SSH agents. The TUI omits the Java path field on purpose — CloudBees/Jenkins auto-detects it — and relies on the service-layer default.
+
+### Folders Plus — Controlled Agents (`bee node controlled-agent` / `bee node approve-folder`)
+
+CloudBees Folders Plus allows restricting an agent to only run builds from specific approved folders. `bee` automates the full 5-step handshake so you don't need to click through the UI.
+
+**Enable controlled-agent mode on an agent:**
+
+```bash
+bee node controlled-agent <agent> --enable
+bee node controlled-agent <agent> --disable
+```
+
+**Run the full approve-folder handshake** (enables controlled-agent + completes the key/secret exchange in one command):
+
+```bash
+bee node approve-folder <agent> <folder>
+
+# Examples
+bee node approve-folder MY_AGENT team
+bee node approve-folder MY_AGENT team/backend
+```
+
+This command runs the complete 5-step handshake automatically:
+
+1. Enables "Only accept builds from approved folders" on the agent (patches `config.xml`)
+2. Creates a controlled-agent request on the folder side → gets grant ID (Request Key)
+3. Creates a security token on the agent side → gets token ID
+4. Authorizes the token with the Request Key → gets Request Secret
+5. Completes the authorization on the folder side with the Request Secret
+
+> **Requires**: admin permissions on both the agent and the folder. The user running `bee` must have access to both sides — this mirrors what the UI requires (two admins exchanging a key/secret). If you only have access to one side, run `createFolderRequest` / `authorizeAgentToken` / `authorizeFolderGrant` as separate steps using the service layer directly.
+
+> **Folders Plus plugin** must be installed on the CloudBees CI instance. This feature is part of the CloudBees Folders Plus enterprise plugin and is not available on open-source Jenkins.
 
 ## Tracked Resources ("Mine" vs. "All")
 

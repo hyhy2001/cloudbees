@@ -446,9 +446,11 @@ export async function copyJob(
   client: CloudBeesClient,
   srcName: string,
   destName: string,
+  folder: string | null = null,
 ): Promise<void> {
   const xmlStr = await client.getText(`/job/${jobSeg(srcName)}/config.xml`);
-  await client.postXml(`/createItem?name=${encodeURIComponent(destName)}`, xmlStr, {
+  const base = folder ? `/job/${jobSeg(folder)}` : "";
+  await client.postXml(`${base}/createItem?name=${encodeURIComponent(destName)}`, xmlStr, {
     invalidate: "jobs.",
   });
 }
@@ -911,4 +913,96 @@ export async function updateJobFreestyle(
   }
 
   await client.postXml(`/job/${jobSeg(name)}/config.xml`, updated, { invalidate: "jobs." });
+}
+
+// ── Folders Plus controlled-agent ─────────────────────────────────────────────
+
+export interface ControlledAgentGrant {
+  /** Agent name, or null when the grant is unassigned (handshake not completed). */
+  agentName: string | null;
+  grantId: string;
+}
+
+/**
+ * Fetch the controlled-agents list for a folder (FD type only).
+ * Parses the HTML table at `/job/{folder}/controlled-slaves/`.
+ * Returns [] when the folder has no controlled-agent grants or the plugin is not installed.
+ */
+export async function listControlledAgents(
+  client: CloudBeesClient,
+  folderName: string,
+): Promise<ControlledAgentGrant[]> {
+  const folderPath = folderName.split("/").map((s) => `job/${encodeURIComponent(s)}`).join("/");
+  let html: string;
+  try {
+    html = await client.getText(`/${folderPath}/controlled-slaves/`);
+  } catch {
+    return [];
+  }
+
+  const grants: ControlledAgentGrant[] = [];
+
+  // Each row: agent link OR "Unassigned" text, plus a delete link containing the grantId.
+  // Pattern: href="grantsById/{id}/delete" and nearby agent link or "Unassigned" text.
+  const rowRe = /href="grantsById\/([^/"]+)\/delete"/g;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(html)) !== null) {
+    const grantId = m[1]!;
+    // Find the agent name: look for an <a> tag with href containing "/computer/" near this grant.
+    const before = html.slice(Math.max(0, m.index - 800), m.index);
+    const agentMatch = before.match(/href="[^"]*\/computer\/([^/"]+)\/"[^>]*>([^<]+)<\/a>\s*$/);
+    const agentName = agentMatch
+      ? decodeURIComponent(agentMatch[1]!.replace(/\+/g, " "))
+      : null;
+    grants.push({ agentName, grantId });
+  }
+
+  return grants;
+}
+
+/**
+ * Approve an agent for a folder (full 5-step Folders Plus handshake).
+ * Delegates to the node service functions — kept here so job commands
+ * can import a single entry point.
+ */
+export async function approveAgentForFolder(
+  client: CloudBeesClient,
+  folderName: string,
+  agentName: string,
+): Promise<void> {
+  const { approveFolder } = await import("../node/service");
+  await approveFolder(client, agentName, folderName);
+}
+
+/**
+ * Remove a controlled-agent grant from a folder by agent name.
+ * Looks up the grantId from `listControlledAgents`, then deletes it.
+ * Throws if no grant is found for the given agent name.
+ */
+export async function removeAgentFromFolder(
+  client: CloudBeesClient,
+  folderName: string,
+  agentName: string,
+): Promise<void> {
+  const grants = await listControlledAgents(client, folderName);
+  const grant = grants.find(
+    (g) => g.agentName?.toLowerCase() === agentName.toLowerCase(),
+  );
+  if (!grant) {
+    throw new Error(`No approved grant found for agent '${agentName}' in folder '${folderName}'.`);
+  }
+  await removeControlledAgentGrant(client, folderName, grant.grantId);
+}
+
+/**
+ * Remove a controlled-agent grant from a folder by grant ID (low-level).
+ * `grantId` comes from `listControlledAgents`.
+ */
+export async function removeControlledAgentGrant(
+  client: CloudBeesClient,
+  folderName: string,
+  grantId: string,
+): Promise<void> {
+  const folderPath = folderName.split("/").map((s) => `job/${encodeURIComponent(s)}`).join("/");
+  await client.post(`/${folderPath}/controlled-slaves/grantsById/${encodeURIComponent(grantId)}/delete`);
 }

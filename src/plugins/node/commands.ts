@@ -3,8 +3,7 @@
  * Ports legacy/cb/cli/commands/nodes.py with 1:1 behavior and strings.
  */
 import type { PluginContext } from "../../registry/types";
-import { printError, printInfo, printSuccess, printWarning, printMessage, tableFormatter } from "../../core/cli/output";
-import { confirm } from "../../core/cli/utils";
+import { printError, printInfo, printSuccess, printWarning, printMessage, tableFormatter } from "../../core/cli/output";import { confirm } from "../../core/cli/utils";
 import { NotFoundError } from "../../core/api/errors";
 import { getActiveProfileName } from "../../core/session/index";
 import {
@@ -312,6 +311,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
     .option("--availability <mode>", "Retention strategy: always | demand")
     .option("--in-demand-delay <min>", "Minutes of demand before going online (demand only)")
     .option("--idle-delay <min>", "Minutes idle before going offline (demand only)")
+    .option("--controlled-agent <bool>", "Folders Plus controlled-agent mode: true | false")
     .description("Update a node's configuration")
     .action(
       async (
@@ -329,6 +329,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
           availability?: string;
           inDemandDelay?: string;
           idleDelay?: string;
+          controlledAgent?: string;
         },
       ) => {
         try {
@@ -345,6 +346,13 @@ export function registerNodeCommands(ctx: PluginContext): void {
           if (opts.availability !== undefined && availability === undefined) {
             printWarning(`WARN Unknown --availability '${opts.availability}'; ignored. Valid values: always | demand`);
           }
+          const controlledAgent =
+            opts.controlledAgent === "true" ? true
+            : opts.controlledAgent === "false" ? false
+            : undefined;
+          if (opts.controlledAgent !== undefined && controlledAgent === undefined) {
+            printWarning(`WARN Unknown --controlled-agent '${opts.controlledAgent}'; ignored. Valid values: true | false`);
+          }
           await updateNode(client, name, {
             desc: opts.description,
             remoteDir: opts.remoteDir,
@@ -358,6 +366,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
             availability,
             inDemandDelay: opts.inDemandDelay !== undefined ? Number(opts.inDemandDelay) : undefined,
             idleDelay: opts.idleDelay !== undefined ? Number(opts.idleDelay) : undefined,
+            controlledAgent,
           });
           printSuccess(`OK Node '${name}' updated.`);
           if (launcherType === "ssh" && opts.credId === "") {

@@ -1,0 +1,112 @@
+/**
+ * GrantListOverlay — a read + manage overlay for Folders Plus controlled-agent
+ * grants, used from two symmetric vantage points:
+ *
+ *   • Node tab  → "Approve Folder":   folders this agent is allowed to run.
+ *   • Job (FD)  → "Controlled Agents": agents allowed to run this folder.
+ *
+ * The parent owns data fetching and the add/revoke actions; this component is
+ * pure presentation + key handling (↑↓ move · a add · d revoke · r refresh ·
+ * Esc close).
+ */
+
+import { useState } from "react";
+import { Box, Text, useInput } from "ink";
+import type { FC } from "react";
+import { THEME } from "../theme";
+import { SYM, borderStyle } from "../symbols";
+
+export interface GrantItem {
+  /** Display label — folder name (node side) or agent name (folder side). */
+  label: string;
+  /** Opaque id used to revoke this grant (grantId or tokenId). */
+  id: string;
+  /** True when the grant exists but has no folder/agent assigned yet (pending handshake). */
+  pending?: boolean;
+}
+
+export interface GrantListOverlayProps {
+  title: string;
+  /** One-line context under the title (e.g. the agent or folder name). */
+  subtitle?: string;
+  /** Column header for the item list ("Folder" or "Agent"). */
+  itemHeader: string;
+  /** null = still loading; [] = loaded but empty. */
+  items: GrantItem[] | null;
+  emptyText: string;
+  /** Label for the add action shown in the footer (e.g. "approve folder"). */
+  addHint: string;
+  onAdd: () => void;
+  onRevoke: (item: GrantItem) => void;
+  onRefresh: () => void;
+  onClose: () => void;
+  /** Gate input — false while a child modal (add/confirm) covers this overlay. */
+  isActive?: boolean;
+}
+
+export const GrantListOverlay: FC<GrantListOverlayProps> = ({
+  title,
+  subtitle,
+  itemHeader,
+  items,
+  emptyText,
+  addHint,
+  onAdd,
+  onRevoke,
+  onRefresh,
+  onClose,
+  isActive = true,
+}) => {
+  const [cursor, setCursor] = useState(0);
+  const count = items?.length ?? 0;
+
+  useInput(
+    (input, key) => {
+      if (key.escape) { onClose(); return; }
+      if (key.upArrow) { setCursor((c) => Math.max(0, c - 1)); return; }
+      if (key.downArrow) { setCursor((c) => Math.min(count - 1, c + 1)); return; }
+      if (input === "a") { onAdd(); return; }
+      if (input === "r") { onRefresh(); return; }
+      if (input === "d") {
+        const item = items?.[cursor];
+        if (item && !item.pending) onRevoke(item);
+        return;
+      }
+    },
+    { isActive },
+  );
+
+  return (
+    <Box flexDirection="column" borderStyle={borderStyle()} borderColor={THEME.keyhint} paddingX={2} paddingY={1} marginX={2}>
+      <Text color={THEME.keyhint} bold>{title}</Text>
+      {subtitle ? <Text color={THEME.dim}>{subtitle}</Text> : null}
+
+      <Box flexDirection="column" marginTop={1}>
+        {items === null ? (
+          <Text color={THEME.dim}>Loading…</Text>
+        ) : count === 0 ? (
+          <Text color={THEME.dim}>{emptyText}</Text>
+        ) : (
+          <>
+            <Text color={THEME.subtle}>{"   "}{itemHeader}</Text>
+            {items.map((item, i) => {
+              const on = i === cursor;
+              const label = item.pending ? "(unassigned — pending)" : item.label;
+              const color = item.pending ? THEME.dim : (on ? THEME.normal : THEME.dim);
+              return (
+                <Box key={item.id}>
+                  <Text color={on ? THEME.active : THEME.dim}>{on ? SYM.selected : " "}{" "}</Text>
+                  <Text color={color} bold={on && !item.pending}>{label}</Text>
+                </Box>
+              );
+            })}
+          </>
+        )}
+      </Box>
+
+      <Box marginTop={1}>
+        <Text color={THEME.dim}>↑↓ move  ·  a {addHint}  ·  d revoke  ·  r refresh  ·  Esc back</Text>
+      </Box>
+    </Box>
+  );
+};

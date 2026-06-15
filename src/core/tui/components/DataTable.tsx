@@ -212,13 +212,19 @@ export const DataTable: React.FC<DataTableProps> = ({
             <Text color={THEME.subtle}> </Text>
             {row.map((cell, ci) => {
               const width = colWidths[ci] ?? columns[ci]?.width ?? 10;
-              const color = isCursor ? THEME.selectedFg : cell.dim ? THEME.dim : cell.color;
+              const color = isCursor
+                ? THEME.selectedFg
+                : isSelected
+                  ? THEME.warning
+                  : cell.dim
+                    ? THEME.dim
+                    : cell.color;
               return (
                 <Text
                   key={ci}
                   color={color}
                   backgroundColor={isCursor ? THEME.selectedBg : undefined}
-                  bold={isCursor}
+                  bold={isCursor || isSelected}
                 >
                   {pad(cell.text, width)}{" "}
                 </Text>

@@ -208,6 +208,12 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 {SYM.arrow} Plugins ({plugins.length})
               </Text>
               <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} marginTop={0}>
+                <Box>
+                  <Text color={THEME.dim}>{"  "}</Text>
+                  <Text color={THEME.dim} bold>{fixWidth("Name", 36)}</Text>
+                  <Text color={THEME.dim} bold>{"  "}{fixWidth("Version", 12)}{"  "}</Text>
+                  <Text color={THEME.dim} bold>Status</Text>
+                </Box>
                 {plugins.slice(Math.max(0, pluginCursor - 8), pluginCursor + 9).map((p, relIdx) => {
                   const absIdx = Math.max(0, pluginCursor - 8) + relIdx;
                   const on = absIdx === pluginCursor;

@@ -44,7 +44,12 @@ import {
   streamBuildLog,
   getBuildHistory,
   updateJobFreestyle,
+  copyJob,
+  listControlledAgents,
+  approveAgentForFolder,
+  removeControlledAgentGrant,
 } from "./service";
+import type { ControlledAgentGrant } from "./service";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
 import { getScopeShowAll, setScopeShowAll } from "../../core/db/repositories/scope-repo";
 import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
@@ -53,6 +58,7 @@ import { hasPlugin } from "../system/service";
 import { ScheduleBuilder } from "../../core/tui/components/ScheduleBuilder";
 import { EmailBuilder, type EmailSpec } from "../../core/tui/components/EmailBuilder";
 import { ContextMenu } from "../../core/tui/components/ContextMenu";
+import { GrantListOverlay, type GrantItem } from "../../core/tui/components/GrantListOverlay";
 import { parseCron } from "../../domain/schedule";
 
 import type { JobConfigSummary } from "./types";
@@ -338,10 +344,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [emailExtAvailable, setEmailExtAvailable] = useState(true);
   // When true, the context menu is open for the current job row.
   const [menuOpen, setMenuOpen] = useState(false);
+  // Controlled-agents overlay: the folder whose grants are being viewed (null = closed).
+  const [agentsFolder, setAgentsFolder] = useState<string | null>(null);
+  const [agentGrantItems, setAgentGrantItems] = useState<GrantItem[] | null>(null);
 
-  // Inline "/" search box (client-side filter; no refetch). Disabled while the
-  // log overlay is open.
-  const search = useSearch({ isActive: active && logJob === null && emailJob === null, onEditingChange: ctx.setInputCaptured });
+  // Inline "/" search box. Suspended while log/email/agentsFolder overlay is open.
+  const search = useSearch({ isActive: active && logJob === null && emailJob === null && agentsFolder === null, onEditingChange: ctx.setInputCaptured });
 
   // Resolve the controller base url once (cheap; client-factory caches session).
   // Also checks for email-ext plugin availability in the same pass.
@@ -498,6 +506,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   // Detail panel (config summary for the highlighted job).
   const [summary, setSummary] = useState<JobConfigSummary | null>(null);
+  // Controlled-agent grants for the highlighted folder (FD type only).
+  const [controlledAgents, setControlledAgents] = useState<ControlledAgentGrant[] | null>(null);
 
   // In-memory cache of config summaries: avoids re-fetching config.xml every
   // time the cursor moves back to a previously-visited job within the session.
@@ -534,6 +544,94 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       cancelled = true;
     };
   }, [ctx, current?.name]);
+
+  // Fetch controlled-agent grants for FD folders.
+  useEffect(() => {
+    let cancelled = false;
+    if (!current || current.jobType !== "FD" || !ctx.loggedIn) {
+      setControlledAgents(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        const grants = await listControlledAgents(client, current.name);
+        if (!cancelled) setControlledAgents(grants);
+      } catch {
+        if (!cancelled) setControlledAgents(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ctx, current?.name, current?.jobType]);
+
+  // Controlled-agents overlay (FD only): fetch grants for the open folder.
+  const fetchAgentGrants = useCallback(async (folder: string) => {
+    setAgentGrantItems(null);
+    try {
+      const client = await ctx.getClient({ useController: true });
+      const grants = await listControlledAgents(client, folder);
+      setAgentGrantItems(
+        grants.map((g) => ({
+          label: g.agentName ?? "",
+          id: g.grantId,
+          pending: g.agentName === null,
+        })),
+      );
+    } catch {
+      setAgentGrantItems([]);
+    }
+  }, [ctx]);
+
+  useEffect(() => {
+    if (agentsFolder) void fetchAgentGrants(agentsFolder);
+    else setAgentGrantItems(null);
+  }, [agentsFolder, fetchAgentGrants]);
+
+  const doAddAgentGrant = useCallback(async () => {
+    if (!agentsFolder) return;
+    const result = await ctx.openModal<Record<string, string>>({
+      id: "approve-agent-input",
+      render: (resolve) => (
+        <FormModal
+          title={`${SYM.gear} Approve Agent for '${agentsFolder}'`}
+          fields={[{ name: "agent", label: "Agent Name", required: true, hint: "controlled agent to approve" }]}
+          onResult={resolve}
+        />
+      ),
+    });
+    if (!result?.agent) return;
+    try {
+      const client = await ctx.getClient({ useController: true });
+      await approveAgentForFolder(client, agentsFolder, result.agent);
+      ctx.notify(`${SYM.ok} Agent '${result.agent}' approved for '${agentsFolder}'`, "success");
+      ctx.logCommand(`bee job approve-agent ${agentsFolder} ${result.agent}`);
+      void fetchAgentGrants(agentsFolder);
+    } catch (err) {
+      ctx.notify(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [agentsFolder, ctx, fetchAgentGrants]);
+
+  const doRevokeAgentGrant = useCallback(async (item: GrantItem) => {
+    if (!agentsFolder) return;
+    const ok = await ctx.openModal<boolean>({
+      id: "revoke-agent-confirm",
+      render: (resolve) => (
+        <ConfirmModal
+          message={`Revoke agent '${item.label}' from folder '${agentsFolder}'?`}
+          onResult={resolve}
+        />
+      ),
+    });
+    if (!ok) return;
+    try {
+      const client = await ctx.getClient({ useController: true });
+      await removeControlledAgentGrant(client, agentsFolder, item.id);
+      ctx.notify(`${SYM.ok} Agent removed from '${agentsFolder}'`, "success");
+      void fetchAgentGrants(agentsFolder);
+    } catch (err) {
+      ctx.notify(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [agentsFolder, ctx, fetchAgentGrants]);
 
   const runJob = useCallback(
     async (name: string): Promise<false | void> => {
@@ -741,18 +839,6 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, refetch, summary, invalidateSummary],
   );
 
-  // Import = track an existing server job into Mine (for jobs created outside bee).
-  const doImport = useCallback(
-    (name: string) => {
-      if (!baseUrl) return;
-      trackResource("job", name, ctx.profile, baseUrl, ctx.dbPath);
-      ctx.notify(`${SYM.ok} Imported '${name}' into Mine`, "success");
-      ctx.logCommand(`bee job import ${name}`);
-      void refetch();
-    },
-    [baseUrl, ctx, refetch],
-  );
-
   const toggleSelect = useCallback((key: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -794,6 +880,67 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [selected, current, ctx, refetch]);
 
+  // Clone the cursor job into the current folder under a new name.
+  const cloneJob = useCallback(async (): Promise<false | void> => {
+    if (!current) return false;
+    const src = current.name;
+    const leaf = currentFolder && src.startsWith(`${currentFolder}/`)
+      ? src.slice(currentFolder.length + 1)
+      : src;
+    const result = await ctx.openModal<Record<string, string>>({
+      id: "clone-job",
+      render: (resolve) => (
+        <FormModal
+          title={`${SYM.gear} Clone '${leaf}'${currentFolder ? ` in /${currentFolder}` : ""}`}
+          fields={[
+            { name: "name", label: "New Name", required: true, initial: `${leaf}-copy`, hint: "unique id" },
+          ]}
+          onResult={resolve}
+        />
+      ),
+    });
+    if (!result || !result.name) return false;
+    try {
+      const client = await ctx.getClient({ useController: true });
+      await copyJob(client, src, result.name, currentFolder);
+      const qualified = currentFolder ? `${currentFolder}/${result.name}` : result.name;
+      trackResource("job", qualified, ctx.profile, client.baseUrl, ctx.dbPath);
+      ctx.notify(`${SYM.ok} Cloned '${leaf}' → '${result.name}'`, "success");
+      ctx.logCommand(`bee job copy ${src} ${qualified}`);
+      void refetch();
+    } catch (err) {
+      ctx.notify(err instanceof Error ? err.message : String(err), "error");
+    }
+    return false;
+  }, [current, currentFolder, ctx, refetch]);
+
+  // Bulk import/unimport the selected rows (multi-select only; no-op when empty).
+  const bulkImport = useCallback((): void => {
+    if (!baseUrl || selected.size === 0) return;
+    const toAdd = [...selected].filter((n) => !trackedNames.has(n));
+    if (toAdd.length === 0) {
+      ctx.notify(`${SYM.warn} Nothing to import — all selected already in Mine`, "warning");
+      return;
+    }
+    for (const name of toAdd) trackResource("job", name, ctx.profile, baseUrl, ctx.dbPath);
+    setSelected(new Set());
+    ctx.notify(`${SYM.ok} Imported ${toAdd.length} job(s) into Mine`, "success");
+    void refetch();
+  }, [baseUrl, selected, trackedNames, ctx, refetch]);
+
+  const bulkUnimport = useCallback((): void => {
+    if (!baseUrl || selected.size === 0) return;
+    const toRemove = [...selected].filter((n) => trackedNames.has(n));
+    if (toRemove.length === 0) {
+      ctx.notify(`${SYM.warn} Nothing to unimport — none selected are in Mine`, "warning");
+      return;
+    }
+    for (const name of toRemove) untrackResource("job", name, ctx.profile, baseUrl, ctx.dbPath);
+    setSelected(new Set());
+    ctx.notify(`${SYM.ok} Removed ${toRemove.length} job(s) from Mine`, "success");
+    void refetch();
+  }, [baseUrl, selected, trackedNames, ctx, refetch]);
+
   // Folder navigation: Enter on a folder row descends into it; Backspace pops
   // back up one level. The cursor/selection reset on level change so the user
   // starts at the top of the new listing.
@@ -812,12 +959,6 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Declarative keymap — the single source for both dispatch and footer hints.
   // `F` (not `f`) toggles auto-refresh so it can't collide with the table's
   // Ctrl+f paging.
-  const hasRow = current !== undefined && current.color !== "[DELETED_ON_SERVER]";
-  // Importable = a real server row not yet in the Mine list (most useful in All view).
-  const canImport = hasRow && current !== undefined && !trackedNames.has(current.name);
-  // Untrackable = a row already in Mine (inverse of import).
-  const canUntrack = hasRow && current !== undefined && trackedNames.has(current.name);
-
   const menuActions = useMemo(
     () => [
       // Every action returns false so menuOpen stays true. Overlay actions
@@ -846,41 +987,80 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         });
         return false as const;
       } },
-      { label: "Import",     icon: SYM.iconImport,    when: () => canImport, run: () => { if (current) doImport(current.name); } },
-      { label: "Unimport",   icon: SYM.iconImport,    when: () => canUntrack, run: () => { if (current) { untrackResource("job", current.name, ctx.profile, baseUrl!, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); void refetch(); } } },
-      { label: "Delete",     icon: SYM.iconDelete,    danger: true, run: async () => { if (!current) return false; await removeJob(current.name); } },
+      { label: "Delete",     icon: SYM.iconDelete,    danger: true, run: async (): Promise<false | void> => { if (!current) return false; await removeJob(current.name); } },
+      { label: "Controlled Agents", icon: SYM.iconSchedule, when: () => current?.jobType === "FD", run: (): false => {
+        if (!current) return false;
+        setAgentsFolder(current.name);
+        return false;
+      } },
     ],
-    [current, canImport, canUntrack, baseUrl, summary, runJob, stopJob, editJob, doImport, removeJob, refetch, ctx],
+    [current, summary, runJob, stopJob, editJob, removeJob],
   );
 
+  // Multi-select mode: when rows are checked via Space, the footer collapses to
+  // the bulk actions (import/unimport/delete/clear) and hides single-row hints
+  // so the user only sees what applies to the selection.
+  const multi = selected.size > 0;
   const bindings = useMemo<KeyBinding[]>(
     () => [
-      // Enter opens a folder (drill-in) or the action menu for a leaf job.
-      { key: "Enter", label: isFolder ? "open" : "menu", group: "action", when: () => current !== undefined && !menuOpen, run: () => { if (isFolder && current) drillIn(current.name); else setMenuOpen(true); } },
-      { key: "backspace", label: "up", group: "nav", when: () => folderStack.length > 0, run: () => goUp() },
-      { key: "ctrl+d", label: selected.size > 0 ? `delete ${selected.size}` : "delete", group: "action",
-        when: () => (selected.size > 0 || current !== undefined) && !menuOpen,
+      // Enter drills into a container (FD/MB) or opens the action menu for a
+      // Freestyle leaf. Other leaf types (Pipeline, etc.) aren't supported yet,
+      // so refuse with a notice instead of opening an FS-only menu.
+      { key: "Enter", label: isFolder ? "open" : current?.jobType === "FS" ? "menu" : "n/a", group: "action", hidden: multi, when: () => !multi && current !== undefined && !menuOpen, run: () => {
+        if (!current) return;
+        if (isFolder) { drillIn(current.name); return; }
+        if (current.jobType === "FS") { setMenuOpen(true); return; }
+        const cls = current.jobClass ? current.jobClass.split(".").at(-1)! : current.jobType;
+        ctx.notify(`${SYM.warn} ${cls} isn't supported yet — only Freestyle and Folder.`, "warning");
+      } },
+      { key: "backspace", label: "up", group: "nav", hidden: multi, when: () => !multi && folderStack.length > 0, run: () => goUp() },
+      { key: "ctrl+d", label: "delete", group: "action",
+        when: () => (multi || current !== undefined) && !menuOpen,
         run: () => void bulkRemoveJobs() },
-      { key: "ctrl+n", label: "new",      run: () => void newJob() },
-      { key: "ctrl+a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("job", nv, ctx.dbPath); return nv; }) },
-      { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
+      { key: "ctrl+n", label: "new", hidden: multi, when: () => !multi, run: () => void newJob() },
+      { key: "c", label: "clone", group: "action", hidden: multi, when: () => !multi && current?.jobType === "FS" && !menuOpen, run: () => void cloneJob() },
+      { key: "i", label: "import", group: "action", hidden: !multi,
+        when: () => multi && !menuOpen, run: () => bulkImport() },
+      { key: "u", label: "unimport", group: "action", hidden: !multi,
+        when: () => multi && !menuOpen, run: () => bulkUnimport() },
+      { key: "ctrl+a", label: "mine/all", hidden: multi, when: () => !multi, run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("job", nv, ctx.dbPath); return nv; }) },
+      { key: "F", label: "auto", hidden: multi, when: () => !multi, run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
-      { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
-      { key: "r", label: "refresh", run: () => void refetch() },
+      { key: "Esc", label: "clear", group: "action", hidden: !multi && !search.active,
+        when: () => multi || search.active,
+        run: () => { if (multi) setSelected(new Set()); else search.clear(); } },
+      { key: "r", label: "refresh", hidden: multi, when: () => !multi, run: () => void refetch() },
     ],
-    [current, menuOpen, selected, bulkRemoveJobs, newJob, isFolder, drillIn, goUp, folderStack, search, refetch, ctx],
+    [current, menuOpen, selected, multi, bulkRemoveJobs, newJob, cloneJob, bulkImport, bulkUnimport, isFolder, drillIn, goUp, folderStack, search, refetch, ctx],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
   // action keymap (and the table's nav) so letters don't trigger actions.
-  useKeymap(bindings, { isActive: active && !logJob && !paramJob && !scheduleJob && !emailJob && !menuOpen && !search.editing });
+  useKeymap(bindings, { isActive: active && !logJob && !paramJob && !scheduleJob && !emailJob && !menuOpen && !agentsFolder && !search.editing });
 
-  // Publish hints to the shell footer while this tab is the active one.
   useEffect(() => {
     if (!active) return;
-    if (logJob || paramJob || scheduleJob || emailJob || menuOpen) ctx.setActiveKeyHints([]);
+    if (logJob || paramJob || scheduleJob || emailJob || menuOpen || agentsFolder) ctx.setActiveKeyHints([]);
     else ctx.setActiveKeyHints(bindingsToHints(bindings));
-  }, [active, logJob, paramJob, scheduleJob, emailJob, menuOpen, bindings, ctx]);
+  }, [active, logJob, paramJob, scheduleJob, emailJob, menuOpen, agentsFolder, bindings, ctx]);
+
+  if (agentsFolder) {
+    return (
+      <GrantListOverlay
+        title={`Controlled Agents — ${agentsFolder}`}
+        subtitle="Agents approved to run builds from this folder"
+        itemHeader="Agent"
+        items={agentGrantItems}
+        emptyText="No controlled-agent grants (Folders Plus may not be installed)."
+        addHint="approve agent"
+        onAdd={() => void doAddAgentGrant()}
+        onRevoke={(item) => void doRevokeAgentGrant(item)}
+        onRefresh={() => void fetchAgentGrants(agentsFolder)}
+        onClose={() => { setAgentsFolder(null); setMenuOpen(false); }}
+        isActive={!ctx.modalActive}
+      />
+    );
+  }
 
   if (logJob) {
     return <LogViewer ctx={ctx} jobName={logJob} onClose={() => setLogJob(null)} />;
@@ -1048,6 +1228,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           <Text color={THEME.yellow}>  {SYM.arrow} /{folderStack.join("/")}</Text>
         ) : null}
         {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
+        {multi ? <Text color={THEME.active}>  [{selected.size} selected]</Text> : null}
         {status === "loading" || status === "stale" ? (
           <Text color={THEME.active}>  ⟳ refreshing…</Text>
         ) : null}
@@ -1143,6 +1324,15 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               </Box>
               {current.url && (
                 <Text color={THEME.subtle} wrap="truncate-end">{current.url}</Text>
+              )}
+              {/* Controlled agents — FD folders only */}
+              {current.jobType === "FD" && controlledAgents !== null && controlledAgents.length > 0 && (
+                <Box marginTop={0}>
+                  <Text color={THEME.dim}>controlled agents </Text>
+                  <Text color={THEME.normal}>
+                    {controlledAgents.map((g) => g.agentName ?? "(unassigned)").join(", ")}
+                  </Text>
+                </Box>
               )}
             </Box>
           )}

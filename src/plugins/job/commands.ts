@@ -28,6 +28,9 @@ import {
   deleteJob,
   getJobConfigSummary,
   updateJobFreestyle,
+  approveAgentForFolder,
+  listControlledAgents,
+  removeAgentFromFolder,
 } from "./service";
 import type { StringParamDef } from "./types";
 
@@ -202,6 +205,7 @@ export function registerJobCommands(ctx: PluginContext): void {
       [] as string[],
     )
     .option("--email-regex <regex>", "Send mail only if build log matches regex")
+    .option("--folder <path>", "Parent folder to create the job in (e.g. 'team/backend')")
     .option(
       "--param-def <name=default>",
       "Define a String build parameter, NAME=default (repeatable)",
@@ -221,11 +225,13 @@ export function registerJobCommands(ctx: PluginContext): void {
           emailCond: string;
           emailKeyword: string[];
           emailRegex?: string;
+          folder?: string;
           paramDef: string[];
         },
       ) => {
         try {
           const client = await ctx.getClient({ useController: true });
+          const folder = opts.folder || null;
 
           await createFreestyleJob(client, name, {
             desc: opts.description,
@@ -238,15 +244,16 @@ export function registerJobCommands(ctx: PluginContext): void {
             emailKeywords: opts.emailKeyword.length > 0 ? opts.emailKeyword : null,
             emailRegex: opts.emailRegex ?? null,
             params: parseParamDefs(opts.paramDef),
-          });
+          }, folder);
 
-          trackResource("job", name, profile, client.baseUrl, dbPath);
+          const qualified = folder ? `${folder}/${name}` : name;
+          trackResource("job", qualified, profile, client.baseUrl, dbPath);
           const nodeMsg = opts.node ? ` on node '${opts.node}'` : "";
-          printSuccess(`OK Freestyle job '${name}' created.${nodeMsg}`);
+          printSuccess(`OK Freestyle job '${qualified}' created.${nodeMsg}`);
           if (!opts.node) {
             printWarning(`WARN No node assigned — job will run on any available agent.`);
           }
-          const url = `${client.baseUrl.replace(/\/$/, "")}/job/${name}/`;
+          const url = `${client.baseUrl.replace(/\/$/, "")}/job/${qualified.split("/").join("/job/")}/`;
           printMessage(`  Link: ${url}`);
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
@@ -260,13 +267,16 @@ export function registerJobCommands(ctx: PluginContext): void {
     .description("Create a Folder")
     .argument("<name>", "Folder name")
     .option("--description <desc>", "Folder description", "")
-    .action(async (name: string, opts: { description: string }) => {
+    .option("--folder <path>", "Parent folder to create the folder in (e.g. 'team')")
+    .action(async (name: string, opts: { description: string; folder?: string }) => {
       try {
         const client = await ctx.getClient({ useController: true });
-        await createFolder(client, name, opts.description);
-        trackResource("job", name, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Folder '${name}' created.`);
-        const url = `${client.baseUrl.replace(/\/$/, "")}/job/${name}/`;
+        const folder = opts.folder || null;
+        await createFolder(client, name, opts.description, folder);
+        const qualified = folder ? `${folder}/${name}` : name;
+        trackResource("job", qualified, profile, client.baseUrl, dbPath);
+        printSuccess(`OK Folder '${qualified}' created.`);
+        const url = `${client.baseUrl.replace(/\/$/, "")}/job/${qualified.split("/").join("/job/")}/`;
         printMessage(`  Link: ${url}`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
@@ -689,4 +699,65 @@ export function registerJobCommands(ctx: PluginContext): void {
         }
       },
     );
+
+  // ── Folders Plus controlled agents (FD folders only) ─────────────────────
+
+  grp
+    .command("list-agents")
+    .description("List agents approved to run builds from a folder")
+    .argument("<folder>", "Folder path (e.g. 'team' or 'team/backend')")
+    .action(async (folder: string) => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        const grants = await listControlledAgents(client, folder);
+        if (grants.length === 0) {
+          printInfo("INFO No controlled-agent grants found (or Folders Plus not installed).");
+          return;
+        }
+        const headers = ["Agent", "Grant ID"];
+        const rows = grants.map((g) => [g.agentName ?? "(unassigned)", g.grantId]);
+        printMessage(tableFormatter.table(headers, rows));
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
+  grp
+    .command("approve-agent")
+    .description("Approve an agent to run builds from a folder (Folders Plus handshake)")
+    .argument("<folder>", "Folder path (e.g. 'team' or 'team/backend')")
+    .argument("<agent>", "Agent name")
+    .action(async (folder: string, agent: string) => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        printMessage(`  Running handshake: folder='${folder}' agent='${agent}'…`);
+        await approveAgentForFolder(client, folder, agent);
+        printSuccess(`OK Agent '${agent}' approved for folder '${folder}'.`);
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
+  grp
+    .command("remove-agent")
+    .description("Remove an agent's approval from a folder")
+    .argument("<folder>", "Folder path")
+    .argument("<agent>", "Agent name (as shown by 'list-agents')")
+    .option("--yes", "Skip confirmation", false)
+    .action(async (folder: string, agent: string, opts: { yes: boolean }) => {
+      try {
+        if (!opts.yes) {
+          const ok = await confirm(`Remove agent '${agent}' from '${folder}'? [y/N] `);
+          if (!ok) { printInfo("INFO Cancelled."); return; }
+        }
+        const client = await ctx.getClient({ useController: true });
+        await removeAgentFromFolder(client, folder, agent);
+        printSuccess(`OK Agent '${agent}' removed from '${folder}'.`);
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
 }
