@@ -40,6 +40,7 @@ import {
   listApprovedFolders,
 } from "./service";
 import { approveFolder } from "../foldersplus/service";
+import { listJobsRecursive } from "../job/service";
 import { listCredentials } from "../credential/service";
 import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
 import { useDimensions } from "../../core/tui/data/use-dimensions";
@@ -460,12 +461,27 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const doAddApprovedFolder = useCallback(async () => {
     if (!foldersAgent) return;
+    // Fetch folder list for the searchable picker; fall back to free-text if fetch fails.
+    let folderOptions: string[] = [];
+    try {
+      const client = await ctx.getClient({ useController: true });
+      const jobs = await listJobsRecursive(client);
+      folderOptions = jobs.filter((j) => j.jobType === "FD").map((j) => j.name).sort();
+    } catch { /* ignore — fall back to free text */ }
+
     const result = await ctx.openModal<Record<string, string>>({
       id: "approve-folder-input",
       render: (resolve) => (
         <FormModal
           title={`${SYM.gear} Approve Folder on '${foldersAgent}'`}
-          fields={[{ name: "folder", label: "Folder Path", required: true, hint: "e.g. team or team/backend" }]}
+          fields={[{
+            name: "folder",
+            label: "Folder",
+            required: true,
+            hint: folderOptions.length > 0 ? "type to search" : "e.g. team or team/backend",
+            options: folderOptions.length > 0 ? folderOptions : undefined,
+            searchable: folderOptions.length > 0 ? true : undefined,
+          }]}
           onResult={resolve}
         />
       ),
