@@ -451,8 +451,9 @@ export async function createFolderRequest(
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     },
   );
-  // Jenkins 302-redirects to grantsById/{id}; fetch follows so html is the landed page
-  const m = html?.match(/\/controlled-slaves\/grantsById\/([^/"'?#\s]+)/);
+  // Jenkins 302-redirects to grantsById/{id}; fetch follows so html is the landed page.
+  // The href may be relative (grantsById/{id}) or absolute (/job/.../controlled-slaves/grantsById/{id}).
+  const m = html?.match(/grantsById\/([^/"'?#\s]+)/);
   if (!m?.[1]) throw new Error("Could not extract grantId from folder request response");
   return m[1];
 }
@@ -472,7 +473,8 @@ export async function createAgentToken(
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     },
   );
-  const m = html?.match(/\/security-tokens\/tokensById\/([^/"'?#\s]+)/);
+  // href may be relative (tokensById/{id}) or absolute (/computer/.../security-tokens/tokensById/{id}).
+  const m = html?.match(/tokensById\/([^/"'?#\s]+)/);
   if (!m?.[1]) throw new Error("Could not extract tokenId from create-token response");
   return m[1];
 }
