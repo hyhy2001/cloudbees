@@ -948,11 +948,15 @@ export async function listControlledAgents(
   let m: RegExpExecArray | null;
   while ((m = rowRe.exec(html)) !== null) {
     const grantId = m[1]!;
-    // Find the agent name: look for an <a> tag with href containing "/computer/" near this grant.
-    const before = html.slice(Math.max(0, m.index - 800), m.index);
-    const agentMatch = before.match(/href="[^"]*\/computer\/([^/"]+)\/"[^>]*>([^<]+)<\/a>\s*$/);
-    const agentName = agentMatch
-      ? decodeURIComponent(agentMatch[1]!.replace(/\+/g, " "))
+    // Find the agent name: scan the 1000 chars before the delete link for the
+    // last /computer/{name}/ href. Pick the last match so we get the closest one.
+    const before = html.slice(Math.max(0, m.index - 1000), m.index);
+    const agentRe = /href="[^"]*\/computer\/([^/"]+)\/"/g;
+    let agentMatch: RegExpExecArray | null;
+    let lastAgentMatch: RegExpExecArray | null = null;
+    while ((agentMatch = agentRe.exec(before)) !== null) lastAgentMatch = agentMatch;
+    const agentName = lastAgentMatch
+      ? decodeURIComponent(lastAgentMatch[1]!.replace(/\+/g, " "))
       : null;
     grants.push({ agentName, grantId });
   }

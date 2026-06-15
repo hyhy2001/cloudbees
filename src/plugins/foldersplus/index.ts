@@ -2,9 +2,8 @@
  * Folders Plus plugin — CloudBees Folders Plus enterprise features.
  * Provides controlled-agent management and folder approval handshake.
  */
-import type { Plugin, PluginContext, TuiScreen } from "../../registry/types";
+import type { Plugin, PluginContext } from "../../registry/types";
 import { registerFoldersPlusCommands } from "./commands";
-import { foldersPlusScreen } from "./screen";
 
 export const foldersPlusPlugin: Plugin = {
   meta: {
@@ -15,8 +14,5 @@ export const foldersPlusPlugin: Plugin = {
   },
   register(ctx: PluginContext): void {
     registerFoldersPlusCommands(ctx);
-  },
-  screen(): TuiScreen {
-    return foldersPlusScreen();
   },
 };

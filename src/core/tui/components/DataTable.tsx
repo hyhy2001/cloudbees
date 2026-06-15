@@ -166,11 +166,15 @@ export const DataTable: React.FC<DataTableProps> = ({
   );
   const visible = rows.slice(start, start + height);
 
+  const multi = (selected?.size ?? 0) > 0;
+
   return (
     <Box flexDirection="column">
       {/* Header */}
       <Box>
-        <Text color={THEME.subtle}>{"  "}</Text>
+        <Text color={multi ? THEME.keyhint : THEME.subtle} bold={multi}>
+          {multi ? "S " : "  "}
+        </Text>
         {columns.map((c, i) => (
           <Text key={i} color={THEME.keyhint} bold>
             {pad(c.header, colWidths[i] ?? c.width)}{" "}
