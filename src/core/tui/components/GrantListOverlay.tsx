@@ -44,6 +44,33 @@ export interface GrantListOverlayProps {
   isActive?: boolean;
 }
 
+// Separate hook component so useInput is fully unmounted (not just disabled)
+// when a modal is open, preventing Ink from firing events to this handler.
+const GrantListInput: FC<{
+  count: number;
+  items: GrantItem[] | null;
+  cursor: number;
+  setCursor: (fn: (c: number) => number) => void;
+  onAdd: () => void;
+  onRevoke: (item: GrantItem) => void;
+  onRefresh: () => void;
+  onClose: () => void;
+}> = ({ count, items, cursor, setCursor, onAdd, onRevoke, onRefresh, onClose }) => {
+  useInput((input, key) => {
+    if (key.escape) { onClose(); return; }
+    if (key.upArrow) { setCursor((c) => Math.max(0, c - 1)); return; }
+    if (key.downArrow) { setCursor((c) => Math.min(count - 1, c + 1)); return; }
+    if (input === "a") { onAdd(); return; }
+    if (input === "r") { onRefresh(); return; }
+    if (input === "d") {
+      const item = items?.[cursor];
+      if (item && !item.pending) onRevoke(item);
+      return;
+    }
+  });
+  return null;
+};
+
 export const GrantListOverlay: FC<GrantListOverlayProps> = ({
   title,
   subtitle,
@@ -60,24 +87,20 @@ export const GrantListOverlay: FC<GrantListOverlayProps> = ({
   const [cursor, setCursor] = useState(0);
   const count = items?.length ?? 0;
 
-  useInput(
-    (input, key) => {
-      if (key.escape) { onClose(); return; }
-      if (key.upArrow) { setCursor((c) => Math.max(0, c - 1)); return; }
-      if (key.downArrow) { setCursor((c) => Math.min(count - 1, c + 1)); return; }
-      if (input === "a") { onAdd(); return; }
-      if (input === "r") { onRefresh(); return; }
-      if (input === "d") {
-        const item = items?.[cursor];
-        if (item && !item.pending) onRevoke(item);
-        return;
-      }
-    },
-    { isActive },
-  );
-
   return (
     <Box flexDirection="column" borderStyle={borderStyle()} borderColor={THEME.keyhint} paddingX={2} paddingY={1} marginX={2}>
+      {isActive && (
+        <GrantListInput
+          count={count}
+          items={items}
+          cursor={cursor}
+          setCursor={setCursor}
+          onAdd={onAdd}
+          onRevoke={onRevoke}
+          onRefresh={onRefresh}
+          onClose={onClose}
+        />
+      )}
       <Text color={THEME.keyhint} bold>{title}</Text>
       {subtitle ? <Text color={THEME.dim}>{subtitle}</Text> : null}
 
