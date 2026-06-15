@@ -12,9 +12,9 @@
 
 - Authentication and **multi-profile** management (log in to several controllers at once, switch the active one)
 - Controller discovery and active-controller selection (remembered per profile)
-- Job lifecycle: list / get / create / update / delete / run / stop / log / status / copy / import, plus String build parameters and an email anti-spam content filter
-- Credential lifecycle: list / get / create / update / delete / import (system & user stores)
-- Node lifecycle: list / get / create / update / delete / offline / online / copy / import (SSH and JNLP/Inbound launchers, Always/On-demand availability), plus CloudBees Folders Plus controlled-agent approval
+- Job lifecycle: list / get / create / update / delete / run / stop / log / status / copy / import / unimport, plus String build parameters, an email anti-spam content filter, and CloudBees Folders Plus controlled-agent approval (list-agents / approve-agent / remove-agent)
+- Credential lifecycle: list / get / create / update / delete / import / unimport (system & user stores)
+- Node lifecycle: list / get / create / update / delete / offline / online / copy / import / unimport (SSH and JNLP/Inbound launchers, Always/On-demand availability), plus Folders Plus controlled-agent mode toggle
 
 ## Requirements
 
@@ -133,6 +133,9 @@ bee job get <name>
 # Track an existing server job as yours (adds to your "Mine" list)
 bee job import <name>
 
+# Stop tracking a job (removes from "Mine"; does not delete it on the server)
+bee job unimport <name>
+
 # Delete job/folder
 bee job delete <name> [--yes]
 
@@ -165,7 +168,7 @@ bee job create freestyle <name> \
   [--schedule "<cron_expr>"] \
   [--param-def NAME=default ...] \
   [--email "a@x.com,b@y.com"] \
-  [--email-cond success|failed|always] \
+  [--email-cond success|failed|always|custom] \
   [--email-keyword <keyword> ...] \
   [--email-regex "<regex>"]
 
@@ -185,7 +188,7 @@ bee job update freestyle <name> \
   [--param-def NAME=default ...] \
   [--clear-params] \
   [--email "a@x.com,b@y.com|''"] \
-  [--email-cond success|failed|always] \
+  [--email-cond success|failed|always|custom] \
   [--email-keyword <keyword> ...] \
   [--email-regex "<regex>"] \
   [--clear-email-keywords] \
@@ -218,6 +221,9 @@ bee cred get <cred_id> [--store system|user]
 # Track an existing server credential as yours
 bee cred import <cred_id> [--store system|user]
 
+# Stop tracking a credential (removes from "Mine"; does not delete it on the server)
+bee cred unimport <cred_id> [--store system|user]
+
 # Create a credential — Username+Password OR SecretText (mutually exclusive)
 bee cred create \
   --username <username> \           # Username+Password type
@@ -231,7 +237,8 @@ bee cred create \
 # Update a credential (partial)
 bee cred update <cred_id> \
   [--username <new_username>] \
-  [--password <new_password>] \
+  [--password <new_password>] \      # Username+Password credentials
+  [--secret-text <new_secret>] \     # SecretText credentials
   [--description <new_description>] \
   [--store system|user]
 
@@ -250,6 +257,9 @@ bee node get <name>
 
 # Track an existing server node as yours
 bee node import <name>
+
+# Stop tracking a node (removes from "Mine"; does not delete it on the server)
+bee node unimport <name>
 
 # Create a node (SSH if --host is given, otherwise JNLP/Inbound)
 bee node create <node_name> \
@@ -278,7 +288,8 @@ bee node update <name> \
   [--java-path </path/to/java>] \
   [--availability always|demand] \
   [--in-demand-delay <n>] \
-  [--idle-delay <n>]
+  [--idle-delay <n>] \
+  [--controlled-agent true|false]    # Folders Plus controlled-agent mode
 
 # Copy node config
 bee node copy <source_name> <new_name>
@@ -298,36 +309,45 @@ Availability:
 
 > Note: the CLI exposes `--java-path` for SSH agents. The TUI omits the Java path field on purpose — CloudBees/Jenkins auto-detects it — and relies on the service-layer default.
 
-### Folders Plus — Controlled Agents (`bee node controlled-agent` / `bee node approve-folder`)
+### Folders Plus — Controlled Agents (`bee job list-agents` / `approve-agent` / `remove-agent`)
 
-CloudBees Folders Plus allows restricting an agent to only run builds from specific approved folders. `bee` automates the full 5-step handshake so you don't need to click through the UI.
+CloudBees Folders Plus allows restricting an agent to only run builds from specific approved folders. `bee` automates the full handshake so you don't need to click through the UI.
 
-**Enable controlled-agent mode on an agent:**
+**Toggle controlled-agent mode on an agent** (one flag on `node update`, no dedicated subcommand):
 
 ```bash
-bee node controlled-agent <agent> --enable
-bee node controlled-agent <agent> --disable
+bee node update <agent> --controlled-agent true     # "Only accept builds from approved folders"
+bee node update <agent> --controlled-agent false
 ```
 
-**Run the full approve-folder handshake** (enables controlled-agent + completes the key/secret exchange in one command):
+**Manage which agents a folder may run on** (all three live under `bee job`):
 
 ```bash
-bee node approve-folder <agent> <folder>
+# List agents approved to run builds from a folder
+bee job list-agents <folder>
+
+# Run the full approve handshake (enables controlled-agent + key/secret exchange)
+bee job approve-agent <folder> <agent>
+
+# Revoke an agent's approval from a folder
+bee job remove-agent <folder> <agent> [--yes]
 
 # Examples
-bee node approve-folder MY_AGENT team
-bee node approve-folder MY_AGENT team/backend
+bee job approve-agent team MY_AGENT
+bee job approve-agent team/backend MY_AGENT
 ```
 
-This command runs the complete 5-step handshake automatically:
+`approve-agent` runs the complete 5-step handshake automatically:
 
 1. Enables "Only accept builds from approved folders" on the agent (patches `config.xml`)
-2. Creates a controlled-agent request on the folder side → gets grant ID (Request Key)
-3. Creates a security token on the agent side → gets token ID
-4. Authorizes the token with the Request Key → gets Request Secret
+2. Creates a controlled-agent request on the folder side → grant ID, read from the `Location` header of the 302 redirect (Request Key)
+3. Creates a security token on the agent side → token ID (also from the `Location` header)
+4. Authorizes the token with the Request Key → Request Secret
 5. Completes the authorization on the folder side with the Request Secret
 
-> **Requires**: admin permissions on both the agent and the folder. The user running `bee` must have access to both sides — this mirrors what the UI requires (two admins exchanging a key/secret). If you only have access to one side, run `createFolderRequest` / `authorizeAgentToken` / `authorizeFolderGrant` as separate steps using the service layer directly.
+If any step after step 2 fails, the artifacts already created (the pending grant on the folder, the unassigned token on the agent) are rolled back automatically — best-effort, in reverse order — so a failed handshake leaves nothing dangling.
+
+> **Requires**: admin permissions on both the agent and the folder. The user running `bee` must have access to both sides — this mirrors what the UI requires (two admins exchanging a key/secret).
 
 > **Folders Plus plugin** must be installed on the CloudBees CI instance. This feature is part of the CloudBees Folders Plus enterprise plugin and is not available on open-source Jenkins.
 
@@ -337,7 +357,7 @@ By default `job list`, `node list`, and `cred list` show only resources created 
 
 ## Cache
 
-A SQLite TTL cache backs GET calls (controllers, jobs, nodes, credentials — most 10 s TTL). Writes automatically invalidate related cache entries.
+A SQLite TTL cache backs GET calls (controllers, jobs, nodes, credentials — TTLs range 15–300 s by resource type; see [Cache & TTL policy](#cache--ttl-policy-corecache)). Writes automatically invalidate related cache entries.
 
 ## TUI
 
@@ -419,15 +439,21 @@ Edit / Import / Unimport live inside the `Enter` action menu, not as standalone 
 
 | Tab | Key | Action |
 |---|---|---|
-| Jobs | `Enter` | On a folder: drill in. On a job: open the action menu |
+| Jobs | `Enter` | On a folder: drill in. On a freestyle job: open the action menu |
 | Jobs | `Backspace` | Go up one folder level |
-| Nodes | `Enter` | Action menu (Toggle Offline · Edit · Import · Unimport · Delete) |
+| Jobs | `c` | Clone the cursor job (freestyle only) |
+| Jobs | `A` | Open the Controlled Agents overlay (folders only) |
+| Nodes | `Enter` | Action menu (Toggle Offline · Edit · Approve Folder · Import · Unimport · Delete) |
 | Credentials | `Shift+S` | Toggle system / user store (a real refetch) |
 | Credentials | `Enter` | Action menu (Edit · Import · Unimport · Delete) |
 | Controllers | `Enter` | Select the active controller |
 | Info | `Ctrl+x` | Clear the local cache |
 
-The Jobs action menu carries: View Log · Run · Stop · Edit · Params · Schedule · Email · Import/Unimport · Delete. Inside the menu, `1`–`9` pick directly, `↑`/`↓` move, `Enter` runs, `Esc` backs out to the list.
+The Jobs action menu carries: View Log · Run · Stop · Edit · Params · Schedule · Email · Import/Unimport · Delete, plus Controlled Agents on folder rows. Inside the menu, `1`–`9` pick directly, `↑`/`↓` move, `Enter` runs, `Esc` backs out to the list.
+
+Multi-select (toggle rows with `Space`) swaps the single-row keys for bulk ones on the Jobs tab: `i` import · `u` unimport · `Ctrl+d` delete · `Esc` deselect all.
+
+The Nodes "Approve Folder" action and the Jobs "Controlled Agents" overlay both open the same grant list (folders↔agents are two views of the same approval). In that overlay: `↑`/`↓` move · `a` approve · `d` revoke (works on pending grants too) · `r` refresh · `Esc` close.
 
 ### Log viewer
 
@@ -456,9 +482,11 @@ Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful 
       │
   registry/          plugin contract + BUILTIN_PLUGINS list + formatter registry
       │
-  plugins/           auth · controller · job · node · credential · system
+  plugins/           auth · controller · job · node · credential · system · foldersplus
       │   per plugin: commands.ts (CLI) + service.ts (logic), plus screen.tsx (TUI tab)
-      │   and xml-builder.ts (config.xml) where that plugin needs them
+      │   and xml-builder.ts (config.xml) where that plugin needs them.
+      │   foldersplus is a stub (no commands, no tab); its handshake lives on
+      │   the node/job services and is driven via `bee job` / `bee node update`
       ▼
   core/              stable engine — NEVER imports plugins/
    ├── api/          HTTP client, CSRF crumb, retry, typed errors
@@ -574,7 +602,7 @@ cloudbees/
 │   │   ├── xml.ts        # escapeXml
 │   │   ├── email.ts      # email-ext publisher + anti-spam presend filter
 │   │   └── schedule.ts   # cron model + TimerTrigger XML
-│   ├── plugins/          # auth · controller · job · node · credential · system
+│   ├── plugins/          # auth · controller · job · node · credential · system · foldersplus
 │   └── registry/         # Plugin contract, BUILTIN_PLUGINS, TUI screen collection
 └── data/                 # runtime SQLite DB (created next to the binary on first run)
 ```
