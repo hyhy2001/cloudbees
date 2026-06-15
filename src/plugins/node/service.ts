@@ -565,8 +565,8 @@ export async function listApprovedFolders(
   // Split by <tr> so each chunk is one row, then extract tokenId and folderName.
   const rows = html.split(/<tr[^>]*>/i).slice(1); // skip before first <tr>
   for (const row of rows) {
-    // tokenId from the delete link in this row
-    const tokenMatch = row.match(/href="tokensById\/([^/"]+)\/doDelete"/);
+    // tokenId from the delete link in this row (href may be relative or absolute)
+    const tokenMatch = row.match(/href="[^"]*\/tokensById\/([^/"]+)\/doDelete"/);
     if (!tokenMatch) continue;
     const tokenId = tokenMatch[1]!;
 
