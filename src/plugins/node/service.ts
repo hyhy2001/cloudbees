@@ -521,23 +521,57 @@ export async function authorizeFolderGrant(
 }
 
 /**
+ * Delete a security token on an agent via `/computer/<agent>/security-tokens/tokensById/<id>/doDelete`.
+ * Used both for user-initiated revoke and for handshake rollback.
+ */
+export async function deleteAgentToken(
+  client: CloudBeesClient,
+  nodeName: string,
+  tokenId: string,
+): Promise<void> {
+  await client.post(
+    `/computer/${nodeSeg(nodeName)}/security-tokens/tokensById/${encodeURIComponent(tokenId)}/doDelete`,
+    { body: formEncode({ Submit: "Yes" }), headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+  );
+}
+
+/**
  * Full approve-folder handshake in one call (requires admin on both agent and folder).
  * 1. Enable controlled-agent on node (if not already)
  * 2. Folder creates request → grantId
  * 3. Agent creates token → tokenId
  * 4. Agent authorizes → requestSecret
  * 5. Folder authorizes with secret
+ *
+ * Steps 2 and 3 each create a persisted artifact (a pending grant on the folder,
+ * an unassigned token on the agent). If a later step fails, those artifacts are
+ * left dangling, so we roll back any we created — best-effort, in reverse order —
+ * before re-throwing the original error. Rollback failures are swallowed so they
+ * don't mask the real cause.
  */
 export async function approveFolder(
   client: CloudBeesClient,
   nodeName: string,
   folderName: string,
 ): Promise<void> {
-  await setControlledAgent(client, nodeName, true);
-  const grantId = await createFolderRequest(client, folderName);
-  const tokenId = await createAgentToken(client, nodeName);
-  const requestSecret = await authorizeAgentToken(client, nodeName, tokenId, grantId);
-  await authorizeFolderGrant(client, folderName, grantId, requestSecret);
+  let grantId: string | null = null;
+  let tokenId: string | null = null;
+  try {
+    await setControlledAgent(client, nodeName, true);
+    grantId = await createFolderRequest(client, folderName);
+    tokenId = await createAgentToken(client, nodeName);
+    const requestSecret = await authorizeAgentToken(client, nodeName, tokenId, grantId);
+    await authorizeFolderGrant(client, folderName, grantId, requestSecret);
+  } catch (err) {
+    const { removeControlledAgentGrant } = await import("../job/service");
+    if (tokenId !== null) {
+      try { await deleteAgentToken(client, nodeName, tokenId); } catch { /* best-effort */ }
+    }
+    if (grantId !== null) {
+      try { await removeControlledAgentGrant(client, folderName, grantId); } catch { /* best-effort */ }
+    }
+    throw err;
+  }
 }
 
 export interface ApprovedFolder {

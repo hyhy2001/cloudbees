@@ -38,6 +38,7 @@ import {
   toggleOffline,
   parseNodeConfig,
   listApprovedFolders,
+  deleteAgentToken,
 } from "./service";
 import { approveFolder } from "../foldersplus/service";
 import { listJobsRecursive } from "../job/service";
@@ -513,10 +514,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     if (!ok) return;
     try {
       const client = await ctx.getClient({ useController: true });
-      await client.post(
-        `/computer/${encodeURIComponent(foldersAgent)}/security-tokens/tokensById/${encodeURIComponent(item.id)}/doDelete`,
-        { body: "Submit=Yes", headers: { "Content-Type": "application/x-www-form-urlencoded" } },
-      );
+      await deleteAgentToken(client, foldersAgent, item.id);
       ctx.notify(`${SYM.ok} Token revoked`, "success");
       ctx.logCommand(`bee job remove-agent ${foldersAgent} ${item.label}`);
       void fetchApprovedFolders(foldersAgent);
