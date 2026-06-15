@@ -567,7 +567,7 @@ export async function listApprovedFolders(
   for (const row of rows) {
     // tokenId from the row's delete link. The table renders the confirmation
     // link as `/delete` (the POST action is `/doDelete` — different endpoint).
-    const tokenMatch = row.match(/href="[^"]*\/tokensById\/([^/"]+)\/delete"/);
+    const tokenMatch = row.match(/href="(?:[^"]*\/)?tokensById\/([^/"]+)\/delete"/);
     if (!tokenMatch) continue;
     const tokenId = tokenMatch[1]!;
 
