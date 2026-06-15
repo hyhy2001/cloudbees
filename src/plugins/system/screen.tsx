@@ -10,7 +10,7 @@ import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps } from "../../registry/types";
 import { useKeymap, bindingsToHints, type KeyBinding } from "../../core/tui/keymap";
-import { SYM, borderStyle } from "../../core/tui/symbols";
+import { SYM, borderStyle, UNICODE_MODE } from "../../core/tui/symbols";
 import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
 import { useResource } from "../../core/tui/data/use-resource";
@@ -26,6 +26,14 @@ interface SystemInfo {
   version: string;
   health: SystemHealth;
   plugins: PluginInfo[];
+}
+
+// Fixed-width cell: pad short strings, truncate long ones so later columns
+// stay aligned. padEnd alone overflows when the value exceeds width.
+function fixWidth(s: string, width: number): string {
+  if (s.length <= width) return s.padEnd(width);
+  const ell = UNICODE_MODE ? "…" : ".";
+  return width <= 1 ? s.slice(0, width) : s.slice(0, width - 1) + ell;
 }
 
 // ─── Settings screen ─────────────────────────────────────────────────────────
@@ -209,9 +217,9 @@ const SettingsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                     <Box key={p.shortName}>
                       <Text color={on ? THEME.active : THEME.dim}>{on ? SYM.arrow : " "} </Text>
                       <Text color={on ? THEME.normal : THEME.dim} bold={on}>
-                        {p.shortName.padEnd(36)}
+                        {fixWidth(p.shortName, 36)}
                       </Text>
-                      <Text color={THEME.dim}>{"  "}{p.version.padEnd(12)}{"  "}</Text>
+                      <Text color={THEME.dim}>{"  "}{fixWidth(p.version, 12)}{"  "}</Text>
                       <Text color={statusColor}>{statusText}</Text>
                     </Box>
                   );
