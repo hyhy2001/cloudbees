@@ -63,8 +63,11 @@ const GrantListInput: FC<{
     if (input === "a") { onAdd(); return; }
     if (input === "r") { onRefresh(); return; }
     if (input === "d") {
+      // Revoke works for pending grants too: an unassigned grant still has a
+      // valid id, and a stuck/pending grant (failed handshake) is exactly what
+      // a user needs to clean up.
       const item = items?.[cursor];
-      if (item && !item.pending) onRevoke(item);
+      if (item) onRevoke(item);
       return;
     }
   });
