@@ -500,6 +500,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const doRevokeApprovedFolder = useCallback(async (item: GrantItem) => {
     if (!foldersAgent) return;
+    ctx.notify(`Revoking '${item.label}' (id=${item.id.slice(0, 8)}…)`, "info");
     const ok = await ctx.openModal<boolean>({
       id: "revoke-folder-confirm",
       render: (resolve) => (
