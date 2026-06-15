@@ -945,7 +945,7 @@ export async function listControlledAgents(
   // Each row: agent link OR "Unassigned" text, plus a delete link containing the grantId.
   // The table renders the confirmation link as `/delete` (the POST action is
   // `/doDelete` — a different endpoint).
-  const rowRe = /href="[^"]*\/grantsById\/([^/"]+)\/delete"/g;
+  const rowRe = /href="(?:[^"]*\/)?grantsById\/([^/"]+)\/delete"/g;
   let m: RegExpExecArray | null;
   while ((m = rowRe.exec(html)) !== null) {
     const grantId = m[1]!;
