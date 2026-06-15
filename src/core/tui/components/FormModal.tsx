@@ -153,11 +153,13 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
         return;
       }
 
-      // Dropdown closed: Enter or printable char opens it; ←/→ still cycle.
-      if (key.return || (input && !key.ctrl && !key.meta && !key.leftArrow && !key.rightArrow)) {
+      // Dropdown closed: "/" opens the searchable dropdown. Enter is NOT handled
+      // here — it falls through to submit() below (line ~221), so Enter always
+      // submits the form regardless of whether a value is already selected.
+      if (input === "/") {
         if (opts.length > 0) {
           setDropdownOpen(true);
-          setDropdownQuery(input && !key.return ? input : "");
+          setDropdownQuery("");
           setDropdownCursor(0);
         }
         return;
@@ -308,7 +310,7 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
             ) : f.options && f.searchable ? (
               <Text color={isActive ? THEME.normal : THEME.dim}>
                 {maskedRaw || "(none)"}
-                {isActive ? <Text color={THEME.dim}> ↵search</Text> : null}
+                {isActive ? <Text color={THEME.dim}> /search</Text> : null}
               </Text>
             ) : cursorPos >= 0 ? (
               <Text color={isPlaceholder ? THEME.dim : THEME.normal}>
