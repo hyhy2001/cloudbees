@@ -562,17 +562,12 @@ export async function listApprovedFolders(
 
   const folders: ApprovedFolder[] = [];
 
-  // DEBUG: dump raw HTML to stderr so we can inspect what Jenkins returns
-  process.stderr.write(`[DEBUG listApprovedFolders] html length=${html.length}\n`);
-  process.stderr.write(`[DEBUG listApprovedFolders] first 2000 chars:\n${html.slice(0, 2000)}\n`);
-
   // Split by <tr> so each chunk is one row, then extract tokenId and folderName.
   const rows = html.split(/<tr[^>]*>/i).slice(1); // skip before first <tr>
-  process.stderr.write(`[DEBUG listApprovedFolders] rows count=${rows.length}\n`);
   for (const row of rows) {
-    // tokenId from the delete link in this row (href may be relative or absolute)
-    const tokenMatch = row.match(/href="[^"]*\/tokensById\/([^/"]+)\/doDelete"/);
-    process.stderr.write(`[DEBUG row tokensById match=${JSON.stringify(tokenMatch?.[1] ?? null)}] row=${row.slice(0, 300)}\n`);
+    // tokenId from the row's delete link. The table renders the confirmation
+    // link as `/delete` (the POST action is `/doDelete` — different endpoint).
+    const tokenMatch = row.match(/href="[^"]*\/tokensById\/([^/"]+)\/delete"/);
     if (!tokenMatch) continue;
     const tokenId = tokenMatch[1]!;
 
