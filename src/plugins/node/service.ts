@@ -469,10 +469,14 @@ export async function createAgentToken(
 ): Promise<string> {
   // Jenkins 302-redirects to tokensById/{id} with an empty body; the id lives in
   // the Location header, not the page.
+  // createSubmit calls request.getSubmittedForm(), which requires a `json`
+  // form param — without it Stapler rejects the POST with HTTP 400
+  // "This page expects a form submission". The form has no inputs, so an empty
+  // JSON object satisfies it.
   const location = await client.postRedirect(
     `/computer/${nodeSeg(nodeName)}/security-tokens/createSubmit`,
     {
-      body: formEncode({ Submit: "Yes" }),
+      body: formEncode({ json: "{}", Submit: "Yes" }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     },
   );
