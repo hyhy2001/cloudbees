@@ -203,27 +203,31 @@ export function registerNodeCommands(ctx: PluginContext): void {
   // ── track ────────────────────────────────────────────────────────────────
   grp
     .command("track")
-    .argument("<name>")
-    .description("Track an existing server node as yours (adds it to your Mine list)")
-    .action(async (name: string) => {
+    .argument("<names...>")
+    .description("Track one or more existing server nodes (adds them to your Mine list)")
+    .action(async (names: string[]) => {
       try {
         const client = await ctx.getClient({ useController: true });
-        try {
-          await getNode(client, name);
-        } catch (e) {
-          if (e instanceof NotFoundError) {
-            printError(`Node '${name}' not found on server. Nothing to track.`);
-            process.exit(1);
-          }
-          throw e;
-        }
         const tracked = getTrackedResources("node", profile, client.baseUrl, dbPath);
-        if (tracked.includes(name)) {
-          printInfo(`INFO Node '${name}' is already tracked.`);
-          return;
+        const trackedSet = new Set(tracked);
+        for (const name of names) {
+          try {
+            await getNode(client, name);
+          } catch (e) {
+            if (e instanceof NotFoundError) {
+              printError(`Node '${name}' not found on server. Skipping.`);
+              continue;
+            }
+            throw e;
+          }
+          if (trackedSet.has(name)) {
+            printInfo(`INFO Node '${name}' is already tracked.`);
+            continue;
+          }
+          trackResource("node", name, profile, client.baseUrl, dbPath);
+          trackedSet.add(name);
+          printSuccess(`OK Tracked node '${name}'.`);
         }
-        trackResource("node", name, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Tracked node '${name}' into your Mine list.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -233,19 +237,28 @@ export function registerNodeCommands(ctx: PluginContext): void {
   // ── delete ────────────────────────────────────────────────────────────────
   grp
     .command("delete")
-    .argument("<name>")
+    .argument("<names...>")
     .option("--yes", "Skip confirmation", false)
-    .description("Delete a node")
-    .action(async (name: string, opts: { yes: boolean }) => {
+    .description("Delete one or more nodes")
+    .action(async (names: string[], opts: { yes: boolean }) => {
       try {
-        if (!opts.yes && !(await confirm(`Delete node '${name}'? [y/N] `))) {
-          printInfo("INFO Cancelled.");
-          return;
+        if (!opts.yes) {
+          const label = names.length === 1 ? `node '${names[0]}'` : `${names.length} nodes`;
+          if (!(await confirm(`Delete ${label}? [y/N] `))) {
+            printInfo("INFO Cancelled.");
+            return;
+          }
         }
         const client = await ctx.getClient({ useController: true });
-        await deleteNode(client, name);
-        untrackResource("node", name, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Node '${name}' deleted.`);
+        for (const name of names) {
+          try {
+            await deleteNode(client, name);
+            untrackResource("node", name, profile, client.baseUrl, dbPath);
+            printSuccess(`OK Node '${name}' deleted.`);
+          } catch (e) {
+            printError(`Failed to delete '${name}': ${e instanceof Error ? e.message : String(e)}`, e);
+          }
+        }
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -298,18 +311,22 @@ export function registerNodeCommands(ctx: PluginContext): void {
   // ── untrack ─────────────────────────────────────────────────────────────────
   grp
     .command("untrack")
-    .argument("<name>")
-    .description("Remove a node from Mine (stops tracking it locally; does not delete from server)")
-    .action(async (name: string) => {
+    .argument("<names...>")
+    .description("Remove one or more nodes from Mine (does not delete from server)")
+    .action(async (names: string[]) => {
       try {
         const client = await ctx.getClient({ useController: true });
         const tracked = getTrackedResources("node", profile, client.baseUrl, dbPath);
-        if (!tracked.includes(name)) {
-          printInfo(`INFO Node '${name}' is not in Mine.`);
-          return;
+        const trackedSet = new Set(tracked);
+        for (const name of names) {
+          if (!trackedSet.has(name)) {
+            printInfo(`INFO Node '${name}' is not in Mine.`);
+            continue;
+          }
+          untrackResource("node", name, profile, client.baseUrl, dbPath);
+          trackedSet.delete(name);
+          printSuccess(`OK Removed node '${name}' from Mine.`);
         }
-        untrackResource("node", name, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Removed node '${name}' from Mine.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);

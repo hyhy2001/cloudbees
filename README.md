@@ -130,17 +130,20 @@ bee job list [--all] [--recursive]
 # Show job details + config summary
 bee job get <name>
 
-# Track an existing server job as yours (adds to your "Mine" list)
-bee job track <name>
+# Track one or more existing server jobs (adds to your "Mine" list)
+bee job track <name...>
 
-# Stop tracking a job (removes from "Mine"; does not delete it on the server)
-bee job untrack <name>
+# Stop tracking one or more jobs (removes from "Mine"; does not delete on the server)
+bee job untrack <name...>
 
-# Delete job/folder
-bee job delete <name> [--yes]
+# Delete one or more jobs/folders
+bee job delete <name...> [--yes]
 
 # Clone job configuration
 bee job copy <source> <destination>
+
+# Move a job into a different folder ('.' for root)
+bee job move <source> <folder>
 
 # Trigger build (optional parameters and wait)
 bee job run <name> [-p KEY=value ...] [--wait] [--timeout 120]
@@ -218,11 +221,14 @@ bee cred list [-o|--output table|json] [--all] [--store system|user]
 # Show credential metadata (secrets are never returned by Jenkins)
 bee cred get <cred_id> [--store system|user]
 
-# Track an existing server credential as yours
-bee cred track <cred_id> [--store system|user]
+# Track one or more existing server credentials
+bee cred track <cred_id...> [--store system|user]
 
-# Stop tracking a credential (removes from "Mine"; does not delete it on the server)
-bee cred untrack <cred_id> [--store system|user]
+# Stop tracking one or more credentials (removes from "Mine"; does not delete on the server)
+bee cred untrack <cred_id...> [--store system|user]
+
+# Delete one or more credentials
+bee cred delete <cred_id...> [--yes] [--store system|user]
 
 # Create a credential — Username+Password OR SecretText (mutually exclusive)
 bee cred create \
@@ -241,9 +247,6 @@ bee cred update <cred_id> \
   [--secret-text <new_secret>] \     # SecretText credentials
   [--description <new_description>] \
   [--store system|user]
-
-# Delete a credential
-bee cred delete <cred_id> [--yes] [--store system|user]
 ```
 
 ### Nodes (`bee node`)
@@ -255,11 +258,11 @@ bee node list [--all]
 # Show node details
 bee node get <name>
 
-# Track an existing server node as yours
-bee node track <name>
+# Track one or more existing server nodes
+bee node track <name...>
 
-# Stop tracking a node (removes from "Mine"; does not delete it on the server)
-bee node untrack <name>
+# Stop tracking one or more nodes (removes from "Mine"; does not delete on the server)
+bee node untrack <name...>
 
 # Create a node (SSH if --host is given, otherwise JNLP/Inbound)
 bee node create <node_name> \
@@ -298,8 +301,8 @@ bee node copy <source_name> <new_name>
 bee node offline <name> [--reason <message>]
 bee node online <name>
 
-# Delete a node
-bee node delete <name> [--yes]
+# Delete one or more nodes
+bee node delete <name...> [--yes]
 ```
 
 Availability:

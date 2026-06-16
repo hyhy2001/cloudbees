@@ -25,6 +25,7 @@ import {
   createFreestyleJob,
   createFolder,
   copyJob,
+  moveJob,
   deleteJob,
   getJobConfigSummary,
   updateJobFreestyle,
@@ -287,13 +288,14 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── delete ────────────────────────────────────────────────────────────────
   grp
     .command("delete")
-    .description("Delete a job or folder")
-    .argument("<name>", "Job name")
+    .description("Delete one or more jobs or folders")
+    .argument("<names...>", "Job name(s)")
     .option("--yes", "Skip confirmation", false)
-    .action(async (name: string, opts: { yes: boolean }) => {
+    .action(async (names: string[], opts: { yes: boolean }) => {
       try {
         if (!opts.yes) {
-          const ok = await confirm(`Delete job '${name}'? [y/N] `);
+          const label = names.length === 1 ? `job '${names[0]}'` : `${names.length} jobs`;
+          const ok = await confirm(`Delete ${label}? [y/N] `);
           if (!ok) {
             printInfo("INFO Cancelled.");
             return;
@@ -302,21 +304,22 @@ export function registerJobCommands(ctx: PluginContext): void {
 
         const client = await ctx.getClient({ useController: true });
 
-        try {
-          await deleteJob(client, name);
-          printSuccess(`OK Job '${name}' deleted from server.`);
-        } catch (e) {
-          if (e instanceof NotFoundError) {
-            printInfo(`INFO Job '${name}' not found on server, removing from local tracking only.`);
-          } else {
-            const msg = e instanceof Error ? e.message : String(e);
-            printWarning(`WARN Could not delete job on server: ${msg}`);
-            printInfo("INFO Proceeding with local removal anyway.");
+        for (const name of names) {
+          try {
+            await deleteJob(client, name);
+            printSuccess(`OK Job '${name}' deleted from server.`);
+          } catch (e) {
+            if (e instanceof NotFoundError) {
+              printInfo(`INFO Job '${name}' not found on server, removing from local tracking only.`);
+            } else {
+              const msg = e instanceof Error ? e.message : String(e);
+              printWarning(`WARN Could not delete job '${name}' on server: ${msg}`);
+              printInfo("INFO Proceeding with local removal anyway.");
+            }
           }
+          untrackResource("job", name, profile, client.baseUrl, dbPath);
+          printSuccess(`OK Job '${name}' removed from local database.`);
         }
-
-        untrackResource("job", name, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Job '${name}' removed from local database.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -343,26 +346,51 @@ export function registerJobCommands(ctx: PluginContext): void {
       }
     });
 
+  // ── move ──────────────────────────────────────────────────────────────────
+  grp
+    .command("move")
+    .description("Move a job to a different folder (copy config.xml to dest, delete source)")
+    .argument("<source>", "Source job qualified name (e.g. folderA/my-job)")
+    .argument("<folder>", "Destination folder name, or '.' for root")
+    .action(async (source: string, folder: string) => {
+      try {
+        const destFolder = folder === "." ? null : folder;
+        const client = await ctx.getClient({ useController: true });
+        const qualified = await moveJob(client, source, destFolder);
+        untrackResource("job", source, profile, client.baseUrl, dbPath);
+        trackResource("job", qualified, profile, client.baseUrl, dbPath);
+        const destLabel = destFolder ?? "/";
+        printSuccess(`OK Job '${source}' moved to '${destLabel}' as '${qualified}'.`);
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
   // ── track ────────────────────────────────────────────────────────────────
   grp
     .command("track")
-    .description("Track an existing server job as yours (adds it to your Mine list)")
-    .argument("<name>", "Job name as it appears on the server")
-    .action(async (name: string) => {
+    .description("Track one or more existing server jobs (adds them to your Mine list)")
+    .argument("<names...>", "Job name(s) as they appear on the server")
+    .action(async (names: string[]) => {
       try {
         const client = await ctx.getClient({ useController: true });
-        const job = await getJob(client, name);
-        if (!job) {
-          printError(`Job '${name}' not found on server. Nothing to track.`);
-          process.exit(1);
-        }
         const tracked = getTrackedResources("job", profile, client.baseUrl, dbPath);
-        if (tracked.includes(name)) {
-          printInfo(`INFO Job '${name}' is already tracked.`);
-          return;
+        const trackedSet = new Set(tracked);
+        for (const name of names) {
+          const job = await getJob(client, name);
+          if (!job) {
+            printError(`Job '${name}' not found on server. Skipping.`);
+            continue;
+          }
+          if (trackedSet.has(name)) {
+            printInfo(`INFO Job '${name}' is already tracked.`);
+            continue;
+          }
+          trackResource("job", name, profile, client.baseUrl, dbPath);
+          trackedSet.add(name);
+          printSuccess(`OK Tracked job '${name}'.`);
         }
-        trackResource("job", name, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Tracked job '${name}' into your Mine list.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -372,18 +400,22 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── untrack ─────────────────────────────────────────────────────────────────
   grp
     .command("untrack")
-    .description("Remove a job from Mine (stops tracking it locally; does not delete from server)")
-    .argument("<name>", "Job name as it appears on the server")
-    .action(async (name: string) => {
+    .description("Remove one or more jobs from Mine (does not delete from server)")
+    .argument("<names...>", "Job name(s) as they appear on the server")
+    .action(async (names: string[]) => {
       try {
         const client = await ctx.getClient({ useController: true });
         const tracked = getTrackedResources("job", profile, client.baseUrl, dbPath);
-        if (!tracked.includes(name)) {
-          printInfo(`INFO Job '${name}' is not in Mine.`);
-          return;
+        const trackedSet = new Set(tracked);
+        for (const name of names) {
+          if (!trackedSet.has(name)) {
+            printInfo(`INFO Job '${name}' is not in Mine.`);
+            continue;
+          }
+          untrackResource("job", name, profile, client.baseUrl, dbPath);
+          trackedSet.delete(name);
+          printSuccess(`OK Removed job '${name}' from Mine.`);
         }
-        untrackResource("job", name, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Removed job '${name}' from Mine.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
