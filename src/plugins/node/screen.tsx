@@ -616,10 +616,9 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // ── Declarative keymap ────────────────────────────────────────────────────
   const multi = selected.size > 0;
   const hasRow = current !== undefined && current.labels !== "[DELETED_ON_SERVER]";
-  // Trackable = a real server row not yet in the Mine list (most useful in All view).
   const canImport = hasRow && current !== undefined && !trackedNames.has(current.name);
-  // Untrackable = a row currently in the Mine list (can be removed from Mine).
   const canUntrack = hasRow && current !== undefined && trackedNames.has(current.name);
+  const canCreate = ctx.capabilities?.canCreateNode !== false;
 
   const menuActions = useMemo(
     () => [
@@ -639,7 +638,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "ctrl+d", label: selected.size > 0 ? `delete ${selected.size}` : "delete", group: "action",
         when: () => (selected.size > 0 || current !== undefined) && !menuOpen,
         run: () => void bulkRemoveNodes() },
-      { key: "ctrl+n", label: "new", hidden: multi, run: () => void createNode() },
+      { key: "ctrl+n", label: "new", hidden: multi || !canCreate, when: () => !multi && canCreate, run: () => void createNode() },
       { key: "i", label: "track", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkImport() },
       { key: "u", label: "untrack", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkUnimport() },
       { key: "ctrl+a", label: "mine/all", hidden: multi, run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("node", nv, ctx.dbPath); return nv; }) },
@@ -648,7 +647,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", hidden: !multi && !search.active, when: () => multi || search.active, run: () => { if (multi) setSelected(new Set()); else search.clear(); } },
       { key: "r", label: "refresh", hidden: multi, run: () => void refetch() },
     ],
-    [current, menuOpen, selected, multi, bulkRemoveNodes, bulkImport, bulkUnimport, createNode, search, refetch, ctx],
+    [current, menuOpen, selected, multi, canCreate, bulkRemoveNodes, bulkImport, bulkUnimport, createNode, search, refetch, ctx],
   );
   useKeymap(bindings, { isActive: active && !menuOpen && !foldersAgent && !search.editing });
   useEffect(() => {
@@ -838,7 +837,6 @@ export function nodeScreen(): TuiScreen {
     title: "Nodes",
     order: 3,
     icon: SYM.online,
-    requires: "node",
     Component: NodesScreen,
   };
 }
