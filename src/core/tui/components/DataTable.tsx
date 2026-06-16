@@ -135,8 +135,6 @@ export const DataTable: React.FC<DataTableProps> = ({
     (i: number) => Math.max(0, Math.min(rows.length - 1, i)),
     [rows.length],
   );
-  // Memoize column widths — only recompute when columns or tableWidth change.
-  const colWidths = useMemo(() => resolveColumnWidths(columns, tableWidth), [columns, tableWidth]);
 
   // Navigation only. Enter (and every action key) is owned by the screen's
   // keymap — the table never handles selection, so there's no double-fire.
@@ -166,15 +164,25 @@ export const DataTable: React.FC<DataTableProps> = ({
   );
   const visible = rows.slice(start, start + height);
 
-  const multi = (selected?.size ?? 0) > 0;
+  // Dedicated "Sel" column when the table supports multi-select.
+  const hasSel = !!onToggleSelect;
+  const SEL_W = 3;
+  // When Sel column is present, subtract its width from the flex budget so
+  // data columns don't overflow the terminal.
+  const effectiveTableWidth = tableWidth && hasSel ? tableWidth - (SEL_W + 1) : tableWidth;
+  // Memoize column widths — only recompute when columns or tableWidth change.
+  const colWidths = useMemo(() => resolveColumnWidths(columns, effectiveTableWidth), [columns, effectiveTableWidth]);
 
   return (
     <Box flexDirection="column">
       {/* Header */}
       <Box>
-        <Text color={multi ? THEME.keyhint : THEME.subtle} bold={multi}>
-          {multi ? "S " : "  "}
-        </Text>
+        <Text color={THEME.subtle}>{"  "}</Text>
+        {hasSel && (
+          <Text color={THEME.keyhint} bold>
+            {pad("Sel", SEL_W)}{" "}
+          </Text>
+        )}
         {columns.map((c, i) => (
           <Text key={i} color={THEME.keyhint} bold>
             {pad(c.header, colWidths[i] ?? c.width)}{" "}
@@ -186,6 +194,7 @@ export const DataTable: React.FC<DataTableProps> = ({
       <Box>
         <Text color={THEME.subtle}>
           {"  "}
+          {hasSel ? SYM.sep.repeat(SEL_W + 1) : ""}
           {columns.map((_, i) => SYM.sep.repeat((colWidths[i] ?? columns[i]!.width) + 1)).join("")}
         </Text>
       </Box>
@@ -196,39 +205,35 @@ export const DataTable: React.FC<DataTableProps> = ({
         const isCursor = rowIndex === cursor;
         const rowKey = rowKeys?.[rowIndex] ?? rowIndex;
         const isSelected = typeof rowKey === "string" && (selected?.has(rowKey) ?? false);
-        // ☑ = selected, ▶ = cursor (unselected), ☐ = selectable, space = not selectable
-        const indicator = isSelected
-          ? SYM.iconCheck
-          : isCursor
-            ? SYM.selected
-            : onToggleSelect
-              ? SYM.iconUncheck
-              : " ";
-        const indicatorColor = isSelected
-          ? (isCursor ? THEME.selectedFg : THEME.success)
-          : isCursor
-            ? THEME.active
-            : THEME.subtle;
-        const rowBg = isCursor ? THEME.selectedBg : isSelected ? THEME.badgeWarnBg : undefined;
+        // Cursor indicator (leftmost): ▶ on the cursor row, space elsewhere.
+        const indicator = isCursor ? SYM.selected : " ";
+        // Sel column: ☑ when selected, ☐ when selectable-but-not.
+        const selMark = isSelected ? SYM.iconCheck : SYM.iconUncheck;
+        const rowBg = isCursor ? THEME.selectedBg : undefined;
         return (
           <Box key={rowKey}>
-            <Text color={indicatorColor} backgroundColor={rowBg}>{indicator}</Text>
+            <Text color={isCursor ? THEME.active : THEME.subtle} backgroundColor={rowBg}>
+              {indicator}
+            </Text>
             <Text color={THEME.subtle} backgroundColor={rowBg}> </Text>
+            {hasSel && (
+              <Text color={isSelected ? THEME.success : THEME.subtle} backgroundColor={rowBg} bold={isSelected}>
+                {pad(selMark, SEL_W)}{" "}
+              </Text>
+            )}
             {row.map((cell, ci) => {
               const width = colWidths[ci] ?? columns[ci]?.width ?? 10;
               const color = isCursor
                 ? THEME.selectedFg
-                : isSelected
-                  ? THEME.warning
-                  : cell.dim
-                    ? THEME.dim
-                    : cell.color;
+                : cell.dim
+                  ? THEME.dim
+                  : cell.color;
               return (
                 <Text
                   key={ci}
                   color={color}
                   backgroundColor={rowBg}
-                  bold={isCursor || isSelected}
+                  bold={isCursor}
                 >
                   {pad(cell.text, width)}{" "}
                 </Text>
