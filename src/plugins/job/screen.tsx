@@ -1057,13 +1057,13 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     if (!baseUrl || selected.size === 0) return;
     const toAdd = [...selected].filter((n) => !trackedNames.has(n));
     if (toAdd.length === 0) {
-      ctx.notify(`${SYM.warn} Nothing to import — all selected already in Mine`, "warning");
+      ctx.notify(`${SYM.warn} Nothing to track — all selected already in Mine`, "warning");
       return;
     }
     for (const name of toAdd) trackResource("job", name, ctx.profile, baseUrl, ctx.dbPath);
     setSelected(new Set());
-    ctx.notify(`${SYM.ok} Imported ${toAdd.length} job(s) into Mine`, "success");
-    ctx.logCommand(toAdd.map((n) => `bee job import ${n}`).join("\n"));
+    ctx.notify(`${SYM.ok} Tracked ${toAdd.length} job(s) into Mine`, "success");
+    ctx.logCommand(toAdd.map((n) => `bee job track ${n}`).join("\n"));
     void refetch();
   }, [baseUrl, selected, trackedNames, ctx, refetch]);
 
@@ -1071,13 +1071,13 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     if (!baseUrl || selected.size === 0) return;
     const toRemove = [...selected].filter((n) => trackedNames.has(n));
     if (toRemove.length === 0) {
-      ctx.notify(`${SYM.warn} Nothing to unimport — none selected are in Mine`, "warning");
+      ctx.notify(`${SYM.warn} Nothing to untrack — none selected are in Mine`, "warning");
       return;
     }
     for (const name of toRemove) untrackResource("job", name, ctx.profile, baseUrl, ctx.dbPath);
     setSelected(new Set());
     ctx.notify(`${SYM.ok} Removed ${toRemove.length} job(s) from Mine`, "success");
-    ctx.logCommand(toRemove.map((n) => `bee job unimport ${n}`).join("\n"));
+    ctx.logCommand(toRemove.map((n) => `bee job untrack ${n}`).join("\n"));
     void refetch();
   }, [baseUrl, selected, trackedNames, ctx, refetch]);
 
@@ -1139,7 +1139,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   );
 
   // Multi-select mode: when rows are checked via Space, the footer collapses to
-  // the bulk actions (import/unimport/delete/clear) and hides single-row hints
+  // the bulk actions (track/untrack/delete/clear) and hides single-row hints
   // so the user only sees what applies to the selection.
   const multi = selected.size > 0;
   const bindings = useMemo<KeyBinding[]>(
@@ -1161,9 +1161,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "ctrl+n", label: "new", hidden: multi, when: () => !multi, run: () => void newJob() },
       { key: "c", label: "clone", group: "action", hidden: multi, when: () => !multi && current?.jobType === "FS" && !menuOpen, run: () => void cloneJob() },
       { key: "m", label: "move", group: "action", hidden: multi, when: () => !multi && current?.jobType === "FS" && !menuOpen, run: () => void moveJobCb() },
-      { key: "i", label: "import", group: "action", hidden: !multi,
+      { key: "i", label: "track", group: "action", hidden: !multi,
         when: () => multi && !menuOpen, run: () => bulkImport() },
-      { key: "u", label: "unimport", group: "action", hidden: !multi,
+      { key: "u", label: "untrack", group: "action", hidden: !multi,
         when: () => multi && !menuOpen, run: () => bulkUnimport() },
       { key: "A", label: "agents", group: "action", hidden: multi || current?.jobType !== "FD", when: () => !multi && current?.jobType === "FD" && !menuOpen, run: (): false => {
         if (!current) return false;

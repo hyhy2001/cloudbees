@@ -246,9 +246,9 @@ export function registerCredentialCommands(ctx: PluginContext): void {
       }
     });
 
-  // ── import ──────────────────────────────────────────────────────────────────
+  // ── track ──────────────────────────────────────────────────────────────────
   grp
-    .command("import")
+    .command("track")
     .argument("<cred_id>")
     .option("--store <store>", "Credential store: 'system' or 'user'", "system")
     .description("Track an existing server credential as yours (adds it to Mine)")
@@ -271,11 +271,11 @@ export function registerCredentialCommands(ctx: PluginContext): void {
         }
         const tracked = getTrackedResources("credential", profile, `${client.baseUrl}.${opts.store}`, dbPath);
         if (tracked.includes(credId)) {
-          printInfo(`INFO Credential '${credId}' is already imported.`);
+          printInfo(`INFO Credential '${credId}' is already tracked.`);
           return;
         }
         trackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
-        printSuccess(`OK Imported '${credId}' into Mine.`);
+        printSuccess(`OK Tracked '${credId}' into Mine.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -321,9 +321,9 @@ export function registerCredentialCommands(ctx: PluginContext): void {
       },
     );
 
-  // ── unimport ─────────────────────────────────────────────────────────────────
+  // ── untrack ─────────────────────────────────────────────────────────────────
   grp
-    .command("unimport")
+    .command("untrack")
     .argument("<cred_id>")
     .option("--store <store>", "Credential store: 'system' or 'user'", "system")
     .description("Remove a credential from Mine (stops tracking it locally; does not delete from server)")

@@ -343,9 +343,9 @@ export function registerJobCommands(ctx: PluginContext): void {
       }
     });
 
-  // ── import ────────────────────────────────────────────────────────────────
+  // ── track ────────────────────────────────────────────────────────────────
   grp
-    .command("import")
+    .command("track")
     .description("Track an existing server job as yours (adds it to your Mine list)")
     .argument("<name>", "Job name as it appears on the server")
     .action(async (name: string) => {
@@ -353,25 +353,25 @@ export function registerJobCommands(ctx: PluginContext): void {
         const client = await ctx.getClient({ useController: true });
         const job = await getJob(client, name);
         if (!job) {
-          printError(`Job '${name}' not found on server. Nothing to import.`);
+          printError(`Job '${name}' not found on server. Nothing to track.`);
           process.exit(1);
         }
         const tracked = getTrackedResources("job", profile, client.baseUrl, dbPath);
         if (tracked.includes(name)) {
-          printInfo(`INFO Job '${name}' is already imported.`);
+          printInfo(`INFO Job '${name}' is already tracked.`);
           return;
         }
         trackResource("job", name, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Imported job '${name}' into your Mine list.`);
+        printSuccess(`OK Tracked job '${name}' into your Mine list.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
       }
     });
 
-  // ── unimport ─────────────────────────────────────────────────────────────────
+  // ── untrack ─────────────────────────────────────────────────────────────────
   grp
-    .command("unimport")
+    .command("untrack")
     .description("Remove a job from Mine (stops tracking it locally; does not delete from server)")
     .argument("<name>", "Job name as it appears on the server")
     .action(async (name: string) => {

@@ -441,13 +441,13 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, refetch, credentialOptions],
   );
 
-  // Import = track an existing server node into Mine (for nodes created outside bee).
+  // Track = add an existing server node to Mine (for nodes created outside bee).
   const doImport = useCallback(
     (name: string) => {
       if (!baseUrl) return;
       trackResource("node", name, ctx.profile, baseUrl, ctx.dbPath);
-      ctx.notify(`${SYM.ok} Imported '${name}' into Mine`, "success");
-      ctx.logCommand(`bee node import ${name}`);
+      ctx.notify(`${SYM.ok} Tracked '${name}' into Mine`, "success");
+      ctx.logCommand(`bee node track ${name}`);
       void refetch();
     },
     [baseUrl, ctx, refetch],
@@ -589,13 +589,13 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     if (!baseUrl || selected.size === 0) return;
     const toAdd = [...selected].filter((n) => !trackedNames.has(n));
     if (toAdd.length === 0) {
-      ctx.notify(`${SYM.warn} Nothing to import — all selected already in Mine`, "warning");
+      ctx.notify(`${SYM.warn} Nothing to track — all selected already in Mine`, "warning");
       return;
     }
     for (const name of toAdd) trackResource("node", name, ctx.profile, baseUrl, ctx.dbPath);
     setSelected(new Set());
-    ctx.notify(`${SYM.ok} Imported ${toAdd.length} node(s) into Mine`, "success");
-    ctx.logCommand(toAdd.map((n) => `bee node import ${n}`).join("\n"));
+    ctx.notify(`${SYM.ok} Tracked ${toAdd.length} node(s) into Mine`, "success");
+    ctx.logCommand(toAdd.map((n) => `bee node track ${n}`).join("\n"));
     void refetch();
   }, [baseUrl, selected, trackedNames, ctx, refetch]);
 
@@ -603,20 +603,20 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     if (!baseUrl || selected.size === 0) return;
     const toRemove = [...selected].filter((n) => trackedNames.has(n));
     if (toRemove.length === 0) {
-      ctx.notify(`${SYM.warn} Nothing to unimport — none selected are in Mine`, "warning");
+      ctx.notify(`${SYM.warn} Nothing to untrack — none selected are in Mine`, "warning");
       return;
     }
     for (const name of toRemove) untrackResource("node", name, ctx.profile, baseUrl, ctx.dbPath);
     setSelected(new Set());
     ctx.notify(`${SYM.ok} Removed ${toRemove.length} node(s) from Mine`, "success");
-    ctx.logCommand(toRemove.map((n) => `bee node unimport ${n}`).join("\n"));
+    ctx.logCommand(toRemove.map((n) => `bee node untrack ${n}`).join("\n"));
     void refetch();
   }, [baseUrl, selected, trackedNames, ctx, refetch]);
 
   // ── Declarative keymap ────────────────────────────────────────────────────
   const multi = selected.size > 0;
   const hasRow = current !== undefined && current.labels !== "[DELETED_ON_SERVER]";
-  // Importable = a real server row not yet in the Mine list (most useful in All view).
+  // Trackable = a real server row not yet in the Mine list (most useful in All view).
   const canImport = hasRow && current !== undefined && !trackedNames.has(current.name);
   // Untrackable = a row currently in the Mine list (can be removed from Mine).
   const canUntrack = hasRow && current !== undefined && trackedNames.has(current.name);
@@ -626,8 +626,8 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { label: "Toggle Offline",   icon: SYM.iconToggle,   run: async () => { if (!current) return false as const; return await doToggleOffline(current); } },
       { label: "Edit",             icon: SYM.iconEdit,     run: async () => { if (!current) return false as const; return await editNode(current); } },
       { label: "Approve Folder",   icon: SYM.iconSchedule, run: () => { if (!current) return false as const; return doApproveFolder(current); } },
-      { label: "Import",           icon: SYM.iconImport,   when: () => canImport, run: () => { if (current) doImport(current.name); } },
-      { label: "Unimport", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); ctx.logCommand(`bee node unimport ${current.name}`); void refetch(); } } },
+      { label: "Track",             icon: SYM.iconImport,   when: () => canImport, run: () => { if (current) doImport(current.name); } },
+      { label: "Untrack", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("node", current.name, ctx.profile, baseUrl, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.name}' from Mine`, "success"); ctx.logCommand(`bee node untrack ${current.name}`); void refetch(); } } },
       { label: "Delete",           icon: SYM.iconDelete,   danger: true, run: async () => { if (!current) return false as const; return await removeNode(current.name); } },
     ],
     [current, canImport, canUntrack, baseUrl, editNode, doImport, removeNode, doToggleOffline, doApproveFolder, refetch, ctx],
@@ -640,8 +640,8 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         when: () => (selected.size > 0 || current !== undefined) && !menuOpen,
         run: () => void bulkRemoveNodes() },
       { key: "ctrl+n", label: "new", hidden: multi, run: () => void createNode() },
-      { key: "i", label: "import", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkImport() },
-      { key: "u", label: "unimport", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkUnimport() },
+      { key: "i", label: "track", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkImport() },
+      { key: "u", label: "untrack", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkUnimport() },
       { key: "ctrl+a", label: "mine/all", hidden: multi, run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("node", nv, ctx.dbPath); return nv; }) },
       { key: "F", label: "auto", hidden: multi, run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
