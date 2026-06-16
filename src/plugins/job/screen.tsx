@@ -1505,6 +1505,7 @@ export function jobScreen(): TuiScreen {
     title: "Jobs",
     order: 4,
     icon: SYM.gear,
+    requires: "job",
     Component: JobsScreen,
   };
 }

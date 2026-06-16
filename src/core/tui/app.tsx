@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Box, Text, useApp } from "ink";
 import type { TuiScreen } from "../../registry/types";
 import { useTui } from "./context";
@@ -35,6 +35,26 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
 
   const modalOpen = tui.activeModal !== null;
   const count = screens.length;
+
+  // A tab is disabled when the active controller lacks the required permission.
+  // If capabilities haven't been probed yet (null) we leave tabs enabled — fail open.
+  const isTabDisabled = (s: (typeof screens)[number]) => {
+    if (!s.requires || !tui.capabilities) return false;
+    const { canCreateJob, canCreateNode, canCreateCred } = tui.capabilities;
+    if (s.requires === "job")  return !canCreateJob;
+    if (s.requires === "node") return !canCreateNode;
+    if (s.requires === "cred") return !canCreateCred;
+    return false;
+  };
+
+  // Next/prev tab skip disabled tabs.
+  const nextEnabled = (from: number, dir: 1 | -1) => {
+    for (let i = 1; i <= count; i++) {
+      const idx = ((from + dir * i) + count) % count;
+      if (!isTabDisabled(screens[idx]!)) return idx;
+    }
+    return from; // all disabled (shouldn't happen)
+  };
 
   const globalActive = !modalOpen && !showHelp && !tui.inputCaptured;
 
@@ -127,18 +147,18 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
         });
       },
     },
-    { key: "tab", label: "next", group: "global", hidden: true, run: () => setTabIndex((t) => (t + 1) % count) },
-    { key: "shift+tab", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => (t - 1 + count) % count) },
-    { key: "left", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => (t - 1 + count) % count) },
-    { key: "right", label: "next", group: "global", hidden: true, run: () => setTabIndex((t) => (t + 1) % count) },
+    { key: "tab", label: "next", group: "global", hidden: true, run: () => setTabIndex((t) => nextEnabled(t, 1)) },
+    { key: "shift+tab", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => nextEnabled(t, -1)) },
+    { key: "left", label: "prev", group: "global", hidden: true, run: () => setTabIndex((t) => nextEnabled(t, -1)) },
+    { key: "right", label: "next", group: "global", hidden: true, run: () => setTabIndex((t) => nextEnabled(t, 1)) },
     { key: "L", label: "log", group: "global", run: () => setShowLog((v) => !v) },
-    // Number shortcuts 1–9 for tabs
+    // Number shortcuts 1–9 for tabs — ignored for disabled tabs.
     ...screens.slice(0, 9).map((_, i) => ({
       key: String(i + 1),
       label: screens[i]!.title,
       group: "global" as const,
       hidden: true,
-      run: () => setTabIndex(i),
+      run: () => { if (!isTabDisabled(screens[i]!)) setTabIndex(i); },
     })),
   ];
 
@@ -152,6 +172,13 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
 
   const active = screens[tabIndex];
 
+  // Auto-jump to the nearest enabled tab if capabilities arrive and disable
+  // the currently-active tab.
+  useEffect(() => {
+    if (active && isTabDisabled(active)) setTabIndex((t) => nextEnabled(t, 1));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tui.capabilities]);
+
   // Build the separator line that spans the full terminal width.
   const sepLine = SYM.sep.repeat(Math.max(0, termCols - 2));
 
@@ -163,14 +190,18 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
           <Text color={THEME.active} bold>{SYM.bee}  </Text>
           {screens.map((s, i) => {
             const on = i === tabIndex;
+            const disabled = isTabDisabled(s);
             const num = i < 9 ? String(i + 1) : "0";
+            // Disabled tabs render dimmed with a lock glyph; the controller
+            // can't create this resource type so the tab isn't reachable.
+            const labelColor = disabled ? THEME.subtle : on ? THEME.active : THEME.dim;
             return (
               <React.Fragment key={s.id}>
                 {i > 0 && <Text color={THEME.subtle}>  </Text>}
-                <Text color={on ? THEME.active : THEME.dim} bold={on}>
-                  <Text color={on ? THEME.keyhint : THEME.dim}>{num}:</Text>
+                <Text color={labelColor} bold={on && !disabled} dimColor={disabled}>
+                  <Text color={disabled ? THEME.subtle : on ? THEME.keyhint : THEME.dim}>{num}:</Text>
                   {s.icon ? `${s.icon} ` : ""}{s.title}
-                  {on ? <Text color={THEME.active}> ▾</Text> : ""}
+                  {disabled ? ` ${SYM.disabled}` : on ? <Text color={THEME.active}> ▾</Text> : ""}
                 </Text>
               </React.Fragment>
             );
