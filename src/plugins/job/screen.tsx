@@ -1369,9 +1369,17 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                   </>
                 )}
               </Box>
-              {current.url && (
-                <Text color={THEME.subtle} wrap="truncate-end">{current.url}</Text>
-              )}
+              {current.url && (() => {
+                const pendingReason = reasonByUrl.get(current.url.replace(/\/+$/, ""));
+                return pendingReason ? (
+                  <Box marginTop={0}>
+                    <Text color={THEME.warning}>{SYM.running} </Text>
+                    <Text color={THEME.warning} wrap="wrap">{pendingReason}</Text>
+                  </Box>
+                ) : (
+                  <Text color={THEME.subtle} wrap="truncate-end">{current.url}</Text>
+                );
+              })()}
               {/* Controlled agents — FD folders only */}
               {current.jobType === "FD" && controlledAgents !== null && controlledAgents.length > 0 && (
                 <Box marginTop={0}>
