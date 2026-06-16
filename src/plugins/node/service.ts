@@ -684,7 +684,7 @@ export async function checkNodeApprovalForJob(
   });
   if (!inApproved) {
     const list = named.map((f) => `'${f.folderName}'`).join(", ");
-    return `Job '${jobPath}' is not under any folder approved on node '${nodeName}' (approved: ${list}) — the build will stay PENDING.`;
+    return `Job '${jobPath}' is not under any folder approved on node '${nodeName}' (approved: ${list}) — the build will stay PENDING. Move the job into one of the approved folders, or approve its folder on this node.`;
   }
 
   return null;
