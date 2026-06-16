@@ -642,3 +642,50 @@ export async function listApprovedFolders(
 
   return folders;
 }
+
+/**
+ * Pre-flight check for running a job on a controlled agent. Given the node a
+ * job is assigned to and the job's full path, returns a human-readable reason
+ * why the build would sit PENDING — or null when it should run fine.
+ *
+ * Controlled-agent mode whitelists folders: the agent only accepts builds from
+ * jobs living under an approved folder. So a build pends when:
+ *   - the node has controlled-agent on but zero approved folders, or
+ *   - the job's path isn't under any approved folder.
+ *
+ * Best-effort: returns null (no warning) when the node can't be read (e.g. the
+ * assignment is a label, not a node name) so the run is never blocked falsely.
+ */
+export async function checkNodeApprovalForJob(
+  client: CloudBeesClient,
+  nodeName: string,
+  jobPath: string,
+): Promise<string | null> {
+  let cfg: NodeConfig;
+  try {
+    const detail = await getNode(client, nodeName);
+    cfg = parseNodeConfig(detail.configXml ?? "");
+  } catch {
+    return null; // not a node (likely a label) — can't check, don't block
+  }
+
+  if (!cfg.controlledAgent) return null; // unrestricted — runs anywhere
+
+  const approved = await listApprovedFolders(client, nodeName);
+  const named = approved.filter((f) => f.folderName);
+  if (named.length === 0) {
+    return `Node '${nodeName}' has Controlled Agent enabled but no approved folders — the build will stay PENDING. Approve a folder on this node first.`;
+  }
+
+  // A job is allowed when its path is the approved folder or sits under it.
+  const inApproved = named.some((f) => {
+    const folder = f.folderName!;
+    return jobPath === folder || jobPath.startsWith(`${folder}/`);
+  });
+  if (!inApproved) {
+    const list = named.map((f) => `'${f.folderName}'`).join(", ");
+    return `Job '${jobPath}' is not under any folder approved on node '${nodeName}' (approved: ${list}) — the build will stay PENDING.`;
+  }
+
+  return null;
+}

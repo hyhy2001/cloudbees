@@ -54,7 +54,7 @@ import type { ControlledAgentGrant } from "./service";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
 import { getScopeShowAll, setScopeShowAll } from "../../core/db/repositories/scope-repo";
 import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
-import { listNodes } from "../node/service";
+import { listNodes, checkNodeApprovalForJob } from "../node/service";
 import { hasPlugin } from "../system/service";
 import { ScheduleBuilder } from "../../core/tui/components/ScheduleBuilder";
 import { EmailBuilder, type EmailSpec } from "../../core/tui/components/EmailBuilder";
@@ -702,6 +702,26 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
       try {
         const client = await ctx.getClient({ useController: true });
+
+        // Pre-flight: warn if the assigned node has controlled-agent enabled
+        // but this job isn't under any approved folder.
+        const assignedNode = summary?.node && summary.node !== "-" ? summary.node : null;
+        if (assignedNode) {
+          const reason = await checkNodeApprovalForJob(client, assignedNode, name);
+          if (reason) {
+            const proceed = await ctx.openModal<boolean>({
+              id: "controlled-agent-warn",
+              render: (resolve) => (
+                <ConfirmModal
+                  message={`${SYM.warn} ${reason}\n\nRun anyway?`}
+                  onResult={resolve}
+                />
+              ),
+            });
+            if (!proceed) return false;
+          }
+        }
+
         if (runParams) {
           await triggerJobWithParams(client, name, runParams);
           const pairs = Object.entries(runParams).map(([k, v]) => `-p ${k}="${v}"`).join(" ");
