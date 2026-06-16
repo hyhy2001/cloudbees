@@ -629,6 +629,7 @@ export function credentialScreen(): TuiScreen {
     title: "Credentials",
     order: 5,
     icon: SYM.gear,
+    requires: "cred",
     Component: CredentialsScreen,
   };
 }

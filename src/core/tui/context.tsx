@@ -9,7 +9,7 @@
 
 import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { TuiContext as ITuiContext, ModalSpec, NotifyLevel, GetClientOptions } from "../../registry/types";
+import type { TuiContext as ITuiContext, ModalSpec, NotifyLevel, GetClientOptions, ControllerCapabilities } from "../../registry/types";
 import type { CloudBeesClient } from "../api/types";
 import { getClient as coreGetClient, loginSession, getActiveController } from "../client-factory";
 import { loadSession, getActiveProfileName, switchProfile as coreSwitchProfile, clearSession } from "../session/session";
@@ -65,6 +65,7 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
   const [activeKeyHints, setActiveKeyHintsState] = useState<{ key: string; label: string }[]>([]);
   const [inputCaptured, setInputCapturedState] = useState(false);
   const [commandLog, setCommandLog] = useState<string[]>([]);
+  const [capabilities, setCapabilitiesState] = useState<ControllerCapabilities | null>(null);
   const toastSeq = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -162,6 +163,16 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
     });
   }, []);
 
+  const setCapabilities = useCallback((caps: ControllerCapabilities | null) => {
+    setCapabilitiesState(caps);
+  }, []);
+
+  // Reset probed capabilities whenever the active controller changes — the new
+  // controller's permissions are unknown until the controller plugin re-probes.
+  useEffect(() => {
+    setCapabilitiesState(null);
+  }, [session.activeController]);
+
   const value = useMemo<TuiState>(
     () => ({
       getClient,
@@ -186,8 +197,10 @@ export const TuiProvider: React.FC<TuiProviderProps> = ({ initialSession, dbPath
       inputCaptured,
       commandLog,
       logCommand,
+      capabilities,
+      setCapabilities,
     }),
-    [getClient, session, switchProfile, refreshController, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, login, logout, activeKeyHints, inputCaptured, commandLog, logCommand],
+    [getClient, session, switchProfile, refreshController, openModal, notify, dbPath, activeModal, toast, setActiveKeyHints, setInputCaptured, login, logout, activeKeyHints, inputCaptured, commandLog, logCommand, capabilities, setCapabilities],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

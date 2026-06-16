@@ -90,6 +90,12 @@ export interface TuiScreen {
   order: number;
   /** Optional icon/glyph rendered before the title. */
   icon?: string;
+  /**
+   * Capability gate: when set, the tab is disabled if the active controller
+   * reports it cannot perform this class of operation. The tab is still visible
+   * but rendered dim and skipped by Tab/number navigation.
+   */
+  requires?: "job" | "node" | "cred";
   /** The React component rendered when this tab is shown. */
   Component: FC<TuiScreenProps>;
 }
@@ -157,6 +163,22 @@ export interface TuiContext {
   logout(): void;
   /** Append a CLI-equivalent command string to the command log pane. */
   logCommand(cmd: string): void;
+  /**
+   * Creation permissions for the active controller, or null while not yet
+   * probed (no controller selected, or fetch in flight). Screens/tabs read this
+   * to disable actions the controller can't perform (e.g. a controller with no
+   * credentials endpoint → canCreateCred false → Credentials tab disabled).
+   */
+  capabilities: ControllerCapabilities | null;
+  /** Push updated capability data (called by the controller plugin after probing). */
+  setCapabilities(caps: ControllerCapabilities | null): void;
+}
+
+/** Creation permissions probed from the active controller. */
+export interface ControllerCapabilities {
+  canCreateJob: boolean;
+  canCreateNode: boolean;
+  canCreateCred: boolean;
 }
 
 /**

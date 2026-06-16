@@ -28,7 +28,9 @@ import {
   listControllers,
   resolveControllerUrl,
   selectController,
+  getControllerCapabilities,
 } from "./service";
+import { CloudBeesClientImpl } from "../../core/api/client";
 
 // ─── Controllers screen ──────────────────────────────────────────────────────
 
@@ -80,6 +82,26 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const current = rows[cursor];
 
   // ── Actions ────────────────────────────────────────────────────────────────
+
+  // Probe the capabilities of a controller and push into context.
+  // Best-effort: silently sets null on failure so tabs stay accessible.
+  const probeCapabilities = useCallback(async (ctrlName: string) => {
+    try {
+      const client = await ctx.getClient({ useController: false });
+      const rawToken = client instanceof CloudBeesClientImpl ? client.token : "";
+      const caps = await getControllerCapabilities(client, ctrlName, rawToken);
+      ctx.setCapabilities({ canCreateJob: caps.canCreateJob, canCreateNode: caps.canCreateNode, canCreateCred: caps.canCreateCred });
+    } catch {
+      ctx.setCapabilities(null);
+    }
+  }, [ctx]);
+
+  // Re-probe whenever the active controller changes (e.g. after selecting one,
+  // or on first mount when a controller is already active).
+  useEffect(() => {
+    if (ctx.activeController) void probeCapabilities(ctx.activeController);
+    else ctx.setCapabilities(null);
+  }, [ctx.activeController, probeCapabilities]);
 
   const doSelectController = useCallback(
     async (ctrl: ControllerDTO) => {

@@ -838,6 +838,7 @@ export function nodeScreen(): TuiScreen {
     title: "Nodes",
     order: 3,
     icon: SYM.online,
+    requires: "node",
     Component: NodesScreen,
   };
 }
