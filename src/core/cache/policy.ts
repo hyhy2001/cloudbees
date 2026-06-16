@@ -15,6 +15,7 @@
 
 const TTL: Record<string, number> = {
   "jobs.list":                 15,
+  "jobs.queue":                 5,
   "jobs.detail":               20,
   "jobs.exists":               60,
   "controllers.list":          60,
