@@ -9,6 +9,7 @@
  */
 import type { CloudBeesClient } from "../../core/api/types";
 import { CredentialDTO, credentialFromDict } from "../../core/dtos/index";
+import { NotFoundError } from "../../core/api/errors";
 import { buildUsernamePasswordCredXml, buildSecretTextCredXml } from "./xml-builder";
 import { XMLParser } from "fast-xml-parser";
 
@@ -32,11 +33,18 @@ export async function listCredentials(
   store = "system",
 ): Promise<CredentialDTO[]> {
   const userSeg = getUserSeg(username, store);
-  const data = await client.get<{ credentials?: unknown[] }>(
-    `${userSeg}/api/json?tree=credentials[id,typeName,description,scope,displayName]`,
-    { cacheKey: `credentials.list.${client.baseUrl}.${store}` },
-  );
-  return (data?.credentials ?? []).map((c) => credentialFromDict(c as Record<string, unknown>));
+  try {
+    const data = await client.get<{ credentials?: unknown[] }>(
+      `${userSeg}/api/json?tree=credentials[id,typeName,description,scope,displayName]`,
+      { cacheKey: `credentials.list.${client.baseUrl}.${store}` },
+    );
+    return (data?.credentials ?? []).map((c) => credentialFromDict(c as Record<string, unknown>));
+  } catch (err) {
+    // 404 means this controller has no credentials store endpoint (plugin not
+    // installed, or store disabled) — that's an empty list, not a hard error.
+    if (err instanceof NotFoundError) return [];
+    throw err;
+  }
 }
 
 /** Fetches a single credential by ID from `<storePath>/credential/<credId>/api/json`. */
