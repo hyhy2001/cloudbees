@@ -474,6 +474,34 @@ export async function copyJob(
   });
 }
 
+/**
+ * Move a job to a different folder (or to root) by copying its config.xml to
+ * the destination and deleting the source. The destination job name is the
+ * leaf of srcName unless destLeaf is provided. Atomic at the Jenkins level is
+ * not possible, so we copy first; if delete fails the copy is rolled back.
+ */
+export async function moveJob(
+  client: CloudBeesClient,
+  srcName: string,
+  destFolder: string | null,
+  destLeaf?: string,
+): Promise<string> {
+  const srcLeaf = srcName.split("/").at(-1)!;
+  const leaf = destLeaf?.trim() || srcLeaf;
+  const destQualified = destFolder ? `${destFolder}/${leaf}` : leaf;
+
+  // Copy first so the source remains intact if the post fails.
+  await copyJob(client, srcName, leaf, destFolder);
+  try {
+    await deleteJob(client, srcName);
+  } catch (err) {
+    // Roll back the copy if delete fails to avoid duplicates.
+    try { await deleteJob(client, destQualified); } catch { /* best-effort */ }
+    throw err;
+  }
+  return destQualified;
+}
+
 export async function deleteJob(client: CloudBeesClient, name: string): Promise<void> {
   try {
     await client.post(`/job/${jobSeg(name)}/doDelete`);
