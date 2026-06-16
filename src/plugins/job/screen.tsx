@@ -520,14 +520,19 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         const isFolderRow = isContainer(j.jobType);
         const nameText = isFolderRow ? `${leaf}/ ${SYM.arrow}` : leaf;
         const reason = j.url ? reasonByUrl.get(j.url.replace(/\/+$/, "")) : undefined;
+        // A job sitting in the build queue is PENDING regardless of its last
+        // build's color — show that as the live status, not the stale result.
+        const statusText = reason ? `${SYM.running} PEND` : st.text;
+        const statusColor = reason ? THEME.warning : st.color;
+        const statusDim = reason ? false : st.dim;
         return [
           { text: mine ? SYM.tracked : "", color: THEME.success },
-          { text: st.text, color: st.color, dim: st.dim },
+          { text: statusText, color: statusColor, dim: statusDim },
           { text: tp.text, color: tp.color, dim: (tp as { dim?: boolean }).dim },
           { text: nameText, color: isFolderRow ? THEME.yellow : undefined },
           { text: j.lastBuildNumber ? `#${j.lastBuildNumber}` : "—" },
           reason
-            ? { text: `${SYM.running} ${reason}`, color: THEME.warning }
+            ? { text: reason, color: THEME.warning }
             : { text: "", dim: true },
           { text: j.description ?? "", dim: true },
         ];
