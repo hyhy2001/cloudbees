@@ -52,6 +52,7 @@ export interface Symbols {
   iconEmail: string;
   iconToggle: string;
   iconCheck: string;
+  iconUncheck: string;
 }
 
 const UNICODE_SYMBOLS: Symbols = {
@@ -85,7 +86,8 @@ const UNICODE_SYMBOLS: Symbols = {
   iconSchedule: "◷",
   iconEmail: "✉",
   iconToggle: "⇄",
-  iconCheck: "◆",
+  iconCheck: "☑",
+  iconUncheck: "☐",
 };
 
 const ASCII_SYMBOLS: Symbols = {
@@ -120,6 +122,7 @@ const ASCII_SYMBOLS: Symbols = {
   iconEmail: "@",
   iconToggle: "<>",
   iconCheck: "#",
+  iconUncheck: ".",
 };
 
 /** Return the symbol set for the given mode. Exposed for testing. */

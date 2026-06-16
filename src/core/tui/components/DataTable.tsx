@@ -196,20 +196,19 @@ export const DataTable: React.FC<DataTableProps> = ({
         const isCursor = rowIndex === cursor;
         const rowKey = rowKeys?.[rowIndex] ?? rowIndex;
         const isSelected = typeof rowKey === "string" && (selected?.has(rowKey) ?? false);
-        // When cursor is on a selected row, show ◆ (selected) — ▶ would hide the selection state.
-        // Non-cursor rows: ◆ selected, ◇ selectable-but-not, space otherwise.
+        // ☑ = selected, ▶ = cursor (unselected), ☐ = selectable, space = not selectable
         const indicator = isSelected
           ? SYM.iconCheck
           : isCursor
             ? SYM.selected
             : onToggleSelect
-              ? "◇"
+              ? SYM.iconUncheck
               : " ";
         const indicatorColor = isSelected
-          ? (isCursor ? THEME.warning : THEME.keyhint)
+          ? (isCursor ? THEME.selectedFg : THEME.success)
           : isCursor
             ? THEME.active
-            : THEME.dim;
+            : THEME.subtle;
         const rowBg = isCursor ? THEME.selectedBg : isSelected ? THEME.badgeWarnBg : undefined;
         return (
           <Box key={rowKey}>
