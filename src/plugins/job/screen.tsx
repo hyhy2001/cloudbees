@@ -33,6 +33,7 @@ import type { JobDTO, QueueItemDTO } from "../../core/dtos/job";
 import {
   listJobs,
   listJobsInFolder,
+  listJobsRecursive,
   listQueue,
   getJobConfigSummary,
   triggerJob,
@@ -946,25 +947,45 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     const leaf = currentFolder && src.startsWith(`${currentFolder}/`)
       ? src.slice(currentFolder.length + 1)
       : src;
+
+    // Fetch folder list for the destination picker; fall back to free-text.
+    let folderOptions: string[] = [];
+    try {
+      const client = await ctx.getClient({ useController: true });
+      const jobs = await listJobsRecursive(client);
+      folderOptions = [NONE_OPTION, ...jobs.filter((j) => j.jobType === "FD").map((j) => j.name).sort()];
+    } catch { /* ignore — fall back to free text */ }
+
     const result = await ctx.openModal<Record<string, string>>({
       id: "clone-job",
       render: (resolve) => (
         <FormModal
-          title={`${SYM.gear} Clone '${leaf}'${currentFolder ? ` in /${currentFolder}` : ""}`}
+          title={`${SYM.gear} Clone '${leaf}'`}
           fields={[
             { name: "name", label: "New Name", required: true, initial: `${leaf}-copy`, hint: "unique id" },
+            {
+              name: "folder",
+              label: "Destination Folder",
+              initial: currentFolder ?? NONE_OPTION,
+              hint: folderOptions.length > 1 ? "type to search" : "leave blank for root",
+              options: folderOptions.length > 1 ? folderOptions : undefined,
+              searchable: folderOptions.length > 1 ? true : undefined,
+            },
           ]}
           onResult={resolve}
         />
       ),
     });
     if (!result || !result.name) return false;
+
+    const destFolder = result.folder && result.folder !== NONE_OPTION ? result.folder : null;
     try {
       const client = await ctx.getClient({ useController: true });
-      await copyJob(client, src, result.name, currentFolder);
-      const qualified = currentFolder ? `${currentFolder}/${result.name}` : result.name;
+      await copyJob(client, src, result.name, destFolder);
+      const qualified = destFolder ? `${destFolder}/${result.name}` : result.name;
       trackResource("job", qualified, ctx.profile, client.baseUrl, ctx.dbPath);
-      ctx.notify(`${SYM.ok} Cloned '${leaf}' → '${result.name}'`, "success");
+      const destLabel = destFolder ? `/${destFolder}` : "/";
+      ctx.notify(`${SYM.ok} Cloned '${leaf}' → '${result.name}' in '${destLabel}'`, "success");
       ctx.logCommand(`bee job copy ${src} ${qualified}`);
       void refetch();
     } catch (err) {
