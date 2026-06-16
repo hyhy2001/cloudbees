@@ -456,6 +456,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   );
 
   const multi = selected.size > 0;
+  const canCreate = ctx.capabilities?.canCreateCred !== false;
   const bindings = useMemo<KeyBinding[]>(
     () => [
       { key: "Enter", label: "menu", group: "action", hidden: multi, when: () => !multi && current !== undefined && !menuOpen, run: () => setMenuOpen(true) },
@@ -464,7 +465,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         run: () => void bulkRemoveCreds() },
       { key: "i", label: "track", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkImport() },
       { key: "u", label: "untrack", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkUnimport() },
-      { key: "ctrl+n", label: "new", hidden: multi, when: () => !multi, run: () => void createCred() },
+      { key: "ctrl+n", label: "new", hidden: multi || !canCreate, when: () => !multi && canCreate, run: () => void createCred() },
       { key: "S", label: "store", hidden: multi, when: () => !multi, run: () => setStore((s) => (s === "system" ? "user" : "system")) },
       { key: "ctrl+a", label: "mine/all", hidden: multi, when: () => !multi, run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("credential", nv, ctx.dbPath); return nv; }) },
       { key: "F", label: "auto", hidden: multi, when: () => !multi, run: () => setAutoRefresh((v) => !v) },
@@ -472,7 +473,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", hidden: !multi && !search.active, when: () => multi || search.active, run: () => { if (multi) setSelected(new Set()); else search.clear(); } },
       { key: "r", label: "refresh", hidden: multi, when: () => !multi, run: () => void refetch() },
     ],
-    [current, menuOpen, selected, multi, bulkRemoveCreds, bulkImport, bulkUnimport, createCred, search, refetch, ctx],
+    [current, menuOpen, selected, multi, canCreate, bulkRemoveCreds, bulkImport, bulkUnimport, createCred, search, refetch, ctx],
   );
   useKeymap(bindings, { isActive: active && !menuOpen && !search.editing });
   useEffect(() => {
@@ -629,7 +630,6 @@ export function credentialScreen(): TuiScreen {
     title: "Credentials",
     order: 5,
     icon: SYM.gear,
-    requires: "cred",
     Component: CredentialsScreen,
   };
 }

@@ -1096,6 +1096,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     setCursor(0);
   }, [setCursor]);
 
+  // Fail-open: allow create actions when capabilities not yet probed.
+  const canCreate = ctx.capabilities?.canCreateJob !== false;
+
   // Declarative keymap — the single source for both dispatch and footer hints.
   // `F` (not `f`) toggles auto-refresh so it can't collide with the table's
   // Ctrl+f paging.
@@ -1128,14 +1131,14 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         return false as const;
       } },
       { label: "Delete",     icon: SYM.iconDelete,    danger: true, run: async (): Promise<false | void> => { if (!current) return false; await removeJob(current.name); } },
-      { label: "Move",       icon: SYM.arrow,          run: async () => { if (!current) return false as const; return await moveJobCb(); } },
+      { label: "Move",       icon: SYM.arrow,          when: () => canCreate, run: async () => { if (!current) return false as const; return await moveJobCb(); } },
       { label: "Controlled Agents", icon: SYM.iconSchedule, when: () => current?.jobType === "FD", run: (): false => {
         if (!current) return false;
         setAgentsFolder(current.name);
         return false;
       } },
     ],
-    [current, summary, runJob, stopJob, editJob, removeJob, moveJobCb],
+    [current, summary, canCreate, runJob, stopJob, editJob, removeJob, moveJobCb],
   );
 
   // Multi-select mode: when rows are checked via Space, the footer collapses to
@@ -1158,9 +1161,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "ctrl+d", label: "delete", group: "action",
         when: () => (multi || current !== undefined) && !menuOpen,
         run: () => void bulkRemoveJobs() },
-      { key: "ctrl+n", label: "new", hidden: multi, when: () => !multi, run: () => void newJob() },
-      { key: "c", label: "clone", group: "action", hidden: multi, when: () => !multi && current?.jobType === "FS" && !menuOpen, run: () => void cloneJob() },
-      { key: "m", label: "move", group: "action", hidden: multi, when: () => !multi && current?.jobType === "FS" && !menuOpen, run: () => void moveJobCb() },
+      { key: "ctrl+n", label: "new", hidden: multi || !canCreate, when: () => !multi && canCreate, run: () => void newJob() },
+      { key: "c", label: "clone", group: "action", hidden: multi || !canCreate, when: () => !multi && canCreate && current?.jobType === "FS" && !menuOpen, run: () => void cloneJob() },
+      { key: "m", label: "move", group: "action", hidden: multi || !canCreate, when: () => !multi && canCreate && current?.jobType === "FS" && !menuOpen, run: () => void moveJobCb() },
       { key: "i", label: "track", group: "action", hidden: !multi,
         when: () => multi && !menuOpen, run: () => bulkImport() },
       { key: "u", label: "untrack", group: "action", hidden: !multi,
@@ -1178,7 +1181,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         run: () => { if (multi) setSelected(new Set()); else search.clear(); } },
       { key: "r", label: "refresh", hidden: multi, when: () => !multi, run: () => void refetch() },
     ],
-    [current, menuOpen, selected, multi, bulkRemoveJobs, newJob, cloneJob, moveJobCb, bulkImport, bulkUnimport, isFolder, drillIn, goUp, folderStack, search, refetch, ctx],
+    [current, menuOpen, selected, multi, canCreate, bulkRemoveJobs, newJob, cloneJob, moveJobCb, bulkImport, bulkUnimport, isFolder, drillIn, goUp, folderStack, search, refetch, ctx],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
@@ -1505,7 +1508,6 @@ export function jobScreen(): TuiScreen {
     title: "Jobs",
     order: 4,
     icon: SYM.gear,
-    requires: "job",
     Component: JobsScreen,
   };
 }
