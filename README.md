@@ -12,9 +12,9 @@
 
 - Authentication and **multi-profile** management (log in to several controllers at once, switch the active one)
 - Controller discovery and active-controller selection (remembered per profile)
-- Job lifecycle: list / get / create / update / delete / run / stop / log / status / copy / import / unimport, plus String build parameters, an email anti-spam content filter, and CloudBees Folders Plus controlled-agent approval (list-agents / approve-agent / remove-agent)
-- Credential lifecycle: list / get / create / update / delete / import / unimport (system & user stores)
-- Node lifecycle: list / get / create / update / delete / offline / online / copy / import / unimport (SSH and JNLP/Inbound launchers, Always/On-demand availability), plus Folders Plus controlled-agent mode toggle
+- Job lifecycle: list / get / create / update / delete / run / stop / log / status / copy / move / track / untrack, plus String build parameters, an email anti-spam content filter, and CloudBees Folders Plus controlled-agent approval (list-agents / approve-agent / remove-agent)
+- Credential lifecycle: list / get / create / update / delete / track / untrack (system & user stores)
+- Node lifecycle: list / get / create / update / delete / offline / online / copy / track / untrack (SSH and JNLP/Inbound launchers, Always/On-demand availability), plus Folders Plus controlled-agent mode toggle
 
 ## Requirements
 
@@ -131,10 +131,10 @@ bee job list [--all] [--recursive]
 bee job get <name>
 
 # Track an existing server job as yours (adds to your "Mine" list)
-bee job import <name>
+bee job track <name>
 
 # Stop tracking a job (removes from "Mine"; does not delete it on the server)
-bee job unimport <name>
+bee job untrack <name>
 
 # Delete job/folder
 bee job delete <name> [--yes]
@@ -219,10 +219,10 @@ bee cred list [-o|--output table|json] [--all] [--store system|user]
 bee cred get <cred_id> [--store system|user]
 
 # Track an existing server credential as yours
-bee cred import <cred_id> [--store system|user]
+bee cred track <cred_id> [--store system|user]
 
 # Stop tracking a credential (removes from "Mine"; does not delete it on the server)
-bee cred unimport <cred_id> [--store system|user]
+bee cred untrack <cred_id> [--store system|user]
 
 # Create a credential — Username+Password OR SecretText (mutually exclusive)
 bee cred create \
@@ -256,10 +256,10 @@ bee node list [--all]
 bee node get <name>
 
 # Track an existing server node as yours
-bee node import <name>
+bee node track <name>
 
 # Stop tracking a node (removes from "Mine"; does not delete it on the server)
-bee node unimport <name>
+bee node untrack <name>
 
 # Create a node (SSH if --host is given, otherwise JNLP/Inbound)
 bee node create <node_name> \
@@ -353,7 +353,7 @@ If any step after step 2 fails, the artifacts already created (the pending grant
 
 ## Tracked Resources ("Mine" vs. "All")
 
-By default `job list`, `node list`, and `cred list` show only resources created or imported through `bee` (recorded in a local `user_resources` table). Pass `--all` to show everything on the server. The `import` subcommands add a pre-existing server resource to your "Mine" list. Resources tracked locally but missing on the server are shown as `[DELETED_ON_SERVER]`. Tracking is scoped per (resource type, profile, controller).
+By default `job list`, `node list`, and `cred list` show only resources created or tracked through `bee` (recorded in a local `user_resources` table). Pass `--all` to show everything on the server. The `track` subcommands add a pre-existing server resource to your "Mine" list. Resources tracked locally but missing on the server are shown as `[DELETED_ON_SERVER]`. Tracking is scoped per (resource type, profile, controller).
 
 ## Cache
 
@@ -433,7 +433,7 @@ Tabs (one per plugin, contributed via the plugin's optional `screen()`), in orde
 | `Shift+F` | Toggle auto-refresh |
 | `r` | Refresh now |
 
-Edit / Import / Unimport live inside the `Enter` action menu, not as standalone keys.
+Edit / Track / Untrack live inside the `Enter` action menu, not as standalone keys.
 
 ### Tab-specific keys
 
@@ -442,16 +442,17 @@ Edit / Import / Unimport live inside the `Enter` action menu, not as standalone 
 | Jobs | `Enter` | On a folder: drill in. On a freestyle job: open the action menu |
 | Jobs | `Backspace` | Go up one folder level |
 | Jobs | `c` | Clone the cursor job (freestyle only) |
+| Jobs | `m` | Move the cursor job to another folder (freestyle only) |
 | Jobs | `A` | Open the Controlled Agents overlay (folders only) |
-| Nodes | `Enter` | Action menu (Toggle Offline · Edit · Approve Folder · Import · Unimport · Delete) |
+| Nodes | `Enter` | Action menu (Toggle Offline · Edit · Approve Folder · Track · Untrack · Delete) |
 | Credentials | `Shift+S` | Toggle system / user store (a real refetch) |
-| Credentials | `Enter` | Action menu (Edit · Import · Unimport · Delete) |
+| Credentials | `Enter` | Action menu (Edit · Track · Untrack · Delete) |
 | Controllers | `Enter` | Select the active controller |
 | Info | `Ctrl+x` | Clear the local cache |
 
-The Jobs action menu carries: View Log · Run · Stop · Edit · Params · Schedule · Email · Import/Unimport · Delete, plus Controlled Agents on folder rows. Inside the menu, `1`–`9` pick directly, `↑`/`↓` move, `Enter` runs, `Esc` backs out to the list.
+The Jobs action menu carries: View Log · Run · Stop · Edit · Params · Schedule · Email · Move · Track/Untrack · Delete, plus Controlled Agents on folder rows. Inside the menu, `1`–`9` pick directly, `↑`/`↓` move, `Enter` runs, `Esc` backs out to the list.
 
-Multi-select (toggle rows with `Space`) swaps the single-row keys for bulk ones on the Jobs tab: `i` import · `u` unimport · `Ctrl+d` delete · `Esc` deselect all.
+Multi-select (toggle rows with `Space`) swaps the single-row keys for bulk ones on the Jobs, Nodes, and Credentials tabs: `i` track · `u` untrack · `Ctrl+d` delete · `Esc` deselect all.
 
 The Nodes "Approve Folder" action and the Jobs "Controlled Agents" overlay both open the same grant list (folders↔agents are two views of the same approval). In that overlay: `↑`/`↓` move · `a` approve · `d` revoke (works on pending grants too) · `r` refresh · `Esc` close.
 

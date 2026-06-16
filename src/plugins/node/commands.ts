@@ -200,9 +200,9 @@ export function registerNodeCommands(ctx: PluginContext): void {
       }
     });
 
-  // ── import ────────────────────────────────────────────────────────────────
+  // ── track ────────────────────────────────────────────────────────────────
   grp
-    .command("import")
+    .command("track")
     .argument("<name>")
     .description("Track an existing server node as yours (adds it to your Mine list)")
     .action(async (name: string) => {
@@ -212,18 +212,18 @@ export function registerNodeCommands(ctx: PluginContext): void {
           await getNode(client, name);
         } catch (e) {
           if (e instanceof NotFoundError) {
-            printError(`Node '${name}' not found on server. Nothing to import.`);
+            printError(`Node '${name}' not found on server. Nothing to track.`);
             process.exit(1);
           }
           throw e;
         }
         const tracked = getTrackedResources("node", profile, client.baseUrl, dbPath);
         if (tracked.includes(name)) {
-          printInfo(`INFO Node '${name}' is already imported.`);
+          printInfo(`INFO Node '${name}' is already tracked.`);
           return;
         }
         trackResource("node", name, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Imported node '${name}' into your Mine list.`);
+        printSuccess(`OK Tracked node '${name}' into your Mine list.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -295,9 +295,9 @@ export function registerNodeCommands(ctx: PluginContext): void {
       }
     });
 
-  // ── unimport ─────────────────────────────────────────────────────────────────
+  // ── untrack ─────────────────────────────────────────────────────────────────
   grp
-    .command("unimport")
+    .command("untrack")
     .argument("<name>")
     .description("Remove a node from Mine (stops tracking it locally; does not delete from server)")
     .action(async (name: string) => {

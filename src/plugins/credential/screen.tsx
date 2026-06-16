@@ -356,13 +356,13 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, store, refetch],
   );
 
-  // Import = track an existing server credential into Mine (for credentials created outside bee).
+  // Track = add an existing server credential to Mine (for credentials created outside bee).
   const doImport = useCallback(
     (id: string) => {
       if (!baseUrl) return;
       trackResource("credential", id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath);
-      ctx.notify(`${SYM.ok} Imported '${id}' into Mine`, "success");
-      ctx.logCommand(`bee cred import ${id}${store !== "system" ? ` --store ${store}` : ""}`);
+      ctx.notify(`${SYM.ok} Tracked '${id}' into Mine`, "success");
+      ctx.logCommand(`bee cred track ${id}${store !== "system" ? ` --store ${store}` : ""}`);
       void refetch();
     },
     [baseUrl, store, ctx, refetch],
@@ -414,13 +414,13 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     if (!baseUrl || selected.size === 0) return;
     const toAdd = [...selected].filter((id) => !trackedIds.has(id));
     if (toAdd.length === 0) {
-      ctx.notify(`${SYM.warn} Nothing to import — all selected already in Mine`, "warning");
+      ctx.notify(`${SYM.warn} Nothing to track — all selected already in Mine`, "warning");
       return;
     }
     for (const id of toAdd) trackResource("credential", id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath);
     setSelected(new Set());
-    ctx.notify(`${SYM.ok} Imported ${toAdd.length} credential(s) into Mine`, "success");
-    ctx.logCommand(toAdd.map((id) => `bee cred import ${id}${store !== "system" ? ` --store ${store}` : ""}`).join("\n"));
+    ctx.notify(`${SYM.ok} Tracked ${toAdd.length} credential(s) into Mine`, "success");
+    ctx.logCommand(toAdd.map((id) => `bee cred track ${id}${store !== "system" ? ` --store ${store}` : ""}`).join("\n"));
     void refetch();
   }, [baseUrl, store, selected, trackedIds, ctx, refetch]);
 
@@ -428,28 +428,28 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     if (!baseUrl || selected.size === 0) return;
     const toRemove = [...selected].filter((id) => trackedIds.has(id));
     if (toRemove.length === 0) {
-      ctx.notify(`${SYM.warn} Nothing to unimport — none selected are in Mine`, "warning");
+      ctx.notify(`${SYM.warn} Nothing to untrack — none selected are in Mine`, "warning");
       return;
     }
     for (const id of toRemove) untrackResource("credential", id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath);
     setSelected(new Set());
     ctx.notify(`${SYM.ok} Removed ${toRemove.length} credential(s) from Mine`, "success");
-    ctx.logCommand(toRemove.map((id) => `bee cred unimport ${id}${store !== "system" ? ` --store ${store}` : ""}`).join("\n"));
+    ctx.logCommand(toRemove.map((id) => `bee cred untrack ${id}${store !== "system" ? ` --store ${store}` : ""}`).join("\n"));
     void refetch();
   }, [baseUrl, store, selected, trackedIds, ctx, refetch]);
 
   // ── Declarative keymap ────────────────────────────────────────────────────
   const hasRow = current !== undefined && current.typeName !== "[DELETED_ON_SERVER]";
-  // Importable = a real server row not yet in the Mine list (most useful in All view).
+  // Trackable = a real server row not yet in the Mine list (most useful in All view).
   const canImport = hasRow && current !== undefined && !trackedIds.has(current.id);
-  // Unimportable = a tracked row that can be removed from Mine.
+  // Untrackable = a tracked row that can be removed from Mine.
   const canUntrack = hasRow && current !== undefined && trackedIds.has(current.id);
 
   const menuActions = useMemo(
     () => [
       { label: "Edit",     icon: SYM.iconEdit,   run: async () => { if (!current) return false as const; return await editCred(current); } },
-      { label: "Import",   icon: SYM.iconImport, when: () => canImport, run: () => { if (current) doImport(current.id); } },
-      { label: "Unimport", icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("credential", current.id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.id}' from Mine`, "success"); ctx.logCommand(`bee cred unimport ${current.id}${store !== "system" ? ` --store ${store}` : ""}`); void refetch(); } } },
+      { label: "Track",    icon: SYM.iconImport, when: () => canImport, run: () => { if (current) doImport(current.id); } },
+      { label: "Untrack",  icon: SYM.iconImport, when: () => canUntrack, run: () => { if (current && baseUrl) { untrackResource("credential", current.id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath); ctx.notify(`${SYM.ok} Removed '${current.id}' from Mine`, "success"); ctx.logCommand(`bee cred untrack ${current.id}${store !== "system" ? ` --store ${store}` : ""}`); void refetch(); } } },
       { label: "Delete",   icon: SYM.iconDelete, danger: true, run: async () => { if (!current) return false as const; return await removeCred(current.id); } },
     ],
     [current, canImport, canUntrack, baseUrl, store, editCred, doImport, removeCred, refetch, ctx],
@@ -462,8 +462,8 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "ctrl+d", label: selected.size > 0 ? `delete ${selected.size}` : "delete", group: "action",
         when: () => (selected.size > 0 || current !== undefined) && !menuOpen,
         run: () => void bulkRemoveCreds() },
-      { key: "i", label: "import", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkImport() },
-      { key: "u", label: "unimport", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkUnimport() },
+      { key: "i", label: "track", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkImport() },
+      { key: "u", label: "untrack", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkUnimport() },
       { key: "ctrl+n", label: "new", hidden: multi, when: () => !multi, run: () => void createCred() },
       { key: "S", label: "store", hidden: multi, when: () => !multi, run: () => setStore((s) => (s === "system" ? "user" : "system")) },
       { key: "ctrl+a", label: "mine/all", hidden: multi, when: () => !multi, run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("credential", nv, ctx.dbPath); return nv; }) },
