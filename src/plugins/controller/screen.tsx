@@ -6,7 +6,7 @@
  * controller list is fetched from the Operations Center, not a controller.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps, ControllerCapabilities } from "../../registry/types";
@@ -146,20 +146,26 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   // Probe the capabilities of a controller and push into context.
+  // ctx is held in a ref so this callback is stable — depending on ctx directly
+  // would loop: setCapabilities → context value re-memoizes → new ctx ref →
+  // new callback → effect re-runs → setCapabilities → … (max update depth).
+  const ctxRef = useRef(ctx);
+  ctxRef.current = ctx;
   const probeCapabilities = useCallback(async (ctrlName: string) => {
+    const c = ctxRef.current;
     try {
-      const client = await ctx.getClient({ useController: false });
+      const client = await c.getClient({ useController: false });
       const rawToken = client instanceof CloudBeesClientImpl ? client.token : "";
       const caps = await getControllerCapabilities(client, ctrlName, rawToken);
-      ctx.setCapabilities({ canCreateJob: caps.canCreateJob, canCreateNode: caps.canCreateNode, canCreateCred: caps.canCreateCred });
+      c.setCapabilities({ canCreateJob: caps.canCreateJob, canCreateNode: caps.canCreateNode, canCreateCred: caps.canCreateCred });
     } catch {
-      ctx.setCapabilities(null);
+      c.setCapabilities(null);
     }
-  }, [ctx]);
+  }, []);
 
   useEffect(() => {
     if (ctx.activeController) void probeCapabilities(ctx.activeController);
-    else ctx.setCapabilities(null);
+    else ctxRef.current.setCapabilities(null);
   }, [ctx.activeController, probeCapabilities]);
 
   const doSelectController = useCallback(
