@@ -210,10 +210,11 @@ export const DataTable: React.FC<DataTableProps> = ({
           : isCursor
             ? THEME.active
             : THEME.dim;
+        const rowBg = isCursor ? THEME.selectedBg : isSelected ? THEME.badgeWarnBg : undefined;
         return (
           <Box key={rowKey}>
-            <Text color={indicatorColor}>{indicator}</Text>
-            <Text color={THEME.subtle}> </Text>
+            <Text color={indicatorColor} backgroundColor={rowBg}>{indicator}</Text>
+            <Text color={THEME.subtle} backgroundColor={rowBg}> </Text>
             {row.map((cell, ci) => {
               const width = colWidths[ci] ?? columns[ci]?.width ?? 10;
               const color = isCursor
@@ -227,7 +228,7 @@ export const DataTable: React.FC<DataTableProps> = ({
                 <Text
                   key={ci}
                   color={color}
-                  backgroundColor={isCursor ? THEME.selectedBg : undefined}
+                  backgroundColor={rowBg}
                   bold={isCursor || isSelected}
                 >
                   {pad(cell.text, width)}{" "}
