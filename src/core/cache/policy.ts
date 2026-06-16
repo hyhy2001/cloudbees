@@ -25,6 +25,7 @@ const TTL: Record<string, number> = {
   "credentials.detail":        30,
   "nodes.list":                30,
   "nodes.detail":              30,
+  "nodes.approved":            15,
 };
 
 const DEFAULT_TTL = 15;

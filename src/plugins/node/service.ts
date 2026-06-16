@@ -13,6 +13,7 @@ import {
   type LauncherType,
   type Availability,
 } from "./xml-builder";
+import { removeControlledAgentGrant } from "../job/service";
 
 const _NODE_TREE =
   "computer[displayName,offline,numExecutors,assignedLabels[name],description]";
@@ -396,7 +397,6 @@ export async function setControlledAgent(
   enable: boolean,
 ): Promise<void> {
   const xml = await client.getText(`/computer/${nodeSeg(nodeName)}/config.xml`);
-  xmlParser.parse(xml); // validate well-formed
 
   const PROP_TAG = "com.cloudbees.jenkins.plugins.foldersplus.SecurityTokensNodeProperty";
   const propBlock = `  <${PROP_TAG}>\n    <acceptTasksWithoutOwningItem>false</acceptTasksWithoutOwningItem>\n  </${PROP_TAG}>`;
@@ -536,6 +536,7 @@ export async function authorizeFolderGrant(
         Submit: "Authorize",
       }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      invalidate: "nodes.",
     },
   );
 }
@@ -551,7 +552,11 @@ export async function deleteAgentToken(
 ): Promise<void> {
   await client.post(
     `/computer/${nodeSeg(nodeName)}/security-tokens/tokensById/${encodeURIComponent(tokenId)}/doDelete`,
-    { body: formEncode({ Submit: "Yes" }), headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+    {
+      body: formEncode({ Submit: "Yes" }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      invalidate: "nodes.",
+    },
   );
 }
 
@@ -578,12 +583,20 @@ export async function approveFolder(
   let tokenId: string | null = null;
   try {
     await setControlledAgent(client, nodeName, true);
-    grantId = await createFolderRequest(client, folderName);
-    tokenId = await createAgentToken(client, nodeName);
-    const requestSecret = await authorizeAgentToken(client, nodeName, tokenId, grantId);
-    await authorizeFolderGrant(client, folderName, grantId, requestSecret);
+    // Steps 2 and 3 are independent — run in parallel to save one round-trip.
+    // allSettled (not all) so a partial success still captures the other's id
+    // into grantId/tokenId, letting the catch roll back the dangling artifact.
+    const [folderRes, tokenRes] = await Promise.allSettled([
+      createFolderRequest(client, folderName),
+      createAgentToken(client, nodeName),
+    ]);
+    if (folderRes.status === "fulfilled") grantId = folderRes.value;
+    if (tokenRes.status === "fulfilled") tokenId = tokenRes.value;
+    if (folderRes.status === "rejected") throw folderRes.reason;
+    if (tokenRes.status === "rejected") throw tokenRes.reason;
+    const requestSecret = await authorizeAgentToken(client, nodeName, tokenId!, grantId!);
+    await authorizeFolderGrant(client, folderName, grantId!, requestSecret);
   } catch (err) {
-    const { removeControlledAgentGrant } = await import("../job/service");
     if (tokenId !== null) {
       try { await deleteAgentToken(client, nodeName, tokenId); } catch { /* best-effort */ }
     }
@@ -611,10 +624,16 @@ export async function listApprovedFolders(
 ): Promise<ApprovedFolder[]> {
   let html: string;
   try {
-    html = await client.getText(`/computer/${nodeSeg(nodeName)}/security-tokens/`);
+    // Cached (TTL via policy "nodes.approved"): the run pre-flight check hits
+    // this on every job run, and the approved-folder set changes only via an
+    // explicit approve/revoke (both invalidate the "nodes." prefix).
+    html = await client.get<string>(`/computer/${nodeSeg(nodeName)}/security-tokens/`, {
+      cacheKey: `nodes.approved.${client.baseUrl}.${nodeName}`,
+    });
   } catch {
     return [];
   }
+  if (!html) return [];
 
   const folders: ApprovedFolder[] = [];
 
