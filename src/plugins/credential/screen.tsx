@@ -410,6 +410,34 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [selected, current, ctx, store, refetch]);
 
+  const bulkImport = useCallback((): void => {
+    if (!baseUrl || selected.size === 0) return;
+    const toAdd = [...selected].filter((id) => !trackedIds.has(id));
+    if (toAdd.length === 0) {
+      ctx.notify(`${SYM.warn} Nothing to import — all selected already in Mine`, "warning");
+      return;
+    }
+    for (const id of toAdd) trackResource("credential", id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath);
+    setSelected(new Set());
+    ctx.notify(`${SYM.ok} Imported ${toAdd.length} credential(s) into Mine`, "success");
+    ctx.logCommand(toAdd.map((id) => `bee cred import ${id}${store !== "system" ? ` --store ${store}` : ""}`).join("\n"));
+    void refetch();
+  }, [baseUrl, store, selected, trackedIds, ctx, refetch]);
+
+  const bulkUnimport = useCallback((): void => {
+    if (!baseUrl || selected.size === 0) return;
+    const toRemove = [...selected].filter((id) => trackedIds.has(id));
+    if (toRemove.length === 0) {
+      ctx.notify(`${SYM.warn} Nothing to unimport — none selected are in Mine`, "warning");
+      return;
+    }
+    for (const id of toRemove) untrackResource("credential", id, ctx.profile, `${baseUrl}.${store}`, ctx.dbPath);
+    setSelected(new Set());
+    ctx.notify(`${SYM.ok} Removed ${toRemove.length} credential(s) from Mine`, "success");
+    ctx.logCommand(toRemove.map((id) => `bee cred unimport ${id}${store !== "system" ? ` --store ${store}` : ""}`).join("\n"));
+    void refetch();
+  }, [baseUrl, store, selected, trackedIds, ctx, refetch]);
+
   // ── Declarative keymap ────────────────────────────────────────────────────
   const hasRow = current !== undefined && current.typeName !== "[DELETED_ON_SERVER]";
   // Importable = a real server row not yet in the Mine list (most useful in All view).
@@ -427,21 +455,24 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [current, canImport, canUntrack, baseUrl, store, editCred, doImport, removeCred, refetch, ctx],
   );
 
+  const multi = selected.size > 0;
   const bindings = useMemo<KeyBinding[]>(
     () => [
-      { key: "Enter", label: "menu", group: "action", when: () => current !== undefined && !menuOpen, run: () => setMenuOpen(true) },
+      { key: "Enter", label: "menu", group: "action", hidden: multi, when: () => !multi && current !== undefined && !menuOpen, run: () => setMenuOpen(true) },
       { key: "ctrl+d", label: selected.size > 0 ? `delete ${selected.size}` : "delete", group: "action",
         when: () => (selected.size > 0 || current !== undefined) && !menuOpen,
         run: () => void bulkRemoveCreds() },
-      { key: "ctrl+n", label: "new", run: () => void createCred() },
-      { key: "S", label: "store", run: () => setStore((s) => (s === "system" ? "user" : "system")) },
-      { key: "ctrl+a", label: "mine/all", run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("credential", nv, ctx.dbPath); return nv; }) },
-      { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
+      { key: "i", label: "import", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkImport() },
+      { key: "u", label: "unimport", group: "action", hidden: !multi, when: () => multi && !menuOpen, run: () => bulkUnimport() },
+      { key: "ctrl+n", label: "new", hidden: multi, when: () => !multi, run: () => void createCred() },
+      { key: "S", label: "store", hidden: multi, when: () => !multi, run: () => setStore((s) => (s === "system" ? "user" : "system")) },
+      { key: "ctrl+a", label: "mine/all", hidden: multi, when: () => !multi, run: () => setShowAll((v) => { const nv = !v; setScopeShowAll("credential", nv, ctx.dbPath); return nv; }) },
+      { key: "F", label: "auto", hidden: multi, when: () => !multi, run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
-      { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
-      { key: "r", label: "refresh", run: () => void refetch() },
+      { key: "Esc", label: "clear", hidden: !multi && !search.active, when: () => multi || search.active, run: () => { if (multi) setSelected(new Set()); else search.clear(); } },
+      { key: "r", label: "refresh", hidden: multi, when: () => !multi, run: () => void refetch() },
     ],
-    [current, menuOpen, selected, bulkRemoveCreds, createCred, search, refetch, ctx],
+    [current, menuOpen, selected, multi, bulkRemoveCreds, bulkImport, bulkUnimport, createCred, search, refetch, ctx],
   );
   useKeymap(bindings, { isActive: active && !menuOpen && !search.editing });
   useEffect(() => {
@@ -476,6 +507,7 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         <Text color={THEME.dim}>{"  "}</Text>
         <Text color={store === "system" ? THEME.blue : THEME.yellow}>[{store}]</Text>
         {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
+        {multi ? <Text color={THEME.active}>  [{selected.size} selected]</Text> : null}
         {status === "loading" || status === "stale" ? (
           <Text color={THEME.active}>  ⟳ refreshing…</Text>
         ) : null}
