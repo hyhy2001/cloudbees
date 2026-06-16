@@ -4,6 +4,10 @@ SHELL        := /bin/bash
 WRAPPER_CSH  := $(CURDIR)/bee.csh
 WRAPPER_LINK := $(HOME)/.local/bin/bee
 
+# Version pulled from package.json — used to name the release tarball.
+VERSION      := $(shell grep '"version"' package.json | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+TARBALL      := dist/bee-$(VERSION)-linux-x64.tar.gz
+
 # --- Local bun toolchain (self-contained, no system bun) -------------------
 # bun is installed into ./.bun inside the repo so builds don't depend on a
 # system-wide bun. Override BUN_VERSION to pin (e.g. BUN_VERSION=bun-v1.1.38);
@@ -29,7 +33,7 @@ help:
 	@echo ""
 	@echo "    make init        Install local bun + deps + build binary"
 	@echo "    make bun         Install bun locally into ./.bun (if missing)"
-	@echo "    make install     Install deps + build binary + create bee.csh wrapper"
+	@echo "    make install     Install deps + build binary + tarball + bee.csh wrapper"
 	@echo "    make build       Compile binary → dist/bee"
 	@echo "    make deps        Install dependencies only (bun install)"
 	@echo "    make dev         Run from source: make dev ARGS='job list'"
@@ -54,6 +58,8 @@ deps: $(BUN)
 
 install: deps
 	@$(MAKE) build
+	@tar czf "$(TARBALL)" -C dist bee
+	@echo "  [OK] tarball: $(TARBALL)"
 	@printf '#!/usr/bin/env csh\nexec "%s/dist/bee" $$*\n' "$(CURDIR)" > "$(WRAPPER_CSH)"
 	@chmod +x "$(WRAPPER_CSH)"
 	@mkdir -p "$(HOME)/.local/bin"
