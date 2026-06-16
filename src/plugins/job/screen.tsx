@@ -47,6 +47,7 @@ import {
   getBuildHistory,
   updateJobFreestyle,
   copyJob,
+  moveJob,
   listControlledAgents,
   approveAgentForFolder,
   removeControlledAgentGrant,
@@ -994,7 +995,64 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     return false;
   }, [current, currentFolder, ctx, refetch]);
 
-  // Bulk import/unimport the selected rows (multi-select only; no-op when empty).
+  // Move the cursor job to a different folder (copy config.xml → delete src).
+  const moveJobCb = useCallback(async (): Promise<false | void> => {
+    if (!current) return false;
+    const src = current.name;
+    const srcLeaf = currentFolder && src.startsWith(`${currentFolder}/`)
+      ? src.slice(currentFolder.length + 1)
+      : src;
+
+    let folderOptions: string[] = [];
+    try {
+      const client = await ctx.getClient({ useController: true });
+      const jobs = await listJobsRecursive(client);
+      folderOptions = [NONE_OPTION, ...jobs.filter((j) => j.jobType === "FD").map((j) => j.name).sort()];
+    } catch { /* fall back to free text */ }
+
+    const result = await ctx.openModal<Record<string, string>>({
+      id: "move-job",
+      render: (resolve) => (
+        <FormModal
+          title={`${SYM.gear} Move '${srcLeaf}'`}
+          fields={[
+            {
+              name: "folder",
+              label: "Destination Folder",
+              initial: currentFolder ?? NONE_OPTION,
+              hint: folderOptions.length > 1 ? "type to search" : "leave blank for root",
+              options: folderOptions.length > 1 ? folderOptions : undefined,
+              searchable: folderOptions.length > 1 ? true : undefined,
+            },
+          ]}
+          onResult={resolve}
+        />
+      ),
+    });
+    if (!result) return false;
+
+    const destFolder = result.folder && result.folder !== NONE_OPTION ? result.folder : null;
+    if (destFolder === currentFolder || (destFolder === null && currentFolder === null)) {
+      ctx.notify(`${SYM.warn} Already in that folder`, "warning");
+      return false;
+    }
+    try {
+      const client = await ctx.getClient({ useController: true });
+      const qualified = await moveJob(client, src, destFolder);
+      // Update tracking: untrack old name, track new.
+      untrackResource("job", src, ctx.profile, client.baseUrl, ctx.dbPath);
+      trackResource("job", qualified, ctx.profile, client.baseUrl, ctx.dbPath);
+      const destLabel = destFolder ? `/${destFolder}` : "/";
+      ctx.notify(`${SYM.ok} Moved '${srcLeaf}' → '${destLabel}'`, "success");
+      ctx.logCommand(`bee job move ${src} ${qualified}`);
+      void refetch();
+    } catch (err) {
+      ctx.notify(err instanceof Error ? err.message : String(err), "error");
+    }
+    return false;
+  }, [current, currentFolder, ctx, refetch]);
+
+
   const bulkImport = useCallback((): void => {
     if (!baseUrl || selected.size === 0) return;
     const toAdd = [...selected].filter((n) => !trackedNames.has(n));
@@ -1070,13 +1128,14 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         return false as const;
       } },
       { label: "Delete",     icon: SYM.iconDelete,    danger: true, run: async (): Promise<false | void> => { if (!current) return false; await removeJob(current.name); } },
+      { label: "Move",       icon: SYM.arrow,          run: async () => { if (!current) return false as const; return await moveJobCb(); } },
       { label: "Controlled Agents", icon: SYM.iconSchedule, when: () => current?.jobType === "FD", run: (): false => {
         if (!current) return false;
         setAgentsFolder(current.name);
         return false;
       } },
     ],
-    [current, summary, runJob, stopJob, editJob, removeJob],
+    [current, summary, runJob, stopJob, editJob, removeJob, moveJobCb],
   );
 
   // Multi-select mode: when rows are checked via Space, the footer collapses to
@@ -1101,6 +1160,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         run: () => void bulkRemoveJobs() },
       { key: "ctrl+n", label: "new", hidden: multi, when: () => !multi, run: () => void newJob() },
       { key: "c", label: "clone", group: "action", hidden: multi, when: () => !multi && current?.jobType === "FS" && !menuOpen, run: () => void cloneJob() },
+      { key: "m", label: "move", group: "action", hidden: multi, when: () => !multi && current?.jobType === "FS" && !menuOpen, run: () => void moveJobCb() },
       { key: "i", label: "import", group: "action", hidden: !multi,
         when: () => multi && !menuOpen, run: () => bulkImport() },
       { key: "u", label: "unimport", group: "action", hidden: !multi,
@@ -1118,7 +1178,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         run: () => { if (multi) setSelected(new Set()); else search.clear(); } },
       { key: "r", label: "refresh", hidden: multi, when: () => !multi, run: () => void refetch() },
     ],
-    [current, menuOpen, selected, multi, bulkRemoveJobs, newJob, cloneJob, bulkImport, bulkUnimport, isFolder, drillIn, goUp, folderStack, search, refetch, ctx],
+    [current, menuOpen, selected, multi, bulkRemoveJobs, newJob, cloneJob, moveJobCb, bulkImport, bulkUnimport, isFolder, drillIn, goUp, folderStack, search, refetch, ctx],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
