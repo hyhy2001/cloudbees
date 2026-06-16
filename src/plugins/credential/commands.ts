@@ -221,25 +221,31 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   // ── delete ────────────────────────────────────────────────────────────────
   grp
     .command("delete")
-    .argument("<cred_id>")
+    .argument("<cred_ids...>")
     .option("--yes", "Skip confirmation", false)
     .option("--store <store>", "Credential store: 'system' or 'user'", "system")
-    .description("Delete a credential")
-    .action(async (credId: string, opts: { yes: boolean; store: string }) => {
+    .description("Delete one or more credentials")
+    .action(async (credIds: string[], opts: { yes: boolean; store: string }) => {
       try {
         validateStore(opts.store);
         warnUserStoreFallback(opts.store, dbPath);
-        if (
-          !opts.yes &&
-          !(await confirm(`Delete credential '${credId}' from ${opts.store} store? [y/N] `))
-        ) {
-          printInfo("INFO Cancelled.");
-          return;
+        if (!opts.yes) {
+          const label = credIds.length === 1 ? `credential '${credIds[0]}'` : `${credIds.length} credentials`;
+          if (!(await confirm(`Delete ${label} from ${opts.store} store? [y/N] `))) {
+            printInfo("INFO Cancelled.");
+            return;
+          }
         }
         const client = await ctx.getClient({ useController: true });
-        await deleteCredential(client, credId, sessionUsername(dbPath), opts.store);
-        untrackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
-        printSuccess(`OK Credential '${credId}' deleted from ${opts.store} store.`);
+        for (const credId of credIds) {
+          try {
+            await deleteCredential(client, credId, sessionUsername(dbPath), opts.store);
+            untrackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
+            printSuccess(`OK Credential '${credId}' deleted from ${opts.store} store.`);
+          } catch (e) {
+            printError(`Failed to delete '${credId}': ${e instanceof Error ? e.message : String(e)}`, e);
+          }
+        }
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -249,33 +255,37 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   // ── track ──────────────────────────────────────────────────────────────────
   grp
     .command("track")
-    .argument("<cred_id>")
+    .argument("<cred_ids...>")
     .option("--store <store>", "Credential store: 'system' or 'user'", "system")
-    .description("Track an existing server credential as yours (adds it to Mine)")
-    .action(async (credId: string, opts: { store: string }) => {
+    .description("Track one or more existing server credentials (adds them to Mine)")
+    .action(async (credIds: string[], opts: { store: string }) => {
       try {
         validateStore(opts.store);
         warnUserStoreFallback(opts.store, dbPath);
         const client = await ctx.getClient({ useController: true });
-        // Verify the credential exists on the server before tracking it.
-        try {
-          await getCredential(client, credId, sessionUsername(dbPath), opts.store);
-        } catch (e) {
-          if (e instanceof NotFoundError) {
-            printError(`Credential '${credId}' not found in ${opts.store} store.`, e);
-          } else {
-            const msg = e instanceof Error ? e.message : String(e);
-            printError(`Could not verify credential '${credId}': ${msg}`, e);
-          }
-          process.exit(1);
-        }
         const tracked = getTrackedResources("credential", profile, `${client.baseUrl}.${opts.store}`, dbPath);
-        if (tracked.includes(credId)) {
-          printInfo(`INFO Credential '${credId}' is already tracked.`);
-          return;
+        const trackedSet = new Set(tracked);
+        for (const credId of credIds) {
+          // Verify the credential exists on the server before tracking it.
+          try {
+            await getCredential(client, credId, sessionUsername(dbPath), opts.store);
+          } catch (e) {
+            if (e instanceof NotFoundError) {
+              printError(`Credential '${credId}' not found in ${opts.store} store. Skipping.`, e);
+            } else {
+              const msg = e instanceof Error ? e.message : String(e);
+              printError(`Could not verify credential '${credId}': ${msg}`, e);
+            }
+            continue;
+          }
+          if (trackedSet.has(credId)) {
+            printInfo(`INFO Credential '${credId}' is already tracked.`);
+            continue;
+          }
+          trackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
+          trackedSet.add(credId);
+          printSuccess(`OK Tracked '${credId}' into Mine.`);
         }
-        trackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
-        printSuccess(`OK Tracked '${credId}' into Mine.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -324,20 +334,24 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   // ── untrack ─────────────────────────────────────────────────────────────────
   grp
     .command("untrack")
-    .argument("<cred_id>")
+    .argument("<cred_ids...>")
     .option("--store <store>", "Credential store: 'system' or 'user'", "system")
-    .description("Remove a credential from Mine (stops tracking it locally; does not delete from server)")
-    .action(async (credId: string, opts: { store: string }) => {
+    .description("Remove one or more credentials from Mine (does not delete from server)")
+    .action(async (credIds: string[], opts: { store: string }) => {
       try {
         validateStore(opts.store);
         const client = await ctx.getClient({ useController: true });
         const tracked = getTrackedResources("credential", profile, `${client.baseUrl}.${opts.store}`, dbPath);
-        if (!tracked.includes(credId)) {
-          printInfo(`INFO Credential '${credId}' is not in Mine.`);
-          return;
+        const trackedSet = new Set(tracked);
+        for (const credId of credIds) {
+          if (!trackedSet.has(credId)) {
+            printInfo(`INFO Credential '${credId}' is not in Mine.`);
+            continue;
+          }
+          untrackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
+          trackedSet.delete(credId);
+          printSuccess(`OK Removed '${credId}' from Mine.`);
         }
-        untrackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
-        printSuccess(`OK Removed '${credId}' from Mine.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
