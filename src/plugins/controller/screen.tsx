@@ -6,10 +6,10 @@
  * controller list is fetched from the Operations Center, not a controller.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Text } from "ink";
 import type { FC } from "react";
-import type { TuiScreen, TuiScreenProps } from "../../registry/types";
+import type { TuiScreen, TuiScreenProps, ControllerCapabilities } from "../../registry/types";
 import { useKeymap, bindingsToHints, type KeyBinding } from "../../core/tui/keymap";
 import { SYM, borderStyle } from "../../core/tui/symbols";
 import { THEME } from "../../core/tui/theme";
@@ -29,14 +29,76 @@ import {
   resolveControllerUrl,
   selectController,
   getControllerCapabilities,
+  getControllerInfo,
 } from "./service";
+import type { ControllerInfo } from "./service";
 import { CloudBeesClientImpl } from "../../core/api/client";
+
+// ─── Controller info overlay ─────────────────────────────────────────────────
+
+interface InfoPanelProps {
+  name: string;
+  info: ControllerInfo | null;
+  loading: boolean;
+  capabilities: ControllerCapabilities | null;
+  isActive: boolean;
+}
+
+const ControllerInfoPanel: FC<InfoPanelProps> = ({ name, info, loading, capabilities, isActive }) => {
+  const CAP_ROWS: { label: string; tab: string; key: keyof ControllerCapabilities }[] = [
+    { label: "Create Job", tab: "Jobs tab", key: "canCreateJob" },
+    { label: "Create Node", tab: "Nodes tab", key: "canCreateNode" },
+    { label: "Create Credential", tab: "Credentials tab", key: "canCreateCred" },
+  ];
+
+  return (
+    <Box flexDirection="column" marginTop={1} borderStyle={borderStyle()} paddingX={1}>
+      <Box>
+        <Text bold color={THEME.normal}>{name}</Text>
+        {isActive && <Text color={THEME.active}>{"  "}{SYM.selected} active</Text>}
+        <Text color={THEME.dim}>{"  — "}Esc to close</Text>
+      </Box>
+      {loading && <Spinner label="Fetching info…" />}
+      {info && !loading && (
+        <>
+          <Box marginTop={1} flexDirection="column">
+            <Text color={THEME.keyhint} bold>System</Text>
+            <Text color={THEME.dim}>  mode          <Text color={THEME.normal}>{info.mode || "—"}</Text></Text>
+            <Text color={THEME.dim}>  description   <Text color={THEME.normal}>{info.description || "—"}</Text></Text>
+            <Text color={THEME.dim}>  executors     <Text color={THEME.normal}>{info.totalExecutors} total  {info.numFreeExecutors} free</Text></Text>
+          </Box>
+          <Box marginTop={1} flexDirection="column">
+            <Text color={THEME.keyhint} bold>Current User</Text>
+            <Text color={THEME.dim}>  id            <Text color={THEME.normal}>{info.userId || "—"}</Text></Text>
+            <Text color={THEME.dim}>  name          <Text color={THEME.normal}>{info.userFullName || "—"}</Text></Text>
+          </Box>
+          <Box marginTop={1} flexDirection="column">
+            <Text color={THEME.keyhint} bold>Permissions</Text>
+            {capabilities ? CAP_ROWS.map(({ label, tab, key }) => (
+              <Box key={key}>
+                <Text color={capabilities[key] ? THEME.success : THEME.error}>
+                  {"  "}{capabilities[key] ? SYM.ok : SYM.fail}{"  "}
+                </Text>
+                <Text color={THEME.normal}>{label}</Text>
+                <Text color={THEME.subtle}>{"  →  "}{tab}</Text>
+              </Box>
+            )) : <Text color={THEME.dim}>  —</Text>}
+          </Box>
+        </>
+      )}
+    </Box>
+  );
+};
 
 // ─── Controllers screen ──────────────────────────────────────────────────────
 
 const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const { columns: termCols } = useDimensions();
+  // Info overlay state: null = closed, string = controller name being viewed.
+  const [infoController, setInfoController] = useState<string | null>(null);
+  const [infoData, setInfoData] = useState<ControllerInfo | null>(null);
+  const [infoLoading, setInfoLoading] = useState(false);
 
   // Inline "/" search box (client-side filter; no refetch).
   const search = useSearch({ isActive: active, onEditingChange: ctx.setInputCaptured });
@@ -84,7 +146,6 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   // Probe the capabilities of a controller and push into context.
-  // Best-effort: silently sets null on failure so tabs stay accessible.
   const probeCapabilities = useCallback(async (ctrlName: string) => {
     try {
       const client = await ctx.getClient({ useController: false });
@@ -96,8 +157,6 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     }
   }, [ctx]);
 
-  // Re-probe whenever the active controller changes (e.g. after selecting one,
-  // or on first mount when a controller is already active).
   useEffect(() => {
     if (ctx.activeController) void probeCapabilities(ctx.activeController);
     else ctx.setCapabilities(null);
@@ -120,16 +179,45 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, refetch],
   );
 
+  const doViewInfo = useCallback(
+    async (ctrl: ControllerDTO) => {
+      setInfoController(ctrl.name);
+      setInfoData(null);
+      setInfoLoading(true);
+      try {
+        const client = await ctx.getClient({ useController: false });
+        const rawToken = client instanceof CloudBeesClientImpl ? client.token : "";
+        const resolvedUrl = await resolveControllerUrl(client, ctrl.url);
+        const ctrlClient = new CloudBeesClientImpl(resolvedUrl, rawToken);
+        const [info, caps] = await Promise.all([
+          getControllerInfo(ctrlClient),
+          getControllerCapabilities(client, ctrl.name, rawToken),
+        ]);
+        setInfoData(info);
+        // Re-push capabilities in case they weren't probed yet.
+        ctx.setCapabilities({ canCreateJob: caps.canCreateJob, canCreateNode: caps.canCreateNode, canCreateCred: caps.canCreateCred });
+      } catch (err) {
+        ctx.notify(err instanceof Error ? err.message : String(err), "error");
+        setInfoController(null);
+      } finally {
+        setInfoLoading(false);
+      }
+    },
+    [ctx],
+  );
+
   // ── Declarative keymap ────────────────────────────────────────────────────
   const bindings = useMemo<KeyBinding[]>(
     () => [
-      { key: "Enter", label: "select", when: () => current !== undefined, run: () => { if (current) void doSelectController(current); } },
-      { key: "F", label: "auto", run: () => setAutoRefresh((v) => !v) },
+      { key: "Enter", label: "info", when: () => current !== undefined && !infoController, run: () => { if (current) void doViewInfo(current); } },
+      { key: "s", label: "select", when: () => current !== undefined && !infoController, run: () => { if (current) void doSelectController(current); } },
+      { key: "Esc", label: "close", when: () => !!infoController, run: () => setInfoController(null) },
+      { key: "F", label: "auto", hidden: !!infoController, run: () => setAutoRefresh((v) => !v) },
       search.openBinding,
-      { key: "Esc", label: "clear", hidden: true, when: () => search.active, run: () => search.clear() },
-      { key: "r", label: "refresh", run: () => void refetch() },
+      { key: "Esc", label: "clear", hidden: true, when: () => search.active && !infoController, run: () => search.clear() },
+      { key: "r", label: "refresh", hidden: !!infoController, run: () => void refetch() },
     ],
-    [current, doSelectController, refetch, search],
+    [current, doSelectController, doViewInfo, infoController, refetch, search],
   );
   useKeymap(bindings, { isActive: active && !search.editing });
   useEffect(() => { if (active) ctx.setActiveKeyHints(bindingsToHints(bindings)); }, [active, bindings, ctx]);
@@ -159,7 +247,15 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       </Box>
 
       {/* Body */}
-      {notLoggedIn ? (
+      {infoController ? (
+        <ControllerInfoPanel
+          name={infoController}
+          info={infoData}
+          loading={infoLoading}
+          capabilities={ctx.capabilities}
+          isActive={infoController === ctx.activeController}
+        />
+      ) : notLoggedIn ? (
         <Box marginTop={1}>
           <Text color={THEME.warning}>
             {SYM.warn} Not logged in — press Ctrl+l to login

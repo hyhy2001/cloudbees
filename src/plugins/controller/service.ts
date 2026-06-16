@@ -186,3 +186,41 @@ export async function getControllerCapabilities(
   setCache(cacheKey, caps, undefined, dbPath);
   return caps;
 }
+
+export interface ControllerInfo {
+  numExecutors: number;
+  numFreeExecutors: number;
+  totalExecutors: number;
+  mode: string;
+  description: string;
+  userId: string;
+  userFullName: string;
+}
+
+/**
+ * Fetch quick info from the active controller: executor counts, mode, and
+ * the identity of the user whose token is in use. Both calls run in parallel.
+ * Best-effort: individual fetch failures yield safe defaults so the overlay
+ * still renders.
+ */
+export async function getControllerInfo(client: CloudBeesClient): Promise<ControllerInfo> {
+  const [sysRaw, meRaw] = await Promise.allSettled([
+    client.get<Record<string, unknown>>(
+      "/api/json?tree=_class,mode,nodeDescription,numExecutors,numFreeExecutors,totalExecutors",
+    ),
+    client.get<Record<string, unknown>>("/me/api/json?tree=id,fullName"),
+  ]);
+
+  const sys = sysRaw.status === "fulfilled" ? (sysRaw.value ?? {}) : {};
+  const me  = meRaw.status  === "fulfilled" ? (meRaw.value  ?? {}) : {};
+
+  return {
+    numExecutors:     typeof sys["numExecutors"]     === "number" ? sys["numExecutors"]     : 0,
+    numFreeExecutors: typeof sys["numFreeExecutors"] === "number" ? sys["numFreeExecutors"] : 0,
+    totalExecutors:   typeof sys["totalExecutors"]   === "number" ? sys["totalExecutors"]   : 0,
+    mode:             typeof sys["mode"]             === "string" ? sys["mode"]             : "",
+    description:      typeof sys["nodeDescription"]  === "string" ? sys["nodeDescription"]  : "",
+    userId:           typeof me["id"]                === "string" ? me["id"]                : "",
+    userFullName:     typeof me["fullName"]          === "string" ? me["fullName"]          : "",
+  };
+}
