@@ -29,6 +29,21 @@ export interface BuildDTO {
   url: string;
 }
 
+/**
+ * One entry from `/queue/api/json`. A queued (pending) build sits here until an
+ * executor picks it up. `why` is Jenkins' human-readable reason for the wait
+ * (e.g. "Waiting for next available executor on 'agent-x'"); null once it's
+ * about to run. `taskUrl` is the job's URL, used to match queue items back to
+ * job-list rows.
+ */
+export interface QueueItemDTO {
+  id: number;
+  taskName: string;
+  taskUrl: string;
+  why: string | null;
+  stuck: boolean;
+}
+
 /** Subset of job config fields returned by the job config API, used for update flows. */
 export interface JobConfigDTO {
   name: string;
@@ -108,6 +123,21 @@ export function buildFromDict(data: Record<string, unknown>): BuildDTO {
     duration: num(data["duration"], 0),
     timestamp: num(data["timestamp"], 0),
     url: str(data["url"]),
+  };
+}
+
+/**
+ * Maps a raw `/queue/api/json` item to QueueItemDTO. `task.name`/`task.url`
+ * identify the job; `why` is null when the item is no longer waiting.
+ */
+export function queueItemFromDict(data: Record<string, unknown>): QueueItemDTO {
+  const task = data["task"];
+  return {
+    id: num(data["id"], 0),
+    taskName: str(nested(task, "name")),
+    taskUrl: str(nested(task, "url")),
+    why: data["why"] != null ? str(data["why"]) : null,
+    stuck: bool(data["stuck"], false),
   };
 }
 

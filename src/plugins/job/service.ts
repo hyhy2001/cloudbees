@@ -5,8 +5,8 @@
 
 import type { CloudBeesClient } from "../../core/api/types";
 import { NotFoundError, APIError, ValidationError } from "../../core/api/errors";
-import { jobFromDict, buildFromDict } from "../../core/dtos/index";
-import type { JobDTO, BuildDTO } from "../../core/dtos/index";
+import { jobFromDict, buildFromDict, queueItemFromDict } from "../../core/dtos/index";
+import type { JobDTO, BuildDTO, QueueItemDTO } from "../../core/dtos/index";
 import {
   buildFreestyleXml,
   buildFolderXml,
@@ -231,6 +231,25 @@ export async function stopBuild(
   buildNumber: number,
 ): Promise<void> {
   await client.post(`/job/${jobSeg(jobName)}/${buildNumber}/stop`, { invalidate: "jobs." });
+}
+
+/**
+ * Lists the build queue via `/queue/api/json`. Each item is a pending build
+ * waiting for an executor; `why` carries the human-readable wait reason
+ * (e.g. "Waiting for next available executor"). Returns [] on any error — the
+ * queue is supplementary display data and must never break the job list.
+ */
+export async function listQueue(client: CloudBeesClient): Promise<QueueItemDTO[]> {
+  try {
+    const data = await client.get<Record<string, unknown>>(
+      "/queue/api/json?tree=items[id,why,stuck,task[name,url]]",
+      { cacheKey: `jobs.queue.${client.baseUrl}` },
+    );
+    const items = (data?.["items"] as Record<string, unknown>[] | undefined) ?? [];
+    return items.map(queueItemFromDict);
+  } catch {
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------------

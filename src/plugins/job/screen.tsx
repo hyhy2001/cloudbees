@@ -29,10 +29,11 @@ import { appendChunk, colorForLine } from "../../core/tui/data/log-buffer";
 import { useAutoRefresh } from "../../core/tui/data/use-auto-refresh";
 import { useDimensions } from "../../core/tui/data/use-dimensions";
 import { getTtl } from "../../core/cache/policy";
-import type { JobDTO } from "../../core/dtos/job";
+import type { JobDTO, QueueItemDTO } from "../../core/dtos/job";
 import {
   listJobs,
   listJobsInFolder,
+  listQueue,
   getJobConfigSummary,
   triggerJob,
   triggerJobWithParams,
@@ -397,6 +398,32 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     policy: { baseMs: 5000, backoffFactor: 2, maxMs: 60000 },
   });
 
+  // ── Build queue: pending builds + their wait reason (the "Reason" column) ──
+  // Fetched alongside the job list. The queue is small (only waiting builds), so
+  // a flat per-instance fetch is fine — no per-folder scoping needed.
+  const { data: queue, refetch: refetchQueue } = useResource<QueueItemDTO[]>(
+    `jobs.queue.${baseUrl ?? "?"}`,
+    async () => listQueue(await ctx.getClient({ useController: true })),
+    { ttlMs: getTtl("jobs.queue") * 1000, enabled: ctx.loggedIn && baseUrl !== null },
+  );
+  useAutoRefresh({
+    enabled: autoRefresh,
+    active: active && logJob === null,
+    refetch: refetchQueue,
+    policy: { baseMs: 5000, backoffFactor: 2, maxMs: 60000 },
+  });
+
+  // Map job URL → wait reason. Queue items identify their job by `task.url`,
+  // which matches JobDTO.url, so URL is the reliable join key (names collide
+  // across folders). Only items still waiting (why != null) are kept.
+  const reasonByUrl = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const it of queue ?? []) {
+      if (it.why && it.taskUrl) m.set(it.taskUrl.replace(/\/+$/, ""), it.why);
+    }
+    return m;
+  }, [queue]);
+
   // Tracked names for the Mine filter + [DELETED_ON_SERVER] synthesis.
   const trackedNames = useMemo(() => {
     if (!baseUrl) return new Set<string>();
@@ -492,16 +519,20 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         // Folders get a trailing "/" + arrow so they read as drillable.
         const isFolderRow = isContainer(j.jobType);
         const nameText = isFolderRow ? `${leaf}/ ${SYM.arrow}` : leaf;
+        const reason = j.url ? reasonByUrl.get(j.url.replace(/\/+$/, "")) : undefined;
         return [
           { text: mine ? SYM.tracked : "", color: THEME.success },
           { text: st.text, color: st.color, dim: st.dim },
           { text: tp.text, color: tp.color, dim: (tp as { dim?: boolean }).dim },
           { text: nameText, color: isFolderRow ? THEME.yellow : undefined },
           { text: j.lastBuildNumber ? `#${j.lastBuildNumber}` : "—" },
-          { text: j.description ?? "" },
+          reason
+            ? { text: `${SYM.running} ${reason}`, color: THEME.warning }
+            : { text: "", dim: true },
+          { text: j.description ?? "", dim: true },
         ];
       }),
-    [jobs, trackedNames, currentFolder],
+    [jobs, trackedNames, currentFolder, reasonByUrl],
   );
 
   // Detail panel (config summary for the highlighted job).
@@ -1284,7 +1315,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               { header: "T", width: 3 },
               { header: "Name", width: 42, flex: true },
               { header: "Build #", width: 9 },
-              { header: "Description", width: 30, flex: true },
+              { header: "Reason", width: 24, flex: true },
+              { header: "Description", width: 24, flex: true },
             ]}
             rows={tableRows}
             rowKeys={rowKeys}
