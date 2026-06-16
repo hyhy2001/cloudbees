@@ -454,11 +454,31 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   );
 
   const doApproveFolder = useCallback(
-    (node: NodeDTO): false => {
+    async (node: NodeDTO): Promise<false> => {
+      // Approving folders requires controlled-agent mode enabled on the node.
+      // Read config (cache first, else fetch) and block with a hint if it's off.
+      let cfg = configCache.current.get(node.name);
+      if (!cfg) {
+        try {
+          const client = await ctx.getClient({ useController: true });
+          const detail = await getNode(client, node.name);
+          cfg = parseNodeConfig(detail.configXml ?? "");
+          configCache.current.set(node.name, cfg);
+        } catch {
+          /* fall through — treat as not enabled */
+        }
+      }
+      if (!cfg?.controlledAgent) {
+        ctx.notify(
+          `${SYM.warn} '${node.name}' chưa bật Controlled Agent — không thể approve folder. Sửa node và đặt Controlled Agent = yes trước.`,
+          "warning",
+        );
+        return false;
+      }
       setFoldersAgent(node.name);
       return false;
     },
-    [],
+    [ctx],
   );
 
   const doAddApprovedFolder = useCallback(async () => {
