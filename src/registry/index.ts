@@ -20,6 +20,7 @@ import { nodePlugin } from "../plugins/node/index";
 import { credentialPlugin } from "../plugins/credential/index";
 import { systemPlugin } from "../plugins/system/index";
 import { foldersPlusPlugin } from "../plugins/foldersplus/index";
+import { docsPlugin } from "../plugins/docs/index";
 
 // Built-in plugins — populated as each is implemented.
 const BUILTIN_PLUGINS: Plugin[] = [
@@ -30,6 +31,7 @@ const BUILTIN_PLUGINS: Plugin[] = [
   credentialPlugin,
   systemPlugin,
   foldersPlusPlugin,
+  docsPlugin,
 ];
 
 /** Formatter registry (built-ins + plugin-provided). */

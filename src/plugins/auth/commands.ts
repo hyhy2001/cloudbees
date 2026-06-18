@@ -33,11 +33,11 @@ export function registerAuthCommands(ctx: PluginContext): void {
   // ── login ──────────────────────────────────────────────────────────────────
   grp
     .command("login")
-    .description("Login to a CloudBees server and save API Token")
-    .option("--url <url>", "CloudBees server URL")
-    .option("--username <username>", "Your username")
-    .option("--token <token>", "Your API Token")
-    .option("--profile <profile>", "Profile name", "default")
+    .description("Login (sign in / authenticate / connect) — enter server URL, username, and API token to create a login profile")
+    .option("--url <url>", "CloudBees / Jenkins server URL to log in to")
+    .option("--username <username>", "Your login username for this server")
+    .option("--token <token>", "Your API Token (from your Jenkins user settings page)")
+    .option("--profile <profile>", "Named profile to save this login under (default: 'default')", "default")
     .action(async (opts: { url?: string; username?: string; token?: string; profile: string }) => {
       try {
         let url = opts.url;
@@ -76,8 +76,8 @@ export function registerAuthCommands(ctx: PluginContext): void {
   // ── logout ─────────────────────────────────────────────────────────────────
   grp
     .command("logout")
-    .description("Remove stored token for a profile")
-    .option("--profile <profile>", "Profile to logout (default: active)")
+    .description("Sign out (disconnect / logout) and remove the stored credentials for a named profile")
+    .option("--profile <profile>", "Profile to sign out (default: active profile)")
     .action((opts: { profile?: string }) => {
       // Resolve which profile we're logging out so we can tell the user whether
       // anything actually happened (a typo'd --profile shouldn't claim success).
@@ -94,7 +94,7 @@ export function registerAuthCommands(ctx: PluginContext): void {
   // ── delete ─────────────────────────────────────────────────────────────────
   grp
     .command("delete")
-    .description("Delete a saved profile")
+    .description("Delete (remove) a login profile (account) and its stored token")
     .requiredOption("--profile <profile>", "Profile name to delete")
     .action((opts: { profile: string }) => {
       try {
@@ -112,7 +112,7 @@ export function registerAuthCommands(ctx: PluginContext): void {
   // ── profiles ───────────────────────────────────────────────────────────────
   grp
     .command("profiles")
-    .description("List all saved profiles")
+    .description("List all saved profiles (accounts) and show which one is currently active (whoami / logged in)")
     .action(() => {
       const profiles = listProfiles(dbPath);
       if (profiles.length === 0) {
@@ -135,7 +135,7 @@ export function registerAuthCommands(ctx: PluginContext): void {
   grp
     .command("use <profile>")
     .aliases(["switch"])
-    .description("Switch the active profile")
+    .description("Switch / change the active profile for subsequent commands — use a different login profile")
     .action((profileName: string) => {
       if (switchProfile(profileName, dbPath)) {
         printSuccess(`OK Active profile: ${profileName}`);

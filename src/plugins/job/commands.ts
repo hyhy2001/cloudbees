@@ -79,12 +79,12 @@ export function registerJobCommands(ctx: PluginContext): void {
 
   const grp = ctx.program
     .command("job")
-    .description("Manage CloudBees jobs (Freestyle, Folder)");
+    .description("Manage CloudBees jobs (Freestyle projects, Pipelines, Folders) and their builds");
 
   // ── list ──────────────────────────────────────────────────────────────────
   grp
     .command("list")
-    .description("List all jobs with type and last build status")
+    .description("List jobs (pipelines, builds) with type and last build status; use --all to see every job on the server")
     .option("--all", "Show all jobs (by default, only shows yours)", false)
     .option("--recursive", "Descend into folders and list jobs at all levels", false)
     .action(async (opts: { all: boolean; recursive: boolean }) => {
@@ -143,7 +143,7 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── get ───────────────────────────────────────────────────────────────────
   grp
     .command("get")
-    .description("Show job details and last build info")
+    .description("View / inspect / show job details and info: last build status, type, URL, schedule")
     .argument("<name>", "Job name")
     .action(async (name: string) => {
       try {
@@ -182,34 +182,34 @@ export function registerJobCommands(ctx: PluginContext): void {
     });
 
   // ── create ────────────────────────────────────────────────────────────────
-  const createGrp = grp.command("create").description("Create a new job");
+  const createGrp = grp.command("create").description("Create a new job on the server (use a sub-command: freestyle or folder)");
 
   createGrp
     .command("freestyle")
-    .description("Create a Freestyle project")
+    .description("Create / add a new Freestyle project (shell-command build job) with optional schedule, email, and parameters")
     .argument("<name>", "Job name")
     .option("--description <desc>", "Job description", "")
-    .option("--shell <cmd>", "Shell command to run")
-    .option("--chdir <dir>", "Working directory for the script")
-    .option("--node <node>", "Restrict job to a specific node/label")
-    .option("--schedule <cron>", "Cron format schedule (e.g., 'H 8 * * *')")
-    .option("--email <emails>", "Comma-separated emails to notify")
+    .option("--shell <cmd>", "Shell command / build script to run on the agent")
+    .option("--chdir <dir>", "Working directory for the build script")
+    .option("--node <node>", "Restrict / assign this job to a specific node or label")
+    .option("--schedule <cron>", "Cron schedule to auto-trigger builds (e.g., 'H 8 * * *')")
+    .option("--email <emails>", "Email addresses to notify on build result (comma-separated)")
     .option(
       "--email-cond <cond>",
-      "When to send email: failed | success | always | custom (custom = keyword/regex filter)",
+      "When to send email notification: failed | success | always | custom",
       "failed",
     )
     .option(
       "--email-keyword <kw>",
-      "Send mail only if build log contains keyword (repeatable)",
+      "Send email only if build log contains this keyword (repeatable)",
       (val: string, prev: string[]) => prev.concat([val]),
       [] as string[],
     )
-    .option("--email-regex <regex>", "Send mail only if build log matches regex")
-    .option("--folder <path>", "Parent folder to create the job in (e.g. 'team/backend')")
+    .option("--email-regex <regex>", "Send email only if build log matches this regex")
+    .option("--folder <path>", "Create job inside this parent folder (e.g. 'team/backend')")
     .option(
       "--param-def <name=default>",
-      "Define a String build parameter, NAME=default (repeatable)",
+      "Add a build parameter to this job: NAME=default (repeatable, use to pass params at run time)",
       (val: string, prev: string[]) => prev.concat([val]),
       [] as string[],
     )
@@ -265,7 +265,7 @@ export function registerJobCommands(ctx: PluginContext): void {
 
   createGrp
     .command("folder")
-    .description("Create a Folder")
+    .description("Create a Folder to organise (group / nest) jobs inside it")
     .argument("<name>", "Folder name")
     .option("--description <desc>", "Folder description", "")
     .option("--folder <path>", "Parent folder to create the folder in (e.g. 'team')")
@@ -288,7 +288,7 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── delete ────────────────────────────────────────────────────────────────
   grp
     .command("delete")
-    .description("Delete one or more jobs or folders")
+    .description("Delete (remove) one or more jobs or folders permanently")
     .argument("<names...>", "Job name(s)")
     .option("--yes", "Skip confirmation", false)
     .action(async (names: string[], opts: { yes: boolean }) => {
@@ -329,7 +329,7 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── copy ──────────────────────────────────────────────────────────────────
   grp
     .command("copy")
-    .description("Clone an existing job")
+    .description("Clone (duplicate / copy) an existing job's configuration into a new job")
     .argument("<source>", "Source job name")
     .argument("<destination>", "Destination job name")
     .action(async (source: string, destination: string) => {
@@ -349,7 +349,7 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── move ──────────────────────────────────────────────────────────────────
   grp
     .command("move")
-    .description("Move a job to a different folder (copy config.xml to dest, delete source)")
+    .description("Move (rename / relocate) a job to a different folder or the root")
     .argument("<source>", "Source job qualified name (e.g. folderA/my-job)")
     .argument("<folder>", "Destination folder name, or '.' for root")
     .action(async (source: string, folder: string) => {
@@ -370,7 +370,7 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── track ────────────────────────────────────────────────────────────────
   grp
     .command("track")
-    .description("Track one or more existing server jobs (adds them to your Mine list)")
+    .description("Start tracking an existing server job (pipeline / build) — add it to your Mine (tracked builds) for quick access")
     .argument("<names...>", "Job name(s) as they appear on the server")
     .action(async (names: string[]) => {
       try {
@@ -400,7 +400,7 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── untrack ─────────────────────────────────────────────────────────────────
   grp
     .command("untrack")
-    .description("Remove one or more jobs from Mine (does not delete from server)")
+    .description("Stop tracking this job — remove from your Mine (does not delete from server)")
     .argument("<names...>", "Job name(s) as they appear on the server")
     .action(async (names: string[]) => {
       try {
@@ -425,7 +425,7 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── run ───────────────────────────────────────────────────────────────────
   grp
     .command("run")
-    .description("Trigger a job build")
+    .description("Trigger / start a new build (execute / launch / kick off); pass -p KEY=value for parameterized builds; use --wait to wait for completion with optional --timeout")
     .argument("<name>", "Job name")
     .option(
       "-p, --param <param>",
@@ -525,7 +525,7 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── stop ──────────────────────────────────────────────────────────────────
   grp
     .command("stop")
-    .description("Stop a running build")
+    .description("Stop (cancel / abort / kill / halt) a running build")
     .argument("<name>", "Job name")
     .argument("<build_number>", "Build number")
     .action(async (name: string, buildNumberStr: string) => {
@@ -547,7 +547,7 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── log ───────────────────────────────────────────────────────────────────
   grp
     .command("log")
-    .description("Print console log for a build (default: last build)")
+    .description("Get / view / print build logs (stream / tail / watch / follow console output); use --follow to stream live")
     .argument("<name>", "Job name")
     .argument("[build_number]", "Build number (default: last)")
     .option("-f, --follow", "Stream log (poll every 3s until build completes)", false)
@@ -617,9 +617,9 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── status ────────────────────────────────────────────────────────────────
   grp
     .command("status")
-    .description("Show recent build history for a job")
+    .description("Show recent build history (runs / results / how did last build go) for a job; use --count to set how many builds")
     .argument("<name>", "Job name")
-    .option("--count <n>", "Number of recent builds to show", "10")
+    .option("--count <n>", "How many recent builds to show (default 10) — e.g. --count 20 for last 20 builds", "10")
     .action(async (name: string, opts: { count: string }) => {
       try {
         const parsedCount = parseInt(opts.count, 10);
@@ -655,34 +655,34 @@ export function registerJobCommands(ctx: PluginContext): void {
 
   updateGrp
     .command("freestyle")
-    .description("Update a Freestyle project's configuration")
+    .description("Edit (update / reconfigure) an existing Freestyle project: shell command, working directory (--chdir), build schedule, node assignment, email notifications, build parameters")
     .argument("<name>", "Job name")
-    .option("--description <desc>", "Job description")
-    .option("--shell <cmd>", "Shell command to run")
-    .option("--chdir <dir>", "Working dir prepended to --shell as 'cd <dir> && <cmd>'")
-    .option("--node <node>", "Restrict job to a specific node/label")
-    .option("--schedule <cron>", "Cron format schedule (e.g., 'H 8 * * *', or '' to remove)")
-    .option("--email <emails>", "Comma-separated emails to notify, or '' to remove")
+    .option("--description <desc>", "Update job description")
+    .option("--shell <cmd>", "Replace the shell command / build script")
+    .option("--chdir <dir>", "Change working directory (prepended to --shell)")
+    .option("--node <node>", "Change node assignment — restrict job to a specific node or label")
+    .option("--schedule <cron>", "Change cron build schedule (e.g., 'H 8 * * *', or '' to remove)")
+    .option("--email <emails>", "Add or change email notification recipients, or '' to remove")
     .option(
       "--email-cond <cond>",
-      "When to send email: failed | success | always | custom (custom = keyword/regex filter)",
+      "Change when to send email notification: failed | success | always | custom",
     )
     .option(
       "--email-keyword <kw>",
-      "Replace keyword filters (repeatable)",
+      "Replace email keyword filters (repeatable)",
       (val: string, prev: string[]) => prev.concat([val]),
       [] as string[],
     )
-    .option("--email-regex <regex>", "Replace regex filter (case-insensitive)")
-    .option("--clear-email-keywords", "Clear all configured email keywords", false)
-    .option("--clear-email-regex", "Clear configured email regex", false)
+    .option("--email-regex <regex>", "Replace email regex filter (case-insensitive)")
+    .option("--clear-email-keywords", "Remove all email keyword filters from job", false)
+    .option("--clear-email-regex", "Remove the email regex filter from job", false)
     .option(
       "--param-def <name=default>",
-      "Replace String parameters (repeatable, NAME or NAME=default)",
+      "Add or replace build parameters (repeatable, NAME or NAME=default)",
       (val: string, prev: string[]) => prev.concat([val]),
       [] as string[],
     )
-    .option("--clear-params", "Remove all String parameters", false)
+    .option("--clear-params", "Remove all build parameters from job", false)
     .action(
       async (
         name: string,
@@ -757,7 +757,7 @@ export function registerJobCommands(ctx: PluginContext): void {
 
   grp
     .command("list-agents")
-    .description("List agents approved to run builds from a folder")
+    .description("List agents approved (whitelisted) to run builds from a Folders Plus controlled-agent folder")
     .argument("<folder>", "Folder path (e.g. 'team' or 'team/backend')")
     .action(async (folder: string) => {
       try {
@@ -778,7 +778,7 @@ export function registerJobCommands(ctx: PluginContext): void {
 
   grp
     .command("approve-agent")
-    .description("Approve an agent to run builds from a folder (Folders Plus handshake)")
+    .description("Approve (whitelist / grant) an agent to run builds from a Folders Plus controlled-agent folder")
     .argument("<folder>", "Folder path (e.g. 'team' or 'team/backend')")
     .argument("<agent>", "Agent name")
     .action(async (folder: string, agent: string) => {
@@ -795,7 +795,7 @@ export function registerJobCommands(ctx: PluginContext): void {
 
   grp
     .command("remove-agent")
-    .description("Remove an agent's approval from a folder")
+    .description("Remove (revoke) an agent's approval from a Folders Plus controlled-agent folder (does not delete the node)")
     .argument("<folder>", "Folder path")
     .argument("<agent>", "Agent name (as shown by 'list-agents')")
     .option("--yes", "Skip confirmation", false)

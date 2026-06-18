@@ -19,12 +19,12 @@ export function registerControllerCommands(ctx: PluginContext): void {
 
   const grp = ctx.program
     .command("controller")
-    .description("Select and manage CloudBees controllers");
+    .description("Manage CloudBees / Jenkins controller instances (masters)");
 
   // ── list ───────────────────────────────────────────────────────────────────
   grp
     .command("list")
-    .description("List all controllers on this CloudBees server")
+    .description("List all available controllers (instances / masters) on this CloudBees server")
     .action(async () => {
       try {
         const client = await ctx.getClient({ useController: false });
@@ -50,7 +50,7 @@ export function registerControllerCommands(ctx: PluginContext): void {
   // ── info ───────────────────────────────────────────────────────────────────
   grp
     .command("info")
-    .description("Show controller details and creation permissions")
+    .description("View / inspect controller details: URL, type, online status, creation permissions")
     .argument("<name>", "Controller name")
     .action(async (name: string) => {
       try {
@@ -81,7 +81,7 @@ export function registerControllerCommands(ctx: PluginContext): void {
   // ── select ─────────────────────────────────────────────────────────────────
   grp
     .command("select")
-    .description("Set the active controller for subsequent commands")
+    .description("Switch / change the active controller (master / instance) for all subsequent commands")
     .argument("<name>", "Controller name")
     .action(async (name: string) => {
       try {
@@ -106,7 +106,7 @@ export function registerControllerCommands(ctx: PluginContext): void {
   // ── current ────────────────────────────────────────────────────────────────
   grp
     .command("current")
-    .description("Show the currently active controller")
+    .description("Show which controller is currently active (selected instance / master)")
     .action(() => {
       const active = getActiveController(dbPath);
       if (active) {

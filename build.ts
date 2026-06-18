@@ -10,6 +10,33 @@ const VERSION =
 
 console.log(`Building bee v${VERSION} → ./dist/bee`);
 
+await Bun.$`bun run scripts/generate-help-index.ts`;
+
+// ─── LM endpoint config (baked into the binary) ──────────────────────────────
+// Source priority: bee.lm.json (gitignored) → CB_* env → empty (offline binary).
+// Values are inlined as string literals via `define`, so a copied binary carries
+// its own config. The API key is embedded in the binary (extractable via
+// `strings`); only bake keys whose scope you accept being shipped in the binary.
+interface LmConfig {
+  url?: string;
+  apiKey?: string;
+  model?: string;
+}
+const lmFile = (await Bun.file("bee.lm.json")
+  .json()
+  .catch(() => ({}))) as LmConfig;
+
+const LM_URL = lmFile.url ?? process.env.CB_DATABRICK_URL ?? "";
+const LM_API_KEY = lmFile.apiKey ?? process.env.CB_API_KEY ?? "";
+const LM_MODEL = lmFile.model ?? process.env.CB_LM_MODEL ?? "";
+
+// Never log the key — only whether the LM is wired and to which endpoint.
+console.log(
+  LM_URL
+    ? `  LM provider: ENABLED → ${LM_URL}${LM_API_KEY ? " (authenticated)" : " (no key)"}`
+    : "  LM provider: disabled (offline-only binary)",
+);
+
 const result = await Bun.build({
   entrypoints: ["./src/main.ts"],
   // Standalone executable for RHEL8 (glibc 2.28+). baseline = no AVX2 requirement.
@@ -18,7 +45,12 @@ const result = await Bun.build({
   // NOTE: bytecode is intentionally NOT enabled. Ink's flexbox engine
   // (yoga-layout) fails to compile with bytecode. minify alone is fine.
   sourcemap: "linked",
-  define: { BEE_VERSION: `"${VERSION}"` },
+  define: {
+    BEE_VERSION: `"${VERSION}"`,
+    BEE_LM_URL: JSON.stringify(LM_URL),
+    BEE_LM_API_KEY: JSON.stringify(LM_API_KEY),
+    BEE_LM_MODEL: JSON.stringify(LM_MODEL),
+  },
   jsx: {
     runtime: "automatic",
     importSource: "react",
