@@ -544,28 +544,51 @@ The **synonym map** (`corpus.ts`) normalises user vocabulary to the canonical te
 
 ### LLM path (optional)
 
-When an LM endpoint is configured, `bee ask` generates a natural-language answer from the retrieved hits. The provider is an **OpenAI-compatible endpoint** (Databricks, llama.cpp, or any `/v1/chat/completions` server).
+When an LM endpoint is configured, `bee ask` generates a natural-language answer from the retrieved hits. Two auth methods are supported.
 
-**Bake an LM endpoint into the binary at build time:**
+#### Option A — Static Bearer token (PAT or local server)
+
+Works with Databricks personal access tokens, any OpenAI-compatible endpoint, or a local `llama-server`.
 
 Create `bee.lm.json` in the project root (gitignored):
 
 ```json
 {
-  "CB_DATABRICK_URL": "https://your-llm-host/v1/chat/completions",
-  "CB_API_KEY": "your-api-key",
+  "CB_DATABRICK_URL": "https://your-workspace.azuredatabricks.net",
+  "CB_API_KEY": "your-personal-access-token",
   "CB_LM_MODEL": "your-model-id"
 }
 ```
 
-Then build as usual (`make build`). The endpoint is compiled into the binary via `--define`; end users never see it. When the LM is unavailable or returns an error, `bee ask` degrades gracefully to raw BM25 hits.
+#### Option B — Databricks OAuth M2M (client\_id + client\_secret)
 
-**Runtime env vars (override or set without a baked key):**
+For Databricks workspaces that require OAuth machine-to-machine authentication instead of a PAT. `bee ask` automatically exchanges the client credentials for a short-lived access token at runtime (cached for the token's lifetime, typically 1 hour).
+
+```json
+{
+  "CB_DATABRICK_URL": "https://your-workspace.azuredatabricks.net",
+  "CB_CLIENT_ID": "your-oauth-client-id",
+  "CB_CLIENT_SECRET": "your-oauth-client-secret",
+  "CB_LM_MODEL": "your-model-id"
+}
+```
+
+The token exchange calls `POST /oidc/v1/token` with `grant_type=client_credentials` scoped to `all-apis`. The chat request goes to `/serving-endpoints/<model>/invocations` (Databricks native), falling back to `/v1/chat/completions` if needed.
+
+> **Auth priority**: if both `CB_CLIENT_ID`/`CB_CLIENT_SECRET` and `CB_API_KEY` are set, OAuth M2M takes precedence.
+
+---
+
+Then build as usual (`make build`). The credentials are compiled into the binary via `--define`; end users never see them. When the LM is unavailable or returns an error, `bee ask` degrades gracefully to raw BM25 hits.
+
+**Runtime env vars (override or set without rebuilding):**
 
 | Variable | Description |
 |---|---|
-| `CB_DATABRICK_URL` | LM chat completions endpoint |
-| `CB_API_KEY` | Bearer token (omit if the endpoint is open) |
+| `CB_DATABRICK_URL` | LM endpoint base URL |
+| `CB_API_KEY` | Static Bearer token / PAT (Option A) |
+| `CB_CLIENT_ID` | OAuth client ID (Option B) |
+| `CB_CLIENT_SECRET` | OAuth client secret (Option B) |
 | `CB_LM_MODEL` | Model identifier |
 
 ### Adding help facts
@@ -754,7 +777,7 @@ Encrypted session tokens live in `settings`, not in a column of their own — th
 
 `bun build --compile` targets `bun-linux-x64-baseline` (no AVX2 requirement → runs on older CPUs / RHEL 8). The version string is injected via `--define BEE_VERSION`. Two non-obvious constraints: bytecode is **off** (Ink's yoga-layout flexbox engine won't compile with it), and the JSX runtime is pinned to production (`jsx`/`jsxs`, not `jsxDEV`) — a dev-runtime build crashes at first render in the compiled binary.
 
-Before compiling, `build.ts` runs `scripts/generate-help-index.ts` to regenerate `src/generated/help-index.ts` (the `bee ask` help facts). If a `bee.lm.json` config file (or `CB_DATABRICK_URL` / `CB_API_KEY` / `CB_LM_MODEL` env vars) is present, the LM endpoint is injected via `--define` so the binary can generate answers offline without exposing credentials. The build logs whether an LM endpoint was baked in; it never logs the key.
+Before compiling, `build.ts` runs `scripts/generate-help-index.ts` to regenerate `src/generated/help-index.ts` (the `bee ask` help facts). If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. Supported auth: static Bearer token (`CB_API_KEY`) or Databricks OAuth M2M (`CB_CLIENT_ID` + `CB_CLIENT_SECRET`). The build logs which auth method was detected; it never logs the secret itself.
 
 ## Security
 
@@ -774,8 +797,10 @@ This is a developer-tool threat model: the OS file permission on `.bee_secret` i
 | `BEE_DIR` | Override the root directory used to locate the DB |
 | `BEE_DEBUG_TRACEBACK` | Set to `1` to enable debug logging and full stack traces (same as `--debug`) |
 | `BEE_ASCII` | Set to `1` to force ASCII symbols/borders in the TUI instead of Unicode |
-| `CB_DATABRICK_URL` | LM chat completions endpoint for `bee ask` (OpenAI-compatible `/v1/chat/completions`) |
-| `CB_API_KEY` | Bearer token for the LM endpoint (omit if the endpoint is open) |
+| `CB_DATABRICK_URL` | LM endpoint base URL for `bee ask` |
+| `CB_API_KEY` | Static Bearer token / PAT for the LM endpoint (Option A auth) |
+| `CB_CLIENT_ID` | OAuth client ID for Databricks M2M auth (Option B auth) |
+| `CB_CLIENT_SECRET` | OAuth client secret for Databricks M2M auth (Option B auth) |
 | `CB_LM_MODEL` | Model identifier passed to the LM endpoint |
 
 ## Project Structure
@@ -809,6 +834,9 @@ cloudbees/
 │   │   └── schedule.ts   # cron model + TimerTrigger XML
 │   ├── plugins/          # auth · controller · job · node · credential · system · foldersplus
 │   │   └── docs/         # bee ask — BM25 retrieval, presenter, LM provider, config
+│   │       └── providers/
+│   │           ├── openai.ts      # OpenAI-compatible / static Bearer token
+│   │           └── databricks.ts  # Databricks OAuth M2M (client_id + client_secret)
 │   └── registry/         # Plugin contract, BUILTIN_PLUGINS, TUI screen collection
 └── data/                 # runtime SQLite DB (created next to the binary on first run)
 ```
