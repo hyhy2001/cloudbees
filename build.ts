@@ -21,14 +21,18 @@ interface LmConfig {
   url?: string;
   apiKey?: string;
   model?: string;
+  // Legacy keys from bee.lm.json (env-var-named)
+  CB_DATABRICK_URL?: string;
+  CB_API_KEY?: string;
+  CB_LM_MODEL?: string;
 }
 const lmFile = (await Bun.file("bee.lm.json")
   .json()
   .catch(() => ({}))) as LmConfig;
 
-const LM_URL = lmFile.url ?? process.env.CB_DATABRICK_URL ?? "";
-const LM_API_KEY = lmFile.apiKey ?? process.env.CB_API_KEY ?? "";
-const LM_MODEL = lmFile.model ?? process.env.CB_LM_MODEL ?? "";
+const LM_URL = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRICK_URL ?? "";
+const LM_API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
+const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env.CB_LM_MODEL ?? "";
 
 // Never log the key — only whether the LM is wired and to which endpoint.
 console.log(

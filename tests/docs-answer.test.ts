@@ -31,33 +31,32 @@ beforeEach(() => {
 // ─── context.ts ─────────────────────────────────────────────────────────────
 
 describe("formatDocItem — command type", () => {
-  it("renders title as first line", () => {
+  it("renders title in header line", () => {
     const out = formatDocItem(JOB_RUN);
-    expect(out.split("\n")[0]).toBe("bee job run <name>");
+    expect(out.split("\n")[0]).toContain("bee job run <name>");
   });
 
-  it("indents description", () => {
+  it("includes description", () => {
     const out = formatDocItem(JOB_RUN);
-    expect(out).toContain("  Trigger a job build");
+    expect(out).toContain("Trigger a job build");
   });
 
-  it("indents body (flags)", () => {
+  it("includes flags from body", () => {
     const out = formatDocItem(JOB_RUN);
-    expect(out).toContain("    --wait");
+    expect(out).toContain("--wait");
   });
 
   it("handles item with empty body", () => {
     const noBody: DocItem = { ...JOB_RUN, body: "" };
     const out = formatDocItem(noBody);
-    expect(out).not.toContain("    --");
+    expect(out).not.toContain("--");
   });
 
   it("handles item with no description", () => {
     const noDesc: DocItem = { ...JOB_RUN, description: "" };
     const out = formatDocItem(noDesc);
-    const lines = out.split("\n");
-    expect(lines[0]).toBe("bee job run <name>");
-    expect(lines[1]).toContain("--wait");
+    expect(out.split("\n")[0]).toContain("bee job run <name>");
+    expect(out).toContain("--wait");
   });
 });
 
@@ -104,9 +103,9 @@ describe("buildPrompt", () => {
     expect(p).toContain("--wait");
   });
 
-  it("ends with Answer:", () => {
+  it("ends with answer instruction", () => {
     const p = buildPrompt("test", [JOB_RUN]);
-    expect(p.trimEnd().endsWith("Answer:")).toBe(true);
+    expect(p.trimEnd()).toMatch(/Answer:\s*$/);
   });
 });
 

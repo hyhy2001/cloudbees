@@ -5,7 +5,7 @@ export interface PresentedAnswer {
 }
 
 function isQuestionLike(query: string): boolean {
-  return /\b(what|why|how|error|403|401|fail|failed|troubleshoot|problem|issue|is|are|does|can)\b/i.test(query);
+  return /\b(what|why|how|error|403|401|fail|failed|troubleshoot|problem|issue|is|are|does|can|not|keeps|keep|connect|disconnect|disconnecting|unreachable|offline|stuck|broken|wrong|invalid|expired|denied|forbidden|cannot|can't)\b/i.test(query);
 }
 
 function extractFlags(body: string, max = 5): string[] {

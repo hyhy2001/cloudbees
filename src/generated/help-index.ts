@@ -236,7 +236,7 @@ export const HELP_FACTS: HelpFact[] = [
       "node keeps disconnecting",
       "agent not showing up"
     ],
-    "answer": "If a node does not connect, check the launcher type, host, credential, Java path, and whether the node is offline or online.",
+    "answer": "If an agent keeps disconnecting or fails to connect, check the launcher type, host, credential, Java path, and whether the node is offline or online.",
     "commands": [
       "bee node get <name>",
       "bee node list",
@@ -428,7 +428,7 @@ export const HELP_FACTS: HelpFact[] = [
       "labels flag",
       "explain node labels"
     ],
-    "answer": "Node labels let you restrict which agents run a job. Set labels on a node with --labels, then configure the job to require a specific label so builds only run on matching agents.",
+    "answer": "Node labels (tags) let you restrict which agents run a job. Set labels on a node with --labels, then configure the job to require a specific label so builds only run on matching agents.",
     "commands": [
       "bee node create <name> --remote-dir <dir> --labels <labels>",
       "bee node update <name> --labels <labels>"
