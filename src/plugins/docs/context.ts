@@ -20,7 +20,16 @@ function stripTermsFromBody(body: string): string {
   let inTerms = false;
 
   for (const line of lines) {
-    if (line.startsWith("bee ")) {
+    // A real bee command looks like: "bee word word? <optional-arg>?"
+    // e.g. "bee job run <name>", "bee auth login", "bee cred list --store user"
+    // Synonym terms that start with "bee" (e.g. "bee ask finds nothing",
+    // "bee ask no results") are NOT real commands — they lack the command
+    // verb structure and contain natural-language words.
+    const isRealCommand =
+      line.startsWith("bee ") &&
+      /^bee\s+[a-z][-a-z]*(\s+[a-z][-a-z]*)?(\s+[<(--].*)?$/i.test(line);
+
+    if (isRealCommand) {
       out.push(line);
       inTerms = false;
       continue;
@@ -28,7 +37,7 @@ function stripTermsFromBody(body: string): string {
     // A "term" line: short and looks like a keyword phrase (no punctuation like
     // "--flag" or sentence-ending ".")
     const looksLikeTerm =
-      line.length <= 35 &&
+      line.length <= 40 &&
       !line.startsWith("-") &&
       !line.endsWith(".") &&
       !line.endsWith(",") &&
@@ -99,9 +108,13 @@ export const SYSTEM_PROMPT = [
   "",
   "Answer questions about how to use bee commands. Use ONLY the commands in the context.",
   "- For how-to questions: explain in 1 sentence, then show the exact command with flags.",
+  "- For concept/definition questions: explain briefly, then list the relevant commands.",
   "- For troubleshooting: say what to check, then list the relevant commands.",
-  "- If context has no answer: say \"No info available — try `bee --help`\"",
+  "- ALWAYS end your answer with the relevant command(s) from the context, even for definitions.",
+  "- ALWAYS use the FULL command name exactly as written in [COMMAND] or [INFO] blocks (e.g. `bee job list`, not `bee list`).",
+  "- NEVER shorten or abbreviate command names.",
   "- NEVER make up commands. Only use commands shown in [COMMAND] or [INFO] blocks.",
+  "- If context has no answer: say \"No info available — try `bee --help`\"",
   "- Do not answer questions unrelated to bee. Say \"I only help with bee usage.\"",
 ].join("\n");
 
@@ -120,6 +133,9 @@ export function buildUserPrompt(query: string, corpus: DocItem[]): string {
     "=== end of context ===",
     "",
     `Question: ${query}`,
+    "",
+    "Instructions: Answer briefly. Always end your answer by listing the relevant command(s) on a new line.",
+    "Example format: \"<explanation>\\nUse: `bee X Y <arg>`\"",
     "",
     "Answer:",
   ].join("\n");

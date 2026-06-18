@@ -121,6 +121,34 @@ export const HELP_FACTS: HelpFact[] = [
     ]
   },
   {
+    "id": "concept.node-delete",
+    "kind": "concept",
+    "title": "delete or remove agent",
+    "terms": [
+      "delete node",
+      "remove agent",
+      "remove node",
+      "delete agent",
+      "unregister agent",
+      "decommission agent",
+      "get rid of node",
+      "delete an agent",
+      "remove an agent",
+      "how to delete agent",
+      "how to remove agent"
+    ],
+    "answer": "To permanently remove an agent from Jenkins, use bee node delete. This deletes the node entirely — use bee node offline instead if you only want to pause it.",
+    "commands": [
+      "bee node delete <names...>",
+      "bee node list",
+      "bee node get <name>"
+    ],
+    "related": [
+      "bee node offline <name>",
+      "bee node online <name>"
+    ]
+  },
+  {
     "id": "concept.job-run-stop",
     "kind": "concept",
     "title": "run or stop job",
@@ -132,13 +160,27 @@ export const HELP_FACTS: HelpFact[] = [
       "running build",
       "active build",
       "run jenkins job",
-      "execute jenkins job"
+      "execute jenkins job",
+      "past builds",
+      "previous builds",
+      "build history",
+      "job history",
+      "list builds",
+      "see builds",
+      "view builds",
+      "recent builds",
+      "wait for build",
+      "wait build finish",
+      "build finish",
+      "wait for job"
     ],
-    "answer": "Use run to trigger a new build. Use stop to halt the build currently running for that job.",
+    "answer": "Use run to trigger a new build. Use stop to halt the build currently running for that job. Use history to view past builds. Add --wait to block until the build completes.",
     "commands": [
       "bee job run <name>",
+      "bee job run <name> --wait",
       "bee job stop <name>",
-      "bee job log <name> --follow"
+      "bee job log <name> --follow",
+      "bee job history <name>"
     ],
     "related": [
       "bee job get <name>",
@@ -207,14 +249,19 @@ export const HELP_FACTS: HelpFact[] = [
       "ask empty",
       "no results",
       "search failed",
-      "not found"
+      "not found",
+      "bee ask no results",
+      "bee ask finds nothing",
+      "ask command no results",
+      "ask returns nothing"
     ],
-    "answer": "If `bee ask` finds no result, try a shorter query built from key nouns or verbs like `job`, `credential`, `login`, or `node`.",
+    "answer": "When bee ask returns no results, simplify your query to one keyword noun or verb. For example, use 'job', 'credential', 'login', or 'node' instead of a full sentence.",
     "commands": [
-      "bee --help",
       "bee ask job",
       "bee ask credential",
-      "bee ask login"
+      "bee ask login",
+      "bee ask node",
+      "bee --help"
     ],
     "related": [
       "bee job list",
