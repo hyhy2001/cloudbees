@@ -15,7 +15,7 @@
 - Job lifecycle: list / get / create / update / delete / run / stop / log / status / copy / move / track / untrack, plus String build parameters, an email anti-spam content filter, and CloudBees Folders Plus controlled-agent approval (list-agents / approve-agent / remove-agent)
 - Credential lifecycle: list / get / create / update / delete / track / untrack (system & user stores)
 - Node lifecycle: list / get / create / update / delete / offline / online / copy / track / untrack (SSH and JNLP/Inbound launchers, Always/On-demand availability), plus Folders Plus controlled-agent mode toggle
-- **Offline help** (`bee ask`) — BM25 natural-language search over the full command tree and 16 help facts; optional LM answer generation via any OpenAI-compatible endpoint baked at build time
+- **Offline help** (`bee ask`) — BM25 natural-language search over the full command tree and 17 help facts; optional LM answer generation via any OpenAI-compatible endpoint baked at build time
 
 ## Requirements
 
@@ -503,7 +503,7 @@ Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful 
 `bee ask` answers questions about how to use `bee` without requiring network access or an LLM. It is backed by a **BM25/FTS5 retrieval engine** (SQLite) that searches across two sources simultaneously:
 
 1. **Live command tree** — every `bee <plugin> <subcommand>` entry with its flags, auto-derived from the same commander tree that powers the CLI.
-2. **Help facts** — 16 hand-authored entries covering concepts, troubleshooting steps, and cross-cutting topics (profiles, credential types, Mine vs All, build parameters, node labels, controlled agents, etc.).
+2. **Help facts** — 17 hand-authored entries covering concepts, troubleshooting steps, and cross-cutting topics (profiles, credential types, Mine vs All, build parameters, node labels, controlled agents, etc.).
 
 ```bash
 bee ask "how do I log in"
@@ -592,7 +592,50 @@ bun run scripts/generate-help-index.ts   # writes src/generated/help-index.ts
 
 The generated file is committed and baked into the binary.
 
-### BM25 retrieval quality
+### BM25 + LLM benchmark
+
+`scripts/benchmark.ts` is a comprehensive quality harness with **69 hand-curated ground-truth queries** that covers every query type: exact command name, natural-language paraphrase, concept/definition, troubleshooting, flag-specific, and cross-plugin. It has two phases:
+
+**Phase A — BM25 retrieval** (fast, no LLM): scores each query against the real corpus using Recall@1 / Recall@3 / Recall@5 / MRR, with a breakdown by query type and a miss table showing the top competing hit.
+
+**Phase B — LLM answer quality** (requires LM server): uses the role-separated prompt (`SYSTEM_PROMPT` + `buildUserPrompt`) and scores answers with rule-based checks — no self-judge:
+- `correct_command` — does the answer mention the expected command (or any context command for concept/troubleshoot queries)?
+- `hallucination` — does the answer invent a `bee X` command that was not in the retrieved context?
+- `has_flag` — for flag-specific queries, does the answer cite the required flag?
+- `wrong_refusal` — does the model say "No info available" when the context actually has an answer?
+
+```bash
+bun run scripts/benchmark.ts               # Phase A + B (requires LM at http://127.0.0.1:11434)
+bun run scripts/benchmark.ts --no-llm      # Phase A only (fast, no LM needed)
+bun run scripts/benchmark.ts --lm-url http://host:port   # custom LM endpoint
+```
+
+Results are printed to the console and written to `benchmark-report.md` (gitignored).
+
+**Latest results** (qwen2.5-coder-1.5b-q4, 44 LLM queries sampled):
+
+| Metric | Score |
+|---|---|
+| BM25 Recall@1 | **76.8%** (53/69) |
+| BM25 Recall@3 | **89.9%** (62/69) |
+| BM25 Recall@5 | **92.8%** (64/69) |
+| BM25 MRR | **0.837** |
+| LLM correct command | **97.7%** (43/44) |
+| LLM hallucination rate | **0.0%** (0/44) |
+| LLM has required flag | **100.0%** (5/5) |
+| LLM wrong refusal | **2.3%** (1/44) |
+
+BM25 Recall@1 by query type:
+
+| Type | Recall@1 | Recall@5 |
+|---|---|---|
+| exact | 77.3% | 95.5% |
+| natural language | 70.0% | 90.0% |
+| concept / definition | 91.7% | 100.0% |
+| troubleshooting | 100.0% | 100.0% |
+| flag-specific | 80.0% | 100.0% |
+
+### BM25 retrieval quality (legacy audit)
 
 Measured against a 310-query audit suite covering all plugins, sub-options, natural-language phrasings, concept questions, and troubleshooting:
 
@@ -617,7 +660,8 @@ existing:    "update",   // "add X to existing job" → job update
 Run the audit scripts to verify the change does not regress other queries:
 
 ```bash
-bun run scripts/rag-eval.ts       # structured eval over the test corpus
+bun run scripts/rag-eval.ts       # structured eval over the test corpus (legacy)
+bun run scripts/benchmark.ts      # comprehensive BM25 + LLM benchmark (recommended)
 bun test tests/docs-rag-stress.test.ts
 bun test tests/docs-search.test.ts
 ```
@@ -744,7 +788,8 @@ cloudbees/
 ├── bee.lm.json           # (gitignored) LM endpoint config baked at build time
 ├── scripts/
 │   ├── generate-help-index.ts  # regenerates src/generated/help-index.ts
-│   └── rag-eval.ts             # BM25 retrieval quality eval
+│   ├── benchmark.ts            # comprehensive BM25 + LLM quality benchmark
+│   └── rag-eval.ts             # BM25 retrieval quality eval (legacy)
 ├── src/
 │   ├── main.ts           # Entry: initDb → initPlugins → parse; --ui → launchTui()
 │   ├── generated/
