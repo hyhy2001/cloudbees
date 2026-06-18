@@ -7,8 +7,14 @@
  *      the compiled binary, so a copied binary carries its own config and stays
  *      "all in one". The `declare const` below are replaced at compile time;
  *      `bun run` dev mode leaves them undefined.
- *   2. Runtime env — CB_DATABRICK_URL / CB_API_KEY / CB_LM_MODEL. Lets a dev run
- *      from source against a local llama-server without rebuilding.
+ *   2. Runtime env — CB_DATABRICK_URL / CB_API_KEY / CB_LM_MODEL /
+ *      CB_CLIENT_ID / CB_CLIENT_SECRET. Lets a dev run from source without rebuilding.
+ *
+ * Auth priority:
+ *   - CB_CLIENT_ID + CB_CLIENT_SECRET  → Databricks OAuth client credentials
+ *     (exchanges for a short-lived token before each fresh generation run)
+ *   - CB_API_KEY                        → static Bearer token (Databricks PAT, llama-server)
+ *   - neither                           → unauthenticated (local dev server)
  *
  * When LM_URL is empty (no config baked, no env), no provider is registered and
  * `bee ask` runs fully offline.
@@ -17,6 +23,8 @@
 declare const BEE_LM_URL: string | undefined;
 declare const BEE_LM_API_KEY: string | undefined;
 declare const BEE_LM_MODEL: string | undefined;
+declare const BEE_LM_CLIENT_ID: string | undefined;
+declare const BEE_LM_CLIENT_SECRET: string | undefined;
 
 function pick(baked: string | undefined, envKey: string): string {
   if (typeof baked !== "undefined" && baked !== "") return baked;
@@ -34,3 +42,11 @@ export const LM_API_KEY = pick(
 export const LM_MODEL =
   pick(typeof BEE_LM_MODEL !== "undefined" ? BEE_LM_MODEL : undefined, "CB_LM_MODEL") ||
   "default";
+export const LM_CLIENT_ID = pick(
+  typeof BEE_LM_CLIENT_ID !== "undefined" ? BEE_LM_CLIENT_ID : undefined,
+  "CB_CLIENT_ID",
+);
+export const LM_CLIENT_SECRET = pick(
+  typeof BEE_LM_CLIENT_SECRET !== "undefined" ? BEE_LM_CLIENT_SECRET : undefined,
+  "CB_CLIENT_SECRET",
+);

@@ -21,10 +21,14 @@ interface LmConfig {
   url?: string;
   apiKey?: string;
   model?: string;
+  clientId?: string;
+  clientSecret?: string;
   // Legacy keys from bee.lm.json (env-var-named)
   CB_DATABRICK_URL?: string;
   CB_API_KEY?: string;
   CB_LM_MODEL?: string;
+  CB_CLIENT_ID?: string;
+  CB_CLIENT_SECRET?: string;
 }
 const lmFile = (await Bun.file("bee.lm.json")
   .json()
@@ -33,11 +37,13 @@ const lmFile = (await Bun.file("bee.lm.json")
 const LM_URL = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRICK_URL ?? "";
 const LM_API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
 const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env.CB_LM_MODEL ?? "";
+const LM_CLIENT_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
+const LM_CLIENT_SECRET = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";
 
 // Never log the key — only whether the LM is wired and to which endpoint.
 console.log(
   LM_URL
-    ? `  LM provider: ENABLED → ${LM_URL}${LM_API_KEY ? " (authenticated)" : " (no key)"}`
+    ? `  LM provider: ENABLED → ${LM_URL}${LM_CLIENT_ID ? " (OAuth client credentials)" : LM_API_KEY ? " (authenticated)" : " (no key)"}`
     : "  LM provider: disabled (offline-only binary)",
 );
 
@@ -54,6 +60,8 @@ const result = await Bun.build({
     BEE_LM_URL: JSON.stringify(LM_URL),
     BEE_LM_API_KEY: JSON.stringify(LM_API_KEY),
     BEE_LM_MODEL: JSON.stringify(LM_MODEL),
+    BEE_LM_CLIENT_ID: JSON.stringify(LM_CLIENT_ID),
+    BEE_LM_CLIENT_SECRET: JSON.stringify(LM_CLIENT_SECRET),
   },
   jsx: {
     runtime: "automatic",
