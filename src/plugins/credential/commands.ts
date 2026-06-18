@@ -62,15 +62,15 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   const dbPath = process.env["CB_DB_PATH"];
   const profile = getActiveProfileName(dbPath);
 
-  const grp = ctx.program.command("cred").description("Manage CloudBees credentials");
+  const grp = ctx.program.command("cred").description("Manage CloudBees credentials (secrets, tokens, passwords, API keys, SSH keys)");
 
   // ── list ────────────────────────────────────────────────────────────────────
   grp
     .command("list")
-    .description("List credentials from the selected store")
+    .description("List stored credentials (secrets, tokens, passwords) from the selected store")
     .option("-o, --output <fmt>", "Output format (table|json)", "table")
     .option("--all", "Show all credentials (by default, only shows yours)", false)
-    .option("--store <store>", "Credential store: 'system' or 'user'", "system")
+    .option("--store <store>", "Credential store to list from: 'system' (default) or 'user'", "system")
     .action(async (opts: { output: string; all: boolean; store: string }) => {
       try {
         validateStore(opts.store);
@@ -122,8 +122,8 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   grp
     .command("get")
     .argument("<cred_id>")
-    .description("Show credential details (secrets are masked)")
-    .option("--store <store>", "Credential store: 'system' or 'user'", "system")
+    .description("View / inspect a credential's details (secret values are masked)")
+    .option("--store <store>", "Credential store: 'system' (default) or 'user'", "system")
     .action(async (credId: string, opts: { store: string }) => {
       try {
         validateStore(opts.store);
@@ -145,14 +145,14 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   // ── create ─────────────────────────────────────────────────────────────────
   grp
     .command("create")
-    .description("Create a credential (Username+Password or SecretText)")
+    .description("Save / create a new credential (with optional custom --id): Username+Password, API token, SSH key, or plain secret text")
     .option("--id <id>", "Unique credential ID (auto-generated if omitted)")
-    .option("--username <username>", "Username (Username+Password type)")
-    .option("--password <password>", "Password (prompted if omitted, Username+Password only)")
-    .option("--secret-text <secret>", "Plain-text secret value (creates SecretText type)")
-    .option("--description <desc>", "Description", "")
-    .option("--scope <scope>", "Credential scope (GLOBAL|SYSTEM)", "GLOBAL")
-    .option("--store <store>", "Credential store: 'system' or 'user'", "system")
+    .option("--username <username>", "Username — creates a Username+Password credential")
+    .option("--password <password>", "Password or API key (prompted securely if omitted)")
+    .option("--secret-text <secret>", "Plain-text secret value (token, API key) — creates SecretText type")
+    .option("--description <desc>", "Human-readable label for this credential", "")
+    .option("--scope <scope>", "Visibility: GLOBAL (default, all jobs) or SYSTEM (server admin only)", "GLOBAL")
+    .option("--store <store>", "Credential store: 'system' (default) or 'user'", "system")
     .action(
       async (opts: {
         id?: string;
@@ -222,9 +222,9 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   grp
     .command("delete")
     .argument("<cred_ids...>")
-    .option("--yes", "Skip confirmation", false)
-    .option("--store <store>", "Credential store: 'system' or 'user'", "system")
-    .description("Delete one or more credentials")
+    .option("--yes", "Skip confirmation prompt", false)
+    .option("--store <store>", "Which credential store to delete from: 'system' (default) or 'user' store", "system")
+    .description("Delete (remove / revoke / expire) one or more credentials from the system or user store (secrets, tokens, API keys, passwords) permanently")
     .action(async (credIds: string[], opts: { yes: boolean; store: string }) => {
       try {
         validateStore(opts.store);
@@ -256,8 +256,8 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   grp
     .command("track")
     .argument("<cred_ids...>")
-    .option("--store <store>", "Credential store: 'system' or 'user'", "system")
-    .description("Track one or more existing server credentials (adds them to Mine)")
+    .option("--store <store>", "Credential store: 'system' (default) or 'user'", "system")
+    .description("Track / follow / pin existing server credentials — add them to your Mine for quick access (does not create)")
     .action(async (credIds: string[], opts: { store: string }) => {
       try {
         validateStore(opts.store);
@@ -297,11 +297,11 @@ export function registerCredentialCommands(ctx: PluginContext): void {
     .command("update")
     .argument("<cred_id>")
     .option("--username <username>", "New username value")
-    .option("--password <password>", "New password (Username+Password credentials)")
-    .option("--secret-text <secret>", "New secret value (SecretText credentials)")
-    .option("--description <desc>", "New description")
-    .option("--store <store>", "Credential store: 'system' or 'user'", "system")
-    .description("Update an existing credential")
+    .option("--password <password>", "New password or API key (Username+Password credentials)")
+    .option("--secret-text <secret>", "New secret value — rotate / refresh the stored token or key")
+    .option("--description <desc>", "New human-readable label")
+    .option("--store <store>", "Credential store: 'system' (default) or 'user'", "system")
+    .description("Update (edit / rotate) an existing credential — change password, API token, secret value, or description")
     .action(
       async (
         credId: string,
@@ -335,8 +335,8 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   grp
     .command("untrack")
     .argument("<cred_ids...>")
-    .option("--store <store>", "Credential store: 'system' or 'user'", "system")
-    .description("Remove one or more credentials from Mine (does not delete from server)")
+    .option("--store <store>", "Credential store: 'system' (default) or 'user'", "system")
+    .description("Stop tracking credentials — remove from your Mine (does not delete from server)")
     .action(async (credIds: string[], opts: { store: string }) => {
       try {
         validateStore(opts.store);

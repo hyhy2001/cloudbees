@@ -27,12 +27,12 @@ export function registerNodeCommands(ctx: PluginContext): void {
   const dbPath = process.env["CB_DB_PATH"];
   const profile = getActiveProfileName(dbPath);
 
-  const grp = ctx.program.command("node").description("Manage CloudBees agent nodes");
+  const grp = ctx.program.command("node").description("Manage CloudBees build agents, workers, and executor nodes");
 
   // ── list ────────────────────────────────────────────────────────────────────
   grp
     .command("list")
-    .description("List agent nodes with online/offline status")
+    .description("List build agents (workers / nodes) with online/offline status; use --all to show every node on the server")
     .option("--all", "Show all nodes (by default, only shows yours)", false)
     .action(async (opts: { all: boolean }) => {
       try {
@@ -79,7 +79,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
   grp
     .command("get")
     .argument("<name>")
-    .description("Show node details")
+    .description("Show node (agent / worker) details: status, executors, labels, launcher type, remote dir")
     .action(async (name: string) => {
       try {
         const client = await ctx.getClient({ useController: true });
@@ -104,19 +104,19 @@ export function registerNodeCommands(ctx: PluginContext): void {
   // ── create ─────────────────────────────────────────────────────────────────
   grp
     .command("create")
-    .description("Create a Permanent Agent (SSH or JNLP launcher)")
+    .description("Add / create a new Permanent Agent (build agent / worker) — SSH launcher (--host + --cred-id) or JNLP/Inbound (no --host); set labels, executors, remote dir, and availability at creation time")
     .argument("<name>", "Node name")
-    .requiredOption("--remote-dir <dir>", "Remote work directory (e.g. /home/jenkins)")
-    .option("--executors <n>", "Number of executors", "1")
-    .option("--labels <labels>", "Space-separated labels", "")
-    .option("--description <desc>", "Description", "")
-    .option("--host <host>", "SSH host IP/hostname (omit to create JNLP/Inbound agent)", "")
+    .requiredOption("--remote-dir <dir>", "Remote working directory on agent (e.g. /home/jenkins)")
+    .option("--executors <n>", "Number of executors (parallel build slots)", "1")
+    .option("--labels <labels>", "Space-separated node labels (used to restrict jobs to this agent)", "")
+    .option("--description <desc>", "Human-readable description for this node", "")
+    .option("--host <host>", "SSH host IP/hostname — omit to create a JNLP/Inbound agent instead", "")
     .option("--port <port>", "SSH port (default 22)", "22")
-    .option("--cred-id <id>", "Credential ID for SSH connection", "")
-    .option("--java-path <path>", "Path to Java executable on agent", DEFAULT_JAVA_PATH)
-    .option("--availability <mode>", "Retention strategy: always | demand", "always")
-    .option("--in-demand-delay <min>", "Minutes of demand before going online (demand only)", "0")
-    .option("--idle-delay <min>", "Minutes idle before going offline (demand only)", "1")
+    .option("--cred-id <id>", "Credential ID for SSH connection when creating this node (SSH launcher only)", "")
+    .option("--java-path <path>", "Path to Java executable on agent (SSH launcher)", DEFAULT_JAVA_PATH)
+    .option("--availability <mode>", "Retention/availability strategy: always (default) | demand", "always")
+    .option("--in-demand-delay <min>", "Minutes of demand before bringing online (demand availability only)", "0")
+    .option("--idle-delay <min>", "Minutes idle before going offline (demand availability only)", "1")
     .action(
       async (
         name: string,
@@ -187,7 +187,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
     .command("copy")
     .argument("<source_name>")
     .argument("<new_name>")
-    .description("Copy an existing node's configuration to a new node")
+    .description("Clone (duplicate) an existing node's configuration into a new node")
     .action(async (sourceName: string, newName: string) => {
       try {
         const client = await ctx.getClient({ useController: true });
@@ -204,7 +204,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
   grp
     .command("track")
     .argument("<names...>")
-    .description("Track one or more existing server nodes (adds them to your Mine list)")
+    .description("Start tracking an existing node — pin it to your Mine (tracked nodes) for quick access (does not create)")
     .action(async (names: string[]) => {
       try {
         const client = await ctx.getClient({ useController: true });
@@ -239,7 +239,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
     .command("delete")
     .argument("<names...>")
     .option("--yes", "Skip confirmation", false)
-    .description("Delete one or more nodes")
+    .description("Delete (remove / decommission / retire) one or more nodes (build agents / workers) permanently")
     .action(async (names: string[], opts: { yes: boolean }) => {
       try {
         if (!opts.yes) {
@@ -270,7 +270,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
     .command("offline")
     .argument("<name>")
     .option("--reason <reason>", "Reason for taking offline", "")
-    .description("Mark a node as offline")
+    .description("Take a node offline — stop builds on this agent, disable / suspend so it does not accept new builds (maintenance mode)")
     .action(async (name: string, opts: { reason: string }) => {
       try {
         const client = await ctx.getClient({ useController: true });
@@ -291,7 +291,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
   grp
     .command("online")
     .argument("<name>")
-    .description("Bring a node back online (toggle offline off)")
+    .description("Bring a node back online — allow builds again (enable / resume / reactivate this agent)")
     .action(async (name: string) => {
       try {
         const client = await ctx.getClient({ useController: true });
@@ -312,7 +312,7 @@ export function registerNodeCommands(ctx: PluginContext): void {
   grp
     .command("untrack")
     .argument("<names...>")
-    .description("Remove one or more nodes from Mine (does not delete from server)")
+    .description("Remove nodes from your Mine (tracked items) — does not delete from server")
     .action(async (names: string[]) => {
       try {
         const client = await ctx.getClient({ useController: true });
@@ -337,20 +337,20 @@ export function registerNodeCommands(ctx: PluginContext): void {
   grp
     .command("update")
     .argument("<name>")
-    .option("--description <desc>", "Description")
-    .option("--remote-dir <dir>", "Remote root directory (e.g. /home/jenkins)")
-    .option("--executors <n>", "Number of executors")
-    .option("--labels <labels>", "Space-separated labels")
+    .option("--description <desc>", "Human-readable description for this node")
+    .option("--remote-dir <dir>", "Remote working directory on agent (e.g. /home/jenkins)")
+    .option("--executors <n>", "Set number of executors (parallel build slots) — increase or decrease")
+    .option("--labels <labels>", "Space-separated node labels (assign or change labels)")
     .option("--launcher <type>", "Launch method: ssh | jnlp")
     .option("--host <host>", "SSH host IP/hostname (ssh launcher)")
     .option("--port <n>", "SSH port (ssh launcher, default 22)")
     .option("--cred-id <id>", "Credential ID for SSH connection (ssh launcher)")
     .option("--java-path <path>", "Path to Java executable on agent (ssh launcher)")
-    .option("--availability <mode>", "Retention strategy: always | demand")
-    .option("--in-demand-delay <min>", "Minutes of demand before going online (demand only)")
-    .option("--idle-delay <min>", "Minutes idle before going offline (demand only)")
-    .option("--controlled-agent <bool>", "Folders Plus controlled-agent mode: true | false")
-    .description("Update a node's configuration")
+    .option("--availability <mode>", "Retention/availability strategy: always | demand")
+    .option("--in-demand-delay <min>", "Minutes of demand before bringing online (demand availability only)")
+    .option("--idle-delay <min>", "Minutes idle before going offline (demand availability only)")
+    .option("--controlled-agent <bool>", "Enable (true) or disable (false) Folders Plus controlled-agent mode for this node")
+    .description("Edit (modify) a node's configuration: increase/decrease executor count, change labels, launcher, SSH host, remote dir, availability")
     .action(
       async (
         name: string,

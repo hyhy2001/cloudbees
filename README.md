@@ -15,6 +15,7 @@
 - Job lifecycle: list / get / create / update / delete / run / stop / log / status / copy / move / track / untrack, plus String build parameters, an email anti-spam content filter, and CloudBees Folders Plus controlled-agent approval (list-agents / approve-agent / remove-agent)
 - Credential lifecycle: list / get / create / update / delete / track / untrack (system & user stores)
 - Node lifecycle: list / get / create / update / delete / offline / online / copy / track / untrack (SSH and JNLP/Inbound launchers, Always/On-demand availability), plus Folders Plus controlled-agent mode toggle
+- **Offline help** (`bee ask`) — BM25 natural-language search over the full command tree and 16 help facts; optional LM answer generation via any OpenAI-compatible endpoint baked at build time
 
 ## Requirements
 
@@ -69,6 +70,8 @@ bee auth login                       # prompts for URL, username, API token
 bee controller list
 bee controller select <controller-name>
 bee job list
+bee ask "how do I run a job"         # offline help — no network needed
+bee ask "403 error"                  # troubleshooting
 bee --ui                             # or drive everything from the TUI
 ```
 
@@ -84,6 +87,24 @@ bee --install        # self-install: create bee.csh wrapper + symlink ~/.local/b
 ```
 
 Running `bee` with no subcommand prints help.
+
+### Help (`bee ask`)
+
+Search the built-in help without a network connection:
+
+```bash
+bee ask <query>
+
+# Examples
+bee ask login
+bee ask "create freestyle job"
+bee ask "rotate api key"
+bee ask "node offline"
+bee ask "403 error"
+bee ask "what is a credential store"
+```
+
+See the [`bee ask` section](#bee-ask--offline-help--natural-language-search) above for full details on retrieval, the LM path, and extending coverage.
 
 ### Auth & Profiles (`bee auth`)
 
@@ -477,6 +498,130 @@ Form fields show a short hint on the right. Fields that take a filesystem path (
 
 Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful on terminals with limited glyph support).
 
+## `bee ask` — Offline Help & Natural-Language Search
+
+`bee ask` answers questions about how to use `bee` without requiring network access or an LLM. It is backed by a **BM25/FTS5 retrieval engine** (SQLite) that searches across two sources simultaneously:
+
+1. **Live command tree** — every `bee <plugin> <subcommand>` entry with its flags, auto-derived from the same commander tree that powers the CLI.
+2. **Help facts** — 16 hand-authored entries covering concepts, troubleshooting steps, and cross-cutting topics (profiles, credential types, Mine vs All, build parameters, node labels, controlled agents, etc.).
+
+```bash
+bee ask "how do I log in"
+bee ask "create a freestyle job with email notification"
+bee ask "rotate an api key"
+bee ask "take a node offline for maintenance"
+bee ask "what is a credential store"
+bee ask "403 forbidden error"
+bee ask "agent keeps disconnecting"
+```
+
+### How retrieval works
+
+```
+query
+  ↓  tokenise + drop stopwords
+  ↓  synonym expansion (100+ domain synonyms: "kick"→run, "retire"→delete, "maintenance"→offline …)
+  ↓  FTS5 MATCH with column weights  title×10  description×5  body×1
+  ↓  relevance gate (coverage ≥ 60 % — drops off-domain coincidental hits)
+  ↓  soft gate (falls back to raw hits if gate empties everything)
+  ↓  top-K results → presenter
+```
+
+The **synonym map** (`corpus.ts`) normalises user vocabulary to the canonical terms used in command descriptions and help facts. Examples:
+
+| User types | Expands to |
+|---|---|
+| kick, launch, execute, start | run |
+| retire, decommission, erase | delete |
+| rotate, configure, edit | update |
+| maintenance, suspend, pause, disable | offline |
+| notification, notify | email |
+| existing | update |
+| denied, forbidden | 403 |
+| disconnecting, unreachable | connect |
+| whoami | profiles |
+| what | concept |
+
+### LLM path (optional)
+
+When an LM endpoint is configured, `bee ask` generates a natural-language answer from the retrieved hits. The provider is an **OpenAI-compatible endpoint** (Databricks, llama.cpp, or any `/v1/chat/completions` server).
+
+**Bake an LM endpoint into the binary at build time:**
+
+Create `bee.lm.json` in the project root (gitignored):
+
+```json
+{
+  "CB_DATABRICK_URL": "https://your-llm-host/v1/chat/completions",
+  "CB_API_KEY": "your-api-key",
+  "CB_LM_MODEL": "your-model-id"
+}
+```
+
+Then build as usual (`make build`). The endpoint is compiled into the binary via `--define`; end users never see it. When the LM is unavailable or returns an error, `bee ask` degrades gracefully to raw BM25 hits.
+
+**Runtime env vars (override or set without a baked key):**
+
+| Variable | Description |
+|---|---|
+| `CB_DATABRICK_URL` | LM chat completions endpoint |
+| `CB_API_KEY` | Bearer token (omit if the endpoint is open) |
+| `CB_LM_MODEL` | Model identifier |
+
+### Adding help facts
+
+Help facts live in `scripts/generate-help-index.ts`. Each fact has:
+
+```typescript
+{
+  id: "concept.my-topic",
+  kind: "concept" | "troubleshooting",
+  title: "short noun phrase",
+  terms: ["synonym1", "user phrasing 2", ...],  // extra BM25 vocabulary
+  answer: "One or two sentence prose answer.",
+  commands: ["bee plugin subcommand <arg>", ...],
+  related: ["bee other subcommand", ...],
+}
+```
+
+After editing the script, regenerate:
+
+```bash
+bun run scripts/generate-help-index.ts   # writes src/generated/help-index.ts
+```
+
+The generated file is committed and baked into the binary.
+
+### BM25 retrieval quality
+
+Measured against a 310-query audit suite covering all plugins, sub-options, natural-language phrasings, concept questions, and troubleshooting:
+
+| Suite | hit@1 | hit@3 |
+|---|---|---|
+| Cross-plugin (92 queries) | 93 % | 100 % |
+| Natural language (118 queries) | 90 % | 96 % |
+| Sub-option / flag queries (100 queries) | 85 % | 98 % |
+
+Remaining misses are structural (BM25 parent-group nodes scoring above sub-commands) or intentional (concept facts surfacing for "what is X" queries, which then list the relevant commands anyway).
+
+### Extending synonym coverage
+
+Edit the `SYNONYMS` map in `src/plugins/docs/corpus.ts`. Each entry maps one user token to one canonical token — expansion is additive (original token + synonym are both OR-joined into the FTS5 MATCH expression):
+
+```typescript
+kick:        "run",      // "kick off a build" → job run
+maintenance: "offline",  // "maintenance mode" → node offline
+existing:    "update",   // "add X to existing job" → job update
+```
+
+Run the audit scripts to verify the change does not regress other queries:
+
+```bash
+bun run scripts/rag-eval.ts       # structured eval over the test corpus
+bun test tests/docs-rag-stress.test.ts
+bun test tests/docs-search.test.ts
+```
+
 ## Architecture & Internals
 
 `bee` is a single TypeScript codebase compiled to one standalone binary. It is built in strict layers — each layer may only import from the ones below it, never sideways or up:
@@ -565,6 +710,8 @@ Encrypted session tokens live in `settings`, not in a column of their own — th
 
 `bun build --compile` targets `bun-linux-x64-baseline` (no AVX2 requirement → runs on older CPUs / RHEL 8). The version string is injected via `--define BEE_VERSION`. Two non-obvious constraints: bytecode is **off** (Ink's yoga-layout flexbox engine won't compile with it), and the JSX runtime is pinned to production (`jsx`/`jsxs`, not `jsxDEV`) — a dev-runtime build crashes at first render in the compiled binary.
 
+Before compiling, `build.ts` runs `scripts/generate-help-index.ts` to regenerate `src/generated/help-index.ts` (the `bee ask` help facts). If a `bee.lm.json` config file (or `CB_DATABRICK_URL` / `CB_API_KEY` / `CB_LM_MODEL` env vars) is present, the LM endpoint is injected via `--define` so the binary can generate answers offline without exposing credentials. The build logs whether an LM endpoint was baked in; it never logs the key.
+
 ## Security
 
 Session tokens are encrypted with **AES-256-GCM**. The key is derived via `scrypt(secret || uid)`, where `secret` is a random 32-byte value stored in `.bee_secret` (next to the DB, `chmod 600`). A leaked DB file alone cannot recover a token — the secret file must also be accessible, and it is readable only by its owner. Mixing the uid into the key means a copied secret file derives a different key under another account. Deleting `.bee_secret` forces re-login.
@@ -583,6 +730,9 @@ This is a developer-tool threat model: the OS file permission on `.bee_secret` i
 | `BEE_DIR` | Override the root directory used to locate the DB |
 | `BEE_DEBUG_TRACEBACK` | Set to `1` to enable debug logging and full stack traces (same as `--debug`) |
 | `BEE_ASCII` | Set to `1` to force ASCII symbols/borders in the TUI instead of Unicode |
+| `CB_DATABRICK_URL` | LM chat completions endpoint for `bee ask` (OpenAI-compatible `/v1/chat/completions`) |
+| `CB_API_KEY` | Bearer token for the LM endpoint (omit if the endpoint is open) |
+| `CB_LM_MODEL` | Model identifier passed to the LM endpoint |
 
 ## Project Structure
 
@@ -591,8 +741,14 @@ cloudbees/
 ├── Makefile
 ├── build.ts              # Bun compile script → dist/bee
 ├── bee.csh               # csh wrapper (created by make install)
+├── bee.lm.json           # (gitignored) LM endpoint config baked at build time
+├── scripts/
+│   ├── generate-help-index.ts  # regenerates src/generated/help-index.ts
+│   └── rag-eval.ts             # BM25 retrieval quality eval
 ├── src/
 │   ├── main.ts           # Entry: initDb → initPlugins → parse; --ui → launchTui()
+│   ├── generated/
+│   │   └── help-index.ts # auto-generated help facts (committed, baked into binary)
 │   ├── core/             # Stable engine (never imports plugins/)
 │   │   ├── api/          # HTTP client, CSRF crumb, retry, typed errors
 │   │   ├── db/           # SQLite connection, schema, repositories/
@@ -607,6 +763,7 @@ cloudbees/
 │   │   ├── email.ts      # email-ext publisher + anti-spam presend filter
 │   │   └── schedule.ts   # cron model + TimerTrigger XML
 │   ├── plugins/          # auth · controller · job · node · credential · system · foldersplus
+│   │   └── docs/         # bee ask — BM25 retrieval, presenter, LM provider, config
 │   └── registry/         # Plugin contract, BUILTIN_PLUGINS, TUI screen collection
 └── data/                 # runtime SQLite DB (created next to the binary on first run)
 ```
