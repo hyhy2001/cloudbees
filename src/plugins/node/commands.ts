@@ -19,6 +19,7 @@ import {
   deleteNode,
   toggleOffline,
   updateNode,
+  parseNodeConfig,
   DEFAULT_JAVA_PATH,
 } from "./service";
 
@@ -84,17 +85,40 @@ export function registerNodeCommands(ctx: PluginContext): void {
       try {
         const client = await ctx.getClient({ useController: true });
         const node = await getNode(client, name);
-        printMessage(
-          tableFormatter.kv({
-            name: node.name,
-            offline: node.offline,
-            executors: node.numExecutors,
-            labels: node.labels,
-            launcher: node.launcherType,
-            remote_dir: node.remoteDir,
-            description: node.description,
-          }),
-        );
+
+        // Parse full config.xml for launcher + availability details
+        const cfg = node.configXml ? parseNodeConfig(node.configXml) : null;
+
+        // Base fields always shown
+        const fields: Record<string, unknown> = {
+          name: node.name,
+          offline: node.offline,
+          executors: node.numExecutors,
+          labels: node.labels || "(none)",
+          launcher: cfg?.launcherType ?? node.launcherType,
+          remote_dir: cfg?.remoteDir || node.remoteDir,
+          description: node.description || "(none)",
+        };
+
+        // SSH-specific fields
+        if (cfg?.launcherType === "ssh") {
+          fields["ssh_host"] = cfg.host || "(not set)";
+          fields["ssh_port"] = cfg.port;
+          fields["cred_id"] = cfg.credentialsId || "(not set)";
+          fields["java_path"] = cfg.javaPath || "(auto-detect)";
+        }
+
+        // Availability strategy
+        if (cfg) {
+          fields["availability"] = cfg.availability;
+          if (cfg.availability === "demand") {
+            fields["in_demand_delay"] = `${cfg.inDemandDelay}m`;
+            fields["idle_delay"] = `${cfg.idleDelay}m`;
+          }
+          fields["controlled_agent"] = cfg.controlledAgent;
+        }
+
+        printMessage(tableFormatter.kv(fields));
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
