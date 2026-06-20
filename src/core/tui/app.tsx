@@ -207,7 +207,10 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
       <Toast message={tui.toast} />
 
       {/* ── Command Log (toggled with L, default off) ── */}
-      {showLog && <CommandLog entries={tui.commandLog} />}
+      {/* Suppressed while a full-screen component captures input (job log viewer,
+          builders) — it mounts at full height, so the overlay would push past
+          the bottom of the terminal and overflow. */}
+      {showLog && !tui.inputCaptured && <CommandLog entries={tui.commandLog} />}
 
       {/* ── Footer status bar ── */}
       <Box
