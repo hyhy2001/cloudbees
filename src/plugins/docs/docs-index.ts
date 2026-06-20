@@ -105,17 +105,30 @@ function slugify(text: string): string {
 export function chunkMarkdown(source: string, content: string): DocChunk[] {
   const lines = content.split("\n");
   const chunks: DocChunk[] = [];
+  const usedSlugs = new Set<string>();
   let inFence = false;
   let heading = "";
   let buf: string[] = [];
 
   const flush = (): void => {
     const body = buf.join("\n").trim();
-    if (heading || body) {
-      const slug = heading ? slugify(heading) : `section-${chunks.length}`;
-      chunks.push({ id: `${source}#${slug || `section-${chunks.length}`}`, source, heading, body });
-    }
     buf = [];
+    // Skip a heading with no body. A top-level "#" title immediately followed
+    // by a "##" subsection produces such a chunk; indexing it (at title weight)
+    // with no content is noise, and its heading keywords are repeated by the
+    // child sections that actually carry the body.
+    if (!body) return;
+    let slug = heading ? slugify(heading) : `section-${chunks.length}`;
+    if (!slug) slug = `section-${chunks.length}`;
+    // De-duplicate slugs within a file so two identical headings don't collide
+    // on the same chunk id.
+    if (usedSlugs.has(slug)) {
+      let n = 2;
+      while (usedSlugs.has(`${slug}-${n}`)) n++;
+      slug = `${slug}-${n}`;
+    }
+    usedSlugs.add(slug);
+    chunks.push({ id: `${source}#${slug}`, source, heading, body });
   };
 
   for (const line of lines) {
