@@ -115,6 +115,9 @@ const NEGATIVE_QUERIES: string[] = [
   "delete all my git branches",
   "how do I configure nginx",
   "send an email to my boss",
+  "how do I reset my windows password",
+  "what time zone is the server in",
+  "convert this json to yaml",
 ];
 
 function isRefusal(text: string): boolean {
@@ -204,6 +207,41 @@ const CASES: AblationCase[] = [
   { query: "show everything on the server", accept: ["job.list", "node.list", "cred.list"], queryType: "cross-plugin" },
   { query: "what commands are available", accept: ["job.list", "node.list", "cred.list", "controller.list"], queryType: "cross-plugin" },
   { query: "manage jenkins nodes and jobs", accept: ["node.list", "job.list"], queryType: "cross-plugin" },
+
+  // ── coverage expansion ──────────────────────────────────────────────────
+  // Commands the original 68-query set never touched (track/untrack/copy/
+  // update/get/info/create-sub/agent-mgmt), plus messier real-world phrasings.
+  // Every case below was confirmed retrieval-supported (accept-id in top-5,
+  // gate ON) before being added — so a failure here is a model/prompt issue,
+  // not a ground-truth that retrieval can't satisfy.
+  { query: "delete a profile", accept: ["auth.delete"], queryType: "exact" },
+  { query: "remove a saved login", accept: ["auth.delete"], queryType: "natural" },
+  { query: "controller details", accept: ["controller.info"], queryType: "exact" },
+  { query: "show controller url and status", accept: ["controller.info"], queryType: "natural" },
+  { query: "copy a job", accept: ["job.copy"], queryType: "exact" },
+  { query: "clone an existing pipeline", accept: ["job.copy"], queryType: "natural" },
+  { query: "track an existing job", accept: ["job.track"], queryType: "exact" },
+  { query: "pin a job to mine", accept: ["job.track"], queryType: "natural" },
+  { query: "stop tracking a job", accept: ["job.untrack"], queryType: "exact" },
+  { query: "remove job from my list", accept: ["job.untrack"], queryType: "natural" },
+  { query: "update a job config", accept: ["job.update", "job.update.freestyle"], queryType: "exact" },
+  { query: "reconfigure a freestyle project", accept: ["job.update.freestyle", "job.update"], queryType: "natural" },
+  { query: "create a freestyle project", accept: ["job.create.freestyle", "job.create"], queryType: "exact" },
+  { query: "make a new folder", accept: ["job.create.folder", "job.create"], queryType: "natural" },
+  { query: "list approved agents for a folder", accept: ["job.list-agents"], queryType: "exact" },
+  { query: "revoke an agent from a folder", accept: ["job.remove-agent"], queryType: "natural" },
+  { query: "copy a node", accept: ["node.copy"], queryType: "exact" },
+  { query: "duplicate an agent config", accept: ["node.copy"], queryType: "natural" },
+  { query: "track a node", accept: ["node.track"], queryType: "exact" },
+  { query: "stop tracking a node", accept: ["node.untrack"], queryType: "exact" },
+  { query: "view a credential details", accept: ["cred.get"], queryType: "exact" },
+  { query: "inspect a secret", accept: ["cred.get"], queryType: "natural" },
+  { query: "track existing credentials", accept: ["cred.track"], queryType: "exact" },
+  { query: "stop tracking a credential", accept: ["cred.untrack"], queryType: "exact" },
+  { query: "how do i kill a stuck build", accept: ["job.stop"], queryType: "natural" },
+  { query: "add username password credential", accept: ["cred.create"], queryType: "natural" },
+  { query: "move job to another folder", accept: ["job.move"], queryType: "natural" },
+  { query: "rename a job", accept: ["job.move", "job.copy"], queryType: "natural" },
 ];
 
 // ─── Corpus bootstrap ─────────────────────────────────────────────────────────
