@@ -111,6 +111,21 @@ const FACTS: HelpFact[] = [
     commands: ["bee node get <name>", "bee node list", "bee node update <name>"],
     related: ["bee node online <name>", "bee node create <name> --remote-dir <dir>"],
   },
+  {
+    id: "troubleshooting.agent-offline",
+    kind: "troubleshooting",
+    title: "node offline unexpectedly fix",
+    terms: [
+      "my agent is offline", "agent is offline", "agent went offline",
+      "node is offline", "node went offline", "agent not running",
+      "node not picking up builds", "builds not starting on agent",
+      "agent stopped working", "node shows offline", "fix offline agent",
+      "agent unavailable",
+    ],
+    answer: "If a node is unexpectedly offline (not running builds), first check its status with bee node get, then bring it back with bee node online. If it stays offline, it may have lost its connection — check the launcher, host, and credential.",
+    commands: ["bee node online <name>", "bee node get <name>", "bee node list"],
+    related: ["bee node update <name>", "bee node create <name> --remote-dir <dir>"],
+  },
   // ── New facts ──────────────────────────────────────────────────────────────
   {
     id: "concept.mine-vs-all",
@@ -239,6 +254,20 @@ const FACTS: HelpFact[] = [
     answer: "Start by logging in to your CloudBees server, then pick a controller, then you can list and manage jobs. Step 1: bee auth login. Step 2: bee controller select <name>. Step 3: bee job list.",
     commands: ["bee auth login", "bee controller select <name>", "bee job list"],
     related: ["bee --help", "bee --ui"],
+  },
+  {
+    id: "concept.tui",
+    kind: "concept",
+    title: "launch interactive ui tui",
+    terms: [
+      "open the interactive ui", "launch the tui", "interactive mode",
+      "open the ui", "start the tui", "text user interface", "visual mode",
+      "interactive interface", "run the gui", "open dashboard", "browse visually",
+      "use the ui instead", "graphical interface",
+    ],
+    answer: "Launch the interactive terminal UI with the --ui flag: bee --ui. It is a top-level flag, not a subcommand (there is no 'bee ui'). Inside the TUI use Tab/number keys to switch tabs, arrows to move, Enter to act, ? for help, Ctrl+q to quit.",
+    commands: ["bee --ui"],
+    related: ["bee --help"],
   },
   {
     id: "concept.overview",
