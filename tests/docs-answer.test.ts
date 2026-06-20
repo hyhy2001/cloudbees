@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { answer, setProvider, getProvider, type LMProvider } from "../src/plugins/docs/answer";
+import { answer, setProvider, getProvider, stripInventedCommands, type LMProvider } from "../src/plugins/docs/answer";
 import { formatDocItem, formatContext, buildPrompt, SYSTEM_PROMPT } from "../src/plugins/docs/context";
 import type { DocItem } from "../src/plugins/docs/corpus";
 
@@ -182,5 +182,76 @@ describe("answer() — with provider", () => {
     setProvider(p);
     const result = await answer("run a job", []);
     expect(result.source).toBe("raw");
+  });
+});
+
+// ─── stripInventedCommands ────────────────────────────────────────────────────
+
+describe("stripInventedCommands", () => {
+  // Corpus of real command ids. NODE_CREATE/AUTH_LOGIN added so multi-group
+  // answers have something valid to keep.
+  const NODE_CREATE: DocItem = { id: "node.create", type: "command", title: "bee node create <name>", description: "", body: "", source: "command" };
+  const AUTH_LOGIN: DocItem = { id: "auth.login", type: "command", title: "bee auth login", description: "", body: "", source: "command" };
+  const corpus = [JOB_RUN, NODE_CREATE, AUTH_LOGIN];
+
+  it("keeps real sub-commands untouched", () => {
+    const t = "Trigger a build. Use: `bee job run <name>`";
+    expect(stripInventedCommands(t, corpus)).toBe(t);
+  });
+
+  it("keeps a bare valid group name", () => {
+    // JOB_RUN's group "job" is valid via job.run → "bee job" should survive.
+    const t = "Manage jobs with `bee job`.";
+    expect(stripInventedCommands(t, corpus)).toBe(t);
+  });
+
+  it("strips a fake sub-command", () => {
+    const out = stripInventedCommands("Start it with `bee job start <name>`.", corpus);
+    expect(out).not.toContain("bee job start");
+  });
+
+  it("strips a fake top-level command", () => {
+    const out = stripInventedCommands("List all with `bee list --all`.", corpus);
+    expect(out).not.toContain("bee list");
+  });
+
+  it("removes only the fake command from a mixed list, keeping real ones", () => {
+    const out = stripInventedCommands(
+      "Use: `bee job run <name>`, `bee job start`, `bee node create <name>`",
+      corpus,
+    );
+    expect(out).toContain("bee job run");
+    expect(out).toContain("bee node create");
+    expect(out).not.toContain("bee job start");
+    expect(out).not.toMatch(/,\s*,/); // no comma debris left behind
+  });
+
+  it("never touches non-command backtick spans (flags, prose)", () => {
+    const t = "Pass `--wait` to block until done.";
+    expect(stripInventedCommands(t, corpus)).toBe(t);
+  });
+
+  it("leaves bee ask / bee help alone (not real corpus commands but valid)", () => {
+    const t = "See `bee --help` or `bee ask`.";
+    expect(stripInventedCommands(t, corpus)).toBe(t);
+  });
+
+  it("returns text unchanged when corpus has no commands", () => {
+    const t = "Use `bee whatever made up`.";
+    expect(stripInventedCommands(t, [CONCEPTS_PROFILE])).toBe(t);
+  });
+});
+
+describe("answer() — strips invented commands from lm output", () => {
+  it("removes a fake command the model emitted", async () => {
+    const p: LMProvider = {
+      name: "mock",
+      generate: async () => "Run it. Use: `bee job run <name>`, `bee job start <name>`",
+    };
+    setProvider(p);
+    const result = await answer("run a job", [JOB_RUN]);
+    expect(result.source).toBe("lm");
+    expect(result.text).toContain("bee job run");
+    expect(result.text).not.toContain("bee job start");
   });
 });
