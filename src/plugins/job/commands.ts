@@ -617,6 +617,7 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── status ────────────────────────────────────────────────────────────────
   grp
     .command("status")
+    .alias("history")
     .description("Show recent build history (runs / results / how did last build go) for a job; use --count to set how many builds")
     .argument("<name>", "Job name")
     .option("--count <n>", "How many recent builds to show (default 10) — e.g. --count 20 for last 20 builds", "10")

@@ -241,7 +241,11 @@ const SYNONYMS: Record<string, string> = {
   worker:       "node",
   executor:     "node",
   machine:      "node",
-  server:       "node",
+  // NOTE: "server" deliberately NOT mapped. A beginner saying "my server",
+  // "connect to my server", or "add my jenkins server" means the CloudBees
+  // SERVER (login / controller), not a build agent. Mapping server→node sent
+  // those queries to node/cred. Left unmapped, "server" matches literally in
+  // the auth/controller docs where it belongs.
   decommission: "delete",  // "decommission a node" → node delete
   inspect:      "get",     // "inspect node details" → node get
   label:        "labels",  // "add label to node" → node update --labels
