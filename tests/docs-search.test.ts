@@ -118,6 +118,26 @@ describe("chunkMarkdown", () => {
     expect(chunks.length).toBe(1);
     expect(chunks[0]?.body).toContain("just some text");
   });
+
+  it("does not emit a chunk for a heading with empty body", () => {
+    // "# Top" immediately followed by "## Sub" leaves Top with no body — it
+    // should be dropped (otherwise it is indexed at title weight with no content).
+    const chunks = chunkMarkdown("t.md", "# Top\n## Sub\nbody here");
+    expect(chunks.map((c) => c.heading)).not.toContain("Top");
+    expect(chunks.find((c) => c.heading === "Sub")?.body).toBe("body here");
+  });
+
+  it("keeps a top heading that has its own body", () => {
+    const chunks = chunkMarkdown("t.md", "# Top\nreal intro\n## Sub\nmore");
+    expect(chunks.find((c) => c.heading === "Top")?.body).toBe("real intro");
+  });
+
+  it("de-duplicates slugs for identical headings in one file", () => {
+    const chunks = chunkMarkdown("t.md", "## Sub A\nfirst\n## Sub A\nsecond");
+    const ids = chunks.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length); // no collision
+    expect(chunks.map((c) => c.body)).toEqual(["first", "second"]);
+  });
 });
 
 // ─── buildDocChunks ───────────────────────────────────────────────────────────
