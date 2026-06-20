@@ -141,7 +141,7 @@ export function buildCorpus(program: Command, opts: BuildCorpusOptions = {}): Do
  * everywhere in the docs and dilute the BM25 score).
  */
 const STOP_WORDS = new Set([
-  "a","an","the","is","it","its","be","are","was","were","been","being",
+  "a","an","the","is","am","it","its","be","are","was","were","been","being",
   "have","has","had","do","does","did","doing","will","would","could",
   "should","may","might","shall","can","need","dare","ought","used",
   "i","me","my","we","our","you","your","he","she","they","them","their",
@@ -153,6 +153,14 @@ const STOP_WORDS = new Set([
   "to","up","out","with","about","after","before","between","through",
   "during","without","within","against","along","across","behind","beyond",
   "down","off","over","under","above","below","per","via",
+  // Conversational filler that inflates the relevance-gate denominator without
+  // adding retrieval signal ("agent wont COME online", "am i on this").
+  "come","comes","coming",
+  // "jenkins" carries no discriminating signal in a corpus where every doc is
+  // about Jenkins, and inflated the gate denominator ("JENKINS agent wont come
+  // online"). NB: "cloudbees" is deliberately NOT a stopword — dropping it
+  // reranked "sign in to cloudbees" so auth.logout outscored auth.login.
+  "jenkins",
 ]);
 
 /**

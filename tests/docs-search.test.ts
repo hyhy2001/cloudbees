@@ -216,6 +216,23 @@ describe("buildMatchExpr", () => {
       '"create"* OR "agent"* OR "node"* OR "machine"*',
     );
   });
+
+  it("drops conversational filler and product-name stopwords", () => {
+    // "am" (be-verb), "come" (filler), "jenkins" (every doc is about Jenkins —
+    // zero discriminating signal). These inflated the relevance-gate denominator
+    // and dropped the correct hit for "which controller am i on" and
+    // "jenkins agent wont come online".
+    expect(buildMatchExpr("am i on")).toBe("");
+    expect(buildMatchExpr("jenkins agent wont come online")).toBe(
+      '"agent"* OR "node"* OR "wont"* OR "online"*',
+    );
+  });
+
+  it("keeps 'cloudbees' as a content token", () => {
+    // NOT a stopword: dropping it reranked "sign in to cloudbees" so auth.logout
+    // outscored auth.login. "sign"/"in"/"to" reduce to the kept tokens.
+    expect(buildMatchExpr("sign in to cloudbees")).toContain('"cloudbees"*');
+  });
 });
 
 describe("expandToken", () => {

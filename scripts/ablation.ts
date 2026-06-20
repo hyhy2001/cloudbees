@@ -242,6 +242,12 @@ const CASES: AblationCase[] = [
   { query: "add username password credential", accept: ["cred.create"], queryType: "natural" },
   { query: "move job to another folder", accept: ["job.move"], queryType: "natural" },
   { query: "rename a job", accept: ["job.move", "job.copy"], queryType: "natural" },
+
+  // Previously-excluded retrieval gaps, now fixed by stopword tuning (dropping
+  // "am"/"come"/"jenkins" from the gate denominator). Kept here so the fix
+  // stays regression-tested in the eval set, not just unit tests.
+  { query: "which controller am i on", accept: ["controller.current"], queryType: "natural" },
+  { query: "jenkins agent wont come online", accept: ["node.online", "node.get"], queryType: "troubleshoot", idealId: "troubleshooting.node-connect" },
 ];
 
 // ─── Corpus bootstrap ─────────────────────────────────────────────────────────
