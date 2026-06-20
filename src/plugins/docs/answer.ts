@@ -11,7 +11,64 @@
 import { buildUserPrompt } from "./context";
 import { searchDocs, type DocItem } from "./corpus";
 
-// ─── Provider contract ──────────────────────────────────────────────────────
+// --- Output hardening --------------------------------------------------------
+
+/**
+ * Defence-in-depth against fake commands in the LM answer.
+ *
+ * A small model, asked a broad question, sometimes lists plausible-but-
+ * non-existent commands (`bee job start`, `bee list`). The relevance gate and
+ * prompt grounding catch most of it, but not all, and this failure mode (a
+ * confident wrong command the user will paste and run) is the worst kind.
+ * Model-agnostic, so it holds regardless of which model or prompt is in use.
+ *
+ * Strips any backtick-wrapped `bee ...` span whose command path is not a real
+ * command id in the corpus, then cleans up the ", " / "Use:" debris the removal
+ * leaves behind. Real commands (including bare group names like `bee job` and
+ * sub-commands like `bee job run`) are left untouched. Non-command spans (flags,
+ * prose) are never touched.
+ */
+export function stripInventedCommands(text: string, corpus: DocItem[]): string {
+  const valid = new Set<string>();
+  for (const item of corpus) {
+    if (item.type !== "command") continue;
+    valid.add(item.id);
+    // A bare group name (`bee job`) is valid when any command lives under it.
+    const dot = item.id.indexOf(".");
+    if (dot > 0) valid.add(item.id.slice(0, dot));
+  }
+  if (valid.size === 0) return text;
+
+  const SENT = ""; // Private Use Area sentinel; never appears in model text
+  const replaced = text.replace(/`([^`]*)`/g, (full, inner: string) => {
+    // Command path: group + optional sub (2 levels is enough; a real 3-level
+    // command like "bee job create freestyle" still matches at "job.create").
+    const m = inner.match(/^\s*bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?/i);
+    if (!m) return full; // not a bee-command span; leave alone
+    const group = m[1]!.toLowerCase();
+    const sub = m[2]?.toLowerCase();
+    if (group === "ask" || group === "help") return full;
+    const id = sub ? `${group}.${sub}` : group;
+    return valid.has(id) ? full : SENT;
+  });
+
+  if (!replaced.includes(SENT)) return text; // nothing invented; return original
+
+  return replaced
+    .replace(/\s*,\s*/g, "") // ", <removed>"
+    .replace(/\s*,\s*/g, "") // "<removed>, "
+    .replace(/\s+and\s+/gi, "") // " and <removed>"
+    .replace(/\s+and\s+/gi, "")
+    .replace(//g, "") // any lone marker left
+    .replace(/,\s*,/g, ",") // collapsed double commas
+    .replace(/\s+([.,])/g, "$1") // space before punctuation
+    .replace(/\bUse:\s*$/gim, "") // dangling "Use:" with nothing after
+    .replace(/[ \t]{2,}/g, " ") // runs of spaces
+    .replace(/[ \t]+$/gm, "") // trailing spaces per line
+    .trim();
+}
+
+// --- Provider contract -------------------------------------------------------
 
 /**
  * A configured language-model backend.
@@ -28,7 +85,7 @@ export interface LMProvider {
   generate(prompt: string): Promise<string>;
 }
 
-// ─── Active provider registry ──────────────────────────────────────────────
+// --- Active provider registry ------------------------------------------------
 
 let _provider: LMProvider | null = null;
 
@@ -42,7 +99,7 @@ export function getProvider(): LMProvider | null {
   return _provider;
 }
 
-// ─── Answer result ──────────────────────────────────────────────────────────
+// --- Answer result -----------------------------------------------------------
 
 export type AnswerSource = "lm" | "raw";
 
@@ -57,7 +114,7 @@ export interface AnswerResult {
   provider?: string;
 }
 
-// ─── Orchestration ──────────────────────────────────────────────────────────
+// --- Orchestration -----------------------------------------------------------
 
 /**
  * Main entry point for `bee ask`.
@@ -88,7 +145,11 @@ export async function answer(
 
   const prompt = buildUserPrompt(query, hits);
   try {
-    const text = await provider.generate(prompt);
+    const raw = await provider.generate(prompt);
+    // Validate emitted commands against the full command tree, not just the
+    // retrieved hits: the model may correctly name a real command that wasn't
+    // in the top-K, and we must not strip those.
+    const text = stripInventedCommands(raw, corpus);
     return { source: "lm", text, hits, provider: provider.name };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
