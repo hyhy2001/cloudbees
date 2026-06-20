@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { buildCorpus, searchDocs, buildMatchExpr, expandToken } from "../src/plugins/docs/corpus";
+import { buildCorpus, searchDocs, buildMatchExpr, expandToken, relevanceCoverage } from "../src/plugins/docs/corpus";
 import { chunkMarkdown, buildDocChunks } from "../src/plugins/docs/docs-index";
 import { describe, it, expect } from "bun:test";
 
@@ -335,5 +335,29 @@ describe("searchDocs — synonym expansion", () => {
   it("'signin' (signin→login) surfaces login content", () => {
     const hits = searchDocs("signin", corpus, 10);
     expect(hits.some((h) => h.id === "auth.login" || /login/i.test(h.body) || /login/i.test(h.title))).toBe(true);
+  });
+});
+
+describe("relevanceCoverage — word-start matching", () => {
+  const doc = (body: string) => ({ id: "x", type: "doc" as const, title: "", description: "", body, source: "" });
+
+  it("does not count a token matched only inside a longer word", () => {
+    // "node" must NOT match "anode"; "out" must NOT match "logout-noise".
+    const r = relevanceCoverage("node out", doc("the anode and logout-noise"));
+    expect(r.matched).toBe(0);
+  });
+
+  it("counts a token that starts a word (FTS5 prefix semantics)", () => {
+    // "node" matches "nodes" (prefix at word start), "log" matches "login".
+    const r = relevanceCoverage("node log", doc("manage nodes; login required"));
+    expect(r.matched).toBe(2);
+  });
+
+  it("scores short domain tokens the gate's match builder also keeps", () => {
+    // "ui" is 2 chars: buildMatchExpr keeps it, so coverage must score it too,
+    // otherwise a valid short-token query is wrongly emptied by the gate.
+    const r = relevanceCoverage("ui", doc("the interactive ui mode"));
+    expect(r.total).toBe(1);
+    expect(r.matched).toBe(1);
   });
 });

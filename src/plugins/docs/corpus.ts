@@ -404,18 +404,45 @@ export function buildMatchExpr(query: string): string {
 
 const GATE_COV_MIN = 0.6;
 
-/** Content tokens of a query: 3+ chars, non-stopword, lowercased. */
+/**
+ * Content tokens of a query, for the relevance gate. MUST mirror the
+ * tokenization in buildMatchExpr (split on non-alphanumeric, drop stopwords) so
+ * the gate scores exactly the tokens that retrieval matched on. A stricter
+ * length filter here would retrieve a hit on a short domain token (e.g. "ui",
+ * "rm") but then score it as if the token did not exist, wrongly emptying the
+ * gate for a valid query.
+ */
 function contentTokens(query: string): string[] {
   return query
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= 3 && !STOP_WORDS.has(t));
+    .filter((t) => t.length > 0 && !STOP_WORDS.has(t));
+}
+
+/**
+ * Does `token` (or its prefix) start a word in `blob`? FTS5 matches on word
+ * PREFIXES ("node"* matches "node"/"nodes" but not "anode"), so the gate must
+ * use the same word-start semantics. A raw substring test (blob.includes) would
+ * count "node" as present in "anode" and "log" as present in "login"/"logout",
+ * letting coincidental token fragments clear the gate the gate exists to block.
+ */
+function wordStartMatch(blob: string, token: string): boolean {
+  if (token === "") return false;
+  let from = 0;
+  for (;;) {
+    const idx = blob.indexOf(token, from);
+    if (idx < 0) return false;
+    const prev = idx === 0 ? "" : blob[idx - 1]!;
+    // word start = at string start or preceded by a non-alphanumeric char
+    if (!/[a-z0-9]/.test(prev)) return true;
+    from = idx + 1;
+  }
 }
 
 /**
  * How much of the query's content vocabulary is present in this item.
- * A token counts as present if it (or its synonym expansion) appears anywhere
- * in the item's searchable text. Returns matched/total and the ratio.
+ * A token counts as present if it (or its synonym expansion) starts a word in
+ * the item's searchable text. Returns matched/total and the ratio.
  */
 export function relevanceCoverage(
   query: string,
@@ -426,7 +453,7 @@ export function relevanceCoverage(
   if (toks.length === 0) return { cov: 0, matched: 0, total: 0 };
   let matched = 0;
   for (const t of toks) {
-    if (blob.includes(t) || blob.includes(expandToken(t))) matched++;
+    if (wordStartMatch(blob, t) || wordStartMatch(blob, expandToken(t))) matched++;
   }
   return { cov: matched / toks.length, matched, total: toks.length };
 }
