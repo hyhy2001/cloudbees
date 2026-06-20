@@ -26,7 +26,7 @@ import { HELP_FACTS } from "../../generated/help-index";
 // ─── DocItem ─────────────────────────────────────────────────────────────────
 
 export interface DocItem {
-  /** Stable id: "job.run" for commands, "concepts.md#mine-vs-all" for doc chunks. */
+  /** Stable id: "job.run" for commands, "concepts/profiles.md#switch-active-profile" for doc chunks. */
   id: string;
   /**
    * "command" — a live CLI command from the commander tree.

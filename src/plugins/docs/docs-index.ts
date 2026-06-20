@@ -1,22 +1,23 @@
 /**
  * Embedded documentation corpus for `bee ask`.
  *
- * The 12 markdown docs under `docs/` are inlined into the bundle/binary at build
- * time via `import ... with { type: "text" }` (the same mechanism schema.sql
- * uses). This is mandatory for the standalone binary: a runtime `fs.readFile`
- * would point into Bun's virtual "/$bunfs" filesystem and fail once compiled.
+ * Docs under `docs/` are inlined into the bundle/binary at build time via
+ * `import ... with { type: "text" }`. This is mandatory for the standalone
+ * binary: a runtime `fs.readFile` would point into Bun's virtual "/$bunfs"
+ * filesystem and fail once compiled.
  *
- * Each file is split into chunks by its `#`/`##` headings so retrieval ranks a
- * specific section ("Mine vs All", "403 errors") rather than a whole long file —
- * BM25 relevance degrades when documents are long and topically mixed.
+ * Each file is split into chunks by its `#`/`##` headings so retrieval ranks
+ * a specific section rather than a whole long file — BM25 relevance degrades
+ * when documents are long and topically mixed.
+ *
+ * Structure:
+ *   docs/cli/         — one file per command group (auth, job, node, cred, …)
+ *   docs/concepts/    — one file per concept (profiles, controllers, mine-vs-all, …)
+ *   docs/troubleshooting/ — one file per error domain (auth, connection, jobs, tui)
+ *   docs/             — getting-started, env-vars, tui guide
  */
 
-import indexMd from "../../../docs/index.md" with { type: "text" };
-import gettingStartedMd from "../../../docs/getting-started.md" with { type: "text" };
-import conceptsMd from "../../../docs/concepts.md" with { type: "text" };
-import envVarsMd from "../../../docs/env-vars.md" with { type: "text" };
-import troubleshootingMd from "../../../docs/troubleshooting.md" with { type: "text" };
-import tuiMd from "../../../docs/tui.md" with { type: "text" };
+// ── CLI reference ─────────────────────────────────────────────────────────────
 import authMd from "../../../docs/cli/auth.md" with { type: "text" };
 import controllerMd from "../../../docs/cli/controller.md" with { type: "text" };
 import askMd from "../../../docs/cli/ask.md" with { type: "text" };
@@ -24,29 +25,60 @@ import credMd from "../../../docs/cli/cred.md" with { type: "text" };
 import jobMd from "../../../docs/cli/job.md" with { type: "text" };
 import nodeMd from "../../../docs/cli/node.md" with { type: "text" };
 
+// ── Concepts (one topic per file for precise BM25 chunking) ───────────────────
+import profilesMd from "../../../docs/concepts/profiles.md" with { type: "text" };
+import controllersMd from "../../../docs/concepts/controllers.md" with { type: "text" };
+import mineVsAllMd from "../../../docs/concepts/mine-vs-all.md" with { type: "text" };
+import cacheMd from "../../../docs/concepts/cache.md" with { type: "text" };
+import dataLocationMd from "../../../docs/concepts/data-location.md" with { type: "text" };
+
+// ── Troubleshooting (one file per error domain) ────────────────────────────────
+import troubleshootAuthMd from "../../../docs/troubleshooting/auth.md" with { type: "text" };
+import troubleshootConnectionMd from "../../../docs/troubleshooting/connection.md" with { type: "text" };
+import troubleshootJobsMd from "../../../docs/troubleshooting/jobs.md" with { type: "text" };
+import troubleshootTuiMd from "../../../docs/troubleshooting/tui.md" with { type: "text" };
+
+// ── General docs ──────────────────────────────────────────────────────────────
+import gettingStartedMd from "../../../docs/getting-started.md" with { type: "text" };
+import envVarsMd from "../../../docs/env-vars.md" with { type: "text" };
+import tuiMd from "../../../docs/tui.md" with { type: "text" };
+
 interface RawDoc {
-  /** Display source label, e.g. "concepts.md" or "cli/job.md". */
+  /** Display source label, e.g. "concepts/profiles.md" or "cli/job.md". */
   source: string;
   content: string;
 }
 
 const RAW_DOCS: readonly RawDoc[] = [
-  { source: "index.md", content: indexMd },
+  // CLI reference — command-level docs (high signal for action queries)
+  { source: "cli/auth.md",        content: authMd },
+  { source: "cli/controller.md",  content: controllerMd },
+  { source: "cli/ask.md",         content: askMd },
+  { source: "cli/cred.md",        content: credMd },
+  { source: "cli/job.md",         content: jobMd },
+  { source: "cli/node.md",        content: nodeMd },
+
+  // Concepts — one file per concept for tight BM25 chunk focus
+  { source: "concepts/profiles.md",     content: profilesMd },
+  { source: "concepts/controllers.md",  content: controllersMd },
+  { source: "concepts/mine-vs-all.md",  content: mineVsAllMd },
+  { source: "concepts/cache.md",        content: cacheMd },
+  { source: "concepts/data-location.md", content: dataLocationMd },
+
+  // Troubleshooting — one file per error domain for precise error-query matching
+  { source: "troubleshooting/auth.md",        content: troubleshootAuthMd },
+  { source: "troubleshooting/connection.md",  content: troubleshootConnectionMd },
+  { source: "troubleshooting/jobs.md",        content: troubleshootJobsMd },
+  { source: "troubleshooting/tui.md",         content: troubleshootTuiMd },
+
+  // General
   { source: "getting-started.md", content: gettingStartedMd },
-  { source: "concepts.md", content: conceptsMd },
-  { source: "env-vars.md", content: envVarsMd },
-  { source: "troubleshooting.md", content: troubleshootingMd },
-  { source: "tui.md", content: tuiMd },
-  { source: "cli/auth.md", content: authMd },
-  { source: "cli/controller.md", content: controllerMd },
-  { source: "cli/ask.md", content: askMd },
-  { source: "cli/cred.md", content: credMd },
-  { source: "cli/job.md", content: jobMd },
-  { source: "cli/node.md", content: nodeMd },
+  { source: "env-vars.md",        content: envVarsMd },
+  { source: "tui.md",             content: tuiMd },
 ];
 
 export interface DocChunk {
-  /** Stable-ish id, e.g. "concepts.md#mine-vs-all". */
+  /** Stable-ish id, e.g. "concepts/profiles.md#switch-active-profile". */
   id: string;
   /** Source file label. */
   source: string;

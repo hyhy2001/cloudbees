@@ -61,7 +61,7 @@ describe("buildCorpus", () => {
     const corpus = buildCorpus(buildTestProgram(), { includeDocChunks: true });
     const docs = corpus.filter((d) => d.type === "doc");
     const sources = new Set(docs.map((d) => d.source));
-    expect(sources.has("concepts.md")).toBe(true);
+    expect(sources.has("concepts/profiles.md")).toBe(true);
     expect(sources.has("cli/job.md")).toBe(true);
   });
 });
@@ -127,8 +127,8 @@ describe("buildDocChunks", () => {
     const chunks = buildDocChunks();
     const sources = new Set(chunks.map((c) => c.source));
     expect(sources.has("getting-started.md")).toBe(true);
-    expect(sources.has("concepts.md")).toBe(true);
-    expect(sources.has("troubleshooting.md")).toBe(true);
+    expect(sources.has("concepts/profiles.md")).toBe(true);
+    expect(sources.has("troubleshooting/auth.md")).toBe(true);
     expect(sources.has("cli/job.md")).toBe(true);
     expect(sources.has("cli/node.md")).toBe(true);
     expect(sources.has("tui.md")).toBe(true);
@@ -259,7 +259,7 @@ describe("searchDocs — doc queries", () => {
   it("finds troubleshooting chunk for '403 error'", () => {
     const hits = searchDocs("403 error", corpus, 10);
     const docHits = hits.filter((h) => h.type === "doc");
-    expect(docHits.some((h) => h.source === "troubleshooting.md")).toBe(true);
+    expect(docHits.some((h) => h.source === "troubleshooting/auth.md")).toBe(true);
   });
 
   it("finds tui.md chunk for 'global keys tab'", () => {

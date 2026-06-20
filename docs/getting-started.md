@@ -20,9 +20,9 @@ Confirm it runs:
 bee --version
 ```
 
-> **Important — where your data lives:** `bee` stores its login + local state in a SQLite database that sits **next to the binary**, at `<bin dir>/data/cb.db`. The directory you put `bee` in must be **writable**. Move the binary and the data does not follow unless you move `data/` too. See [Concepts → Where data lives](concepts.md#where-data-lives).
+> **Important — where your data lives:** `bee` stores its login + local state in a SQLite database that sits **next to the binary**, at `<bin dir>/data/cb.db`. The directory you put `bee` in must be **writable**. Move the binary and the data does not follow unless you move `data/` too. See [Where data lives](concepts/data-location.md).
 
-## 2. Log in
+## 2. First login to CloudBees server
 
 You need three things from your CloudBees server:
 
@@ -40,7 +40,7 @@ It prompts for each value (the token input is hidden). Or pass them as flags:
 bee auth login --url https://cloudbees.example.com --username alice --token <api_token>
 ```
 
-On success you'll see `OK Logged in as 'alice'`. Your token is encrypted before it touches disk (see [Concepts → Security](concepts.md#security)).
+On success you'll see `OK Logged in as 'alice'`. Your token is encrypted before it touches disk (see [Where data lives → Security](concepts/data-location.md#security)).
 
 ## 3. Select a controller
 
@@ -95,6 +95,7 @@ bee ask "switch profile" --json
 
 ## Next steps
 
-- [Concepts](concepts.md) — understand profiles, "Mine" vs "All", and the cache
+- [Profiles](concepts/profiles.md) — managing multiple logins
+- [Mine vs All](concepts/mine-vs-all.md) — tracked resources
 - [CLI Reference](index.md) — every command group in detail
-- [Troubleshooting](troubleshooting.md) — when something doesn't work
+- [Troubleshooting](troubleshooting/auth.md) — when something doesn't work
