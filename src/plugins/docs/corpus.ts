@@ -534,6 +534,23 @@ export function searchDocs(
       source: r.source,
     }));
 
+    // Exact command-path promotion. BM25 length-normalization penalizes a
+    // canonical CRUD command for HAVING documentation: "node create" ranks
+    // node.track (empty body) above node.create (914-char flag body) even though
+    // node.create matches more query tokens. When the query's content tokens
+    // exactly equal a command's path (its id with "." → " ", e.g. "node.create"
+    // → "node create"), that command is unambiguously the target — promote it to
+    // the front, stably. Fires only on exact path equality, so concept/natural
+    // queries (which never equal a command path) are untouched.
+    const qNorm = query.toLowerCase().replace(/\s+/g, " ").trim();
+    const exactIdx = items.findIndex(
+      (it) => it.type === "command" && it.id.replace(/\./g, " ") === qNorm,
+    );
+    if (exactIdx > 0) {
+      const [exact] = items.splice(exactIdx, 1);
+      items.unshift(exact!);
+    }
+
     const gated = opts.gate
       ? items.filter((item) => passesRelevanceGate(query, item))
       : items;

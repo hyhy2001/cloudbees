@@ -245,6 +245,37 @@ describe("searchDocs — command queries", () => {
   });
 });
 
+describe("searchDocs — exact command-path promotion", () => {
+  // A documented CRUD command (flag body) vs a bare sibling (empty body) that
+  // shares the group token. BM25 length-normalization would rank the bare
+  // sibling first; exact-path promotion must restore the canonical command.
+  function programWithSibling(): Command {
+    const prog = new Command("bee");
+    const node = prog.command("node").description("Manage nodes");
+    node
+      .command("create")
+      .description("Create a new build node with launcher, labels, and executors")
+      .option("--launcher <type>", "ssh or jnlp")
+      .option("--labels <labels>", "comma-separated labels")
+      .option("--executors <n>", "executor count");
+    node.command("track").description("Track nodes"); // bare sibling, short
+    return prog;
+  }
+
+  const corpus = buildCorpus(programWithSibling(), { includeDocChunks: false });
+
+  it("ranks node.create first for exact path 'node create'", () => {
+    const hits = searchDocs("node create", corpus, 5);
+    expect(hits[0]?.id).toBe("node.create");
+  });
+
+  it("does not promote when query is not an exact path", () => {
+    // "track nodes" is not a command path → no promotion, BM25 order stands.
+    const hits = searchDocs("track nodes", corpus, 5);
+    expect(hits.some((h) => h.id === "node.track")).toBe(true);
+  });
+});
+
 describe("searchDocs — doc queries", () => {
   const corpus = buildCorpus(buildTestProgram(), { includeDocChunks: true });
 
