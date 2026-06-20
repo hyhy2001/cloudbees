@@ -185,7 +185,7 @@ const CASES: AblationCase[] = [
   { query: "what are node labels", accept: ["node.create", "node.update"], queryType: "concept", idealId: "concept.node-labels" },
   { query: "how do folders work", accept: ["job.create", "job.move"], queryType: "concept", idealId: "concept.folders" },
   { query: "ssh launcher vs jnlp launcher", accept: ["node.create", "node.get", "node.update"], queryType: "concept", idealId: "concept.agent-launcher" },
-  { query: "what is controlled agent", accept: ["job.approve-agent", "node.create"], queryType: "concept", idealId: "concept.controlled-agent" },
+  { query: "what is controlled agent", accept: ["node.update", "job.approve-agent"], queryType: "concept", idealId: "concept.controlled-agent" },
   { query: "what types of credentials does bee support", accept: ["cred.create", "cred.list"], queryType: "concept", idealId: "concept.credential-types" },
 
   // troubleshoot — ideal rank-1 is the troubleshooting doc; commands are acceptable
