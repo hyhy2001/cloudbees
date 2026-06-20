@@ -94,6 +94,13 @@ interface AblationCase {
   queryType: "exact" | "natural" | "concept" | "troubleshoot" | "flag" | "cross-plugin";
   /** If set, a passing answer must also mention this flag. */
   mustContainFlag?: string;
+  /**
+   * The item that SHOULD rank #1 for this query, for nDCG only. For concept and
+   * troubleshoot queries the ideal top hit is the explanatory doc/help-fact, not
+   * a command — so scoring a command as the nDCG primary unfairly penalizes
+   * correct retrieval. Defaults to accept[0] (the canonical command) when unset.
+   */
+  idealId?: string;
 }
 
 // ─── Negative set ─────────────────────────────────────────────────────────────
@@ -150,7 +157,7 @@ const CASES: AblationCase[] = [
   { query: "abort the current build", accept: ["job.stop"], queryType: "natural" },
   { query: "see build output", accept: ["job.log"], queryType: "natural" },
   { query: "follow console output", accept: ["job.log"], queryType: "natural" },
-  { query: "past builds for a job", accept: ["job.status"], queryType: "concept" },
+  { query: "past builds for a job", accept: ["job.status"], queryType: "concept", idealId: "concept.job-history" },
   { query: "remove a job", accept: ["job.delete"], queryType: "natural" },
   { query: "add an agent", accept: ["node.create"], queryType: "natural" },
   { query: "take an agent offline", accept: ["node.offline"], queryType: "natural" },
@@ -164,27 +171,27 @@ const CASES: AblationCase[] = [
   { query: "show saved accounts", accept: ["auth.profiles"], queryType: "natural" },
   { query: "switch jenkins server", accept: ["controller.select"], queryType: "natural" },
 
-  // concept — accept any command from the relevant group (multiple are valid)
-  { query: "what is a profile", accept: ["auth.profiles", "auth.login", "auth.use"], queryType: "concept" },
-  { query: "what is a controller", accept: ["controller.list", "controller.select", "controller.current"], queryType: "concept" },
-  { query: "what does --all flag do", accept: ["job.list", "node.list", "cred.list"], queryType: "concept" },
-  { query: "mine vs all list", accept: ["job.list", "node.list", "cred.list", "job.track"], queryType: "concept" },
-  { query: "credential system store vs user store", accept: ["cred.list", "cred.create", "cred.get"], queryType: "concept" },
-  { query: "what does node offline mean", accept: ["node.offline", "node.online", "node.list"], queryType: "concept" },
-  { query: "how to run job with parameters", accept: ["job.run"], queryType: "concept" },
-  { query: "what are node labels", accept: ["node.create", "node.update"], queryType: "concept" },
-  { query: "how do folders work", accept: ["job.create", "job.move"], queryType: "concept" },
-  { query: "ssh launcher vs jnlp launcher", accept: ["node.create", "node.get", "node.update"], queryType: "concept" },
-  { query: "what is controlled agent", accept: ["job.approve-agent", "node.create"], queryType: "concept" },
-  { query: "what types of credentials does bee support", accept: ["cred.create", "cred.list"], queryType: "concept" },
+  // concept — ideal rank-1 is the explanatory doc; commands are acceptable alts
+  { query: "what is a profile", accept: ["auth.profiles", "auth.login", "auth.use"], queryType: "concept", idealId: "concept.profile" },
+  { query: "what is a controller", accept: ["controller.list", "controller.select", "controller.current"], queryType: "concept", idealId: "concept.controller" },
+  { query: "what does --all flag do", accept: ["job.list", "node.list", "cred.list"], queryType: "concept", idealId: "concept.mine-vs-all" },
+  { query: "mine vs all list", accept: ["job.list", "node.list", "cred.list", "job.track"], queryType: "concept", idealId: "concept.mine-vs-all" },
+  { query: "credential system store vs user store", accept: ["cred.list", "cred.create", "cred.get"], queryType: "concept", idealId: "concept.credential-store" },
+  { query: "what does node offline mean", accept: ["node.offline", "node.online", "node.list"], queryType: "concept", idealId: "concept.node-offline" },
+  { query: "how to run job with parameters", accept: ["job.run"], queryType: "concept", idealId: "concept.build-params" },
+  { query: "what are node labels", accept: ["node.create", "node.update"], queryType: "concept", idealId: "concept.node-labels" },
+  { query: "how do folders work", accept: ["job.create", "job.move"], queryType: "concept", idealId: "concept.folders" },
+  { query: "ssh launcher vs jnlp launcher", accept: ["node.create", "node.get", "node.update"], queryType: "concept", idealId: "concept.agent-launcher" },
+  { query: "what is controlled agent", accept: ["job.approve-agent", "node.create"], queryType: "concept", idealId: "concept.controlled-agent" },
+  { query: "what types of credentials does bee support", accept: ["cred.create", "cred.list"], queryType: "concept", idealId: "concept.credential-types" },
 
-  // troubleshoot — accept the diagnostic commands a good answer would cite
-  { query: "403 forbidden error", accept: ["controller.current", "controller.list", "auth.profiles", "auth.login"], queryType: "troubleshoot" },
-  { query: "getting 403 access denied", accept: ["controller.current", "controller.list", "auth.profiles", "auth.login"], queryType: "troubleshoot" },
-  { query: "login failed bad token", accept: ["auth.login", "auth.profiles", "auth.use"], queryType: "troubleshoot" },
-  { query: "token expired cannot login", accept: ["auth.login", "auth.profiles", "auth.use"], queryType: "troubleshoot" },
-  { query: "agent keeps disconnecting", accept: ["node.get", "node.list", "node.update", "node.online"], queryType: "troubleshoot" },
-  { query: "node unreachable cannot connect", accept: ["node.get", "node.list", "node.update", "node.online"], queryType: "troubleshoot" },
+  // troubleshoot — ideal rank-1 is the troubleshooting doc; commands are acceptable
+  { query: "403 forbidden error", accept: ["controller.current", "controller.list", "auth.profiles", "auth.login"], queryType: "troubleshoot", idealId: "troubleshooting.403" },
+  { query: "getting 403 access denied", accept: ["controller.current", "controller.list", "auth.profiles", "auth.login"], queryType: "troubleshoot", idealId: "troubleshooting.403" },
+  { query: "login failed bad token", accept: ["auth.login", "auth.profiles", "auth.use"], queryType: "troubleshoot", idealId: "troubleshooting.login" },
+  { query: "token expired cannot login", accept: ["auth.login", "auth.profiles", "auth.use"], queryType: "troubleshoot", idealId: "troubleshooting.login" },
+  { query: "agent keeps disconnecting", accept: ["node.get", "node.list", "node.update", "node.online"], queryType: "troubleshoot", idealId: "troubleshooting.node-connect" },
+  { query: "node unreachable cannot connect", accept: ["node.get", "node.list", "node.update", "node.online"], queryType: "troubleshoot", idealId: "troubleshooting.node-connect" },
 
   // flag — must mention the specific flag
   { query: "wait for build to finish", accept: ["job.run"], queryType: "flag", mustContainFlag: "--wait" },
@@ -361,12 +368,15 @@ function erfc(x: number): number {
 /**
  * nDCG@k — graded retrieval quality. Unlike Recall@k (binary: is the answer in
  * top-k?), nDCG rewards ranking the BEST item highest and gives partial credit
- * to acceptable-but-not-ideal items. Gain: 3 for the primary accepted command,
- * 1 for any other accepted command, 0 otherwise. Discounted by log2(rank+1).
+ * to acceptable-but-not-ideal items. Gain: 3 for the ideal rank-1 item, 1 for
+ * any other accepted command, 0 otherwise. Discounted by log2(rank+1).
+ *
+ * `idealId` is the item that should rank #1 (a doc for concept/troubleshoot
+ * queries, a command for lookups). Items in `accept` get partial credit.
  */
-function ndcgAtK(rankedIds: string[], accept: string[], k: number): number {
+function ndcgAtK(rankedIds: string[], idealId: string, accept: string[], k: number): number {
   const gain = (id: string): number => {
-    if (id === accept[0]) return 3; // primary expected answer
+    if (id === idealId) return 3; // ideal rank-1 item
     if (accept.includes(id)) return 1; // acceptable alternative
     return 0;
   };
@@ -374,11 +384,13 @@ function ndcgAtK(rankedIds: string[], accept: string[], k: number): number {
   for (let i = 0; i < Math.min(k, rankedIds.length); i++) {
     dcg += gain(rankedIds[i]!) / Math.log2(i + 2);
   }
-  // Ideal DCG: primary (3) first, then acceptables (1) — capped at k slots.
-  const ideal = [3, ...accept.slice(1).map(() => 1)].slice(0, k);
-  let idcg = 0;
-  for (let i = 0; i < ideal.length; i++) idcg += ideal[i]! / Math.log2(i + 2);
-  return idcg === 0 ? 0 : dcg / idcg;
+  // Ideal DCG: the single ideal item (gain 3) at rank 1. We deliberately do NOT
+  // stack the acceptable alternatives into the ideal — for a "what is X" query,
+  // the explanatory doc at rank-1 is a perfect result; whether sibling commands
+  // also appear is a bonus, not a requirement. Stacking them would penalize a
+  // correct rank-1 retrieval (the metric artifact this version fixes).
+  const idcg = 3 / Math.log2(2);
+  return idcg === 0 ? 0 : Math.min(1, dcg / idcg);
 }
 
 /**
@@ -473,7 +485,7 @@ async function main(): Promise<void> {
       tallyPos(A1, c, pass, out, 1);
       A1.perQueryPass.push(pass);
       // nDCG@5 on the full RAG ranking (raw path → softGate on, mirrors A1).
-      A1.ndcgSum += ndcgAtK(rankedIds(c.query, corpus, true), c.accept, 5);
+      A1.ndcgSum += ndcgAtK(rankedIds(c.query, corpus, true), c.idealId ?? c.accept[0]!, c.accept, 5);
       A1.ndcgN++;
     }
     // A2 / A3 (LLM) — multi-run
