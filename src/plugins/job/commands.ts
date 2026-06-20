@@ -547,7 +547,7 @@ export function registerJobCommands(ctx: PluginContext): void {
   // ── log ───────────────────────────────────────────────────────────────────
   grp
     .command("log")
-    .description("Get / view / print build logs (stream / tail / watch / follow console output); use --follow to stream live")
+    .description("Get / view / print build logs (stream / tail / watch / follow console output in real time, live); use --follow to stream live")
     .argument("<name>", "Job name")
     .argument("[build_number]", "Build number (default: last)")
     .option("-f, --follow", "Stream log (poll every 3s until build completes)", false)

@@ -255,8 +255,14 @@ async function lmChat(system: string, user: string): Promise<LMReply> {
 // with, plus the raw text (for flag/refusal checks) and latency.
 
 const SEARCH_LIMIT = 5;
-const PROD_SEARCH = (q: string, corpus: DocItem[]) =>
+// Two search paths, matching production exactly:
+//   RAG arms (A0/A1) mirror the raw `bee ask` fallback → softGate ON.
+//   LLM arm (A2) mirrors the LM path in answer.ts → softGate OFF (an empty gate
+//   is the refusal signal; coincidental hits would cause hallucinations).
+const RAG_SEARCH = (q: string, corpus: DocItem[]) =>
   searchDocs(q, corpus, SEARCH_LIMIT, { gate: true, softGate: true });
+const LM_SEARCH = (q: string, corpus: DocItem[]) =>
+  searchDocs(q, corpus, SEARCH_LIMIT, { gate: true, softGate: false });
 
 interface ArmOut { ids: string[]; text: string; ms: number; promptChars: number; completionChars: number }
 
@@ -269,7 +275,7 @@ function hitText(h: DocItem): string {
 
 function armRagTop1(q: string, corpus: DocItem[]): ArmOut {
   const t0 = performance.now();
-  const hits = PROD_SEARCH(q, corpus);
+  const hits = RAG_SEARCH(q, corpus);
   const top = hits[0];
   const ids = top && top.type === "command" ? [canonicalId(top.id)] : [];
   return { ids, text: top ? hitText(top) : "", ms: performance.now() - t0, promptChars: 0, completionChars: 0 };
@@ -277,13 +283,13 @@ function armRagTop1(q: string, corpus: DocItem[]): ArmOut {
 
 function armRagTopK(q: string, corpus: DocItem[], k: number): ArmOut {
   const t0 = performance.now();
-  const hits = PROD_SEARCH(q, corpus).slice(0, k);
+  const hits = RAG_SEARCH(q, corpus).slice(0, k);
   const ids = hits.filter((h) => h.type === "command").map((h) => canonicalId(h.id));
   return { ids, text: hits.map(hitText).join("\n"), ms: performance.now() - t0, promptChars: 0, completionChars: 0 };
 }
 
 async function armLlmContext(q: string, corpus: DocItem[]): Promise<ArmOut> {
-  const hits = PROD_SEARCH(q, corpus);
+  const hits = LM_SEARCH(q, corpus);
   if (hits.length === 0) {
     // Production returns a no-result message here — model never called.
     return { ids: [], text: "No info available — try `bee --help`", ms: 0, promptChars: 0, completionChars: 0 };

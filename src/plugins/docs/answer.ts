@@ -74,8 +74,13 @@ export async function answer(
   corpus: DocItem[],
   limit = 5,
 ): Promise<AnswerResult> {
-  const hits = searchDocs(query, corpus, limit, { gate: true, softGate: true });
   const provider = getProvider();
+  // softGate rescues ungated hits when the relevance gate empties everything.
+  // That is right for the raw fallback (keep `bee ask` useful with no LM), but
+  // WRONG on the LM path: there an empty gate is the desired refusal signal —
+  // feeding coincidental hits to the model produces confident hallucinations on
+  // off-domain queries. So: soft gate only when there is no provider.
+  const hits = searchDocs(query, corpus, limit, { gate: true, softGate: !provider });
 
   if (!provider || hits.length === 0) {
     return { source: "raw", text: "", hits };
