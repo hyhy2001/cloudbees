@@ -293,7 +293,11 @@ const SYNONYMS: Record<string, string> = {
   // controller
   master:      "controller",
   instance:    "controller",
-  use:         "select",    // "use controller" → controller select
+  // NOTE: "use" not mapped to "select". It is an extremely common English verb
+  // ("how do I use the --all flag") that injected controller.select into any
+  // natural query containing it. The command path "auth use" already contains
+  // the literal token "use", and "switch"→"use" still reaches it, so the
+  // synonym only caused false pulls. See retrieval audit.
   // navigation
   list:        "list",
   show:        "list",
