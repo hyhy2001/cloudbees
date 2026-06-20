@@ -2,7 +2,7 @@
 
 A CloudBees CI server hosts one or more **controllers** (managed Jenkins masters). Most operations — jobs, nodes, credentials — run against one specific controller, so you pick an **active controller** first. The selection is remembered per profile.
 
-See [Concepts](../concepts.md) for the profile ↔ controller relationship.
+See [Controllers concept](../concepts/controllers.md) for the profile ↔ controller relationship.
 
 ---
 

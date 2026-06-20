@@ -7,7 +7,12 @@
 | Doc | What it covers |
 |---|---|
 | [Getting Started](getting-started.md) | Install, first login, first workflow |
-| [Concepts](concepts.md) | Profiles, controllers, "Mine" list, cache |
+| **Concepts** | |
+| [Profiles](concepts/profiles.md) | Saved login targets, switching |
+| [Controllers](concepts/controllers.md) | Selecting the active Jenkins master |
+| [Mine vs All](concepts/mine-vs-all.md) | Tracked resources |
+| [Cache](concepts/cache.md) | Response caching and TTLs |
+| [Where data lives](concepts/data-location.md) | Database location and security |
 | **CLI Reference** | |
 | [auth](cli/auth.md) | Login, profiles, logout |
 | [controller](cli/controller.md) | Discover and select a controller |
@@ -17,7 +22,11 @@
 | [ask](cli/ask.md) | Fuzzy command search |
 | **TUI Reference** | |
 | [TUI Guide](tui.md) | Interactive UI — layout, tabs, keys |
-| [Troubleshooting](troubleshooting.md) | Common errors and fixes |
+| **Troubleshooting** | |
+| [Auth errors](troubleshooting/auth.md) | Login failed, 401, 403 |
+| [Connection errors](troubleshooting/connection.md) | Server unreachable, TLS |
+| [Jobs & builds](troubleshooting/jobs.md) | Tracked resources, build logs |
+| [TUI issues](troubleshooting/tui.md) | Garbled display, ASCII mode |
 | [Environment Variables](env-vars.md) | All env vars bee reads |
 
 ## Quick start

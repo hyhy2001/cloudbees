@@ -7,14 +7,14 @@ describe("docs production mode", () => {
   it("buildCorpus excludes embedded doc chunks by default", () => {
     const program = new Command("bee");
     const corpus = buildCorpus(program);
-    expect(corpus.some((d) => d.source === "concepts.md")).toBe(false);
+    expect(corpus.some((d) => d.source === "concepts/profiles.md")).toBe(false);
     expect(corpus.some((d) => d.source.startsWith("help:"))).toBe(true);
   });
 
   it("buildCorpus can include embedded doc chunks explicitly", () => {
     const program = new Command("bee");
     const corpus = buildCorpus(program, { includeDocChunks: true });
-    expect(corpus.some((d) => d.source === "concepts.md")).toBe(true);
+    expect(corpus.some((d) => d.source === "concepts/profiles.md")).toBe(true);
   });
 
   it("presenter prefers generated help facts over raw doc chunks", () => {

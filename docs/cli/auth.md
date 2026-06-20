@@ -2,7 +2,7 @@
 
 Manage logins. A **profile** is a named bundle of (controller URL + username + encrypted API token). You can be logged in to several controllers at once via different profiles; the **active profile** is the one every other command uses.
 
-See [Concepts](../concepts.md) for how profiles and controllers relate.
+See [Profiles concept](../concepts/profiles.md) for how profiles and controllers relate.
 
 ---
 
