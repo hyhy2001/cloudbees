@@ -107,6 +107,14 @@ describe("buildPrompt", () => {
     const p = buildPrompt("test", [JOB_RUN]);
     expect(p.trimEnd()).toMatch(/Answer:\s*$/);
   });
+
+  it("example format uses a real command, not a fake placeholder", () => {
+    // The placeholder "bee X Y <arg>" taught the small model to echo it verbatim
+    // on ambiguous meta-queries, inventing non-existent commands. The example
+    // must show a real command path so the model copies something valid.
+    const p = buildPrompt("test", [JOB_RUN]);
+    expect(p).not.toContain("bee X Y");
+  });
 });
 
 // ─── answer.ts ───────────────────────────────────────────────────────────────
