@@ -134,8 +134,8 @@ export function buildUserPrompt(query: string, corpus: DocItem[]): string {
     "",
     `Question: ${query}`,
     "",
-    "Instructions: Answer briefly. Always end your answer by listing the relevant command(s) on a new line.",
-    "Example format: \"<explanation>\\nUse: `bee X Y <arg>`\"",
+    "Instructions: Answer briefly. Always end your answer by listing the relevant command(s) on a new line, copied verbatim from the context above.",
+    "Example format: \"<explanation>\\nUse: `bee job list`\"",
     "",
     "Answer:",
   ].join("\n");
