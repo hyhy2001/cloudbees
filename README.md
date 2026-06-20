@@ -522,10 +522,17 @@ query
   ↓  tokenise + drop stopwords
   ↓  synonym expansion (100+ domain synonyms: "kick"→run, "retire"→delete, "maintenance"→offline …)
   ↓  FTS5 MATCH with column weights  title×10  description×5  body×1
-  ↓  relevance gate (coverage ≥ 60 % — drops off-domain coincidental hits)
+  ↓  exact command-path promotion (a query equal to a command path → that command ranks #1)
+  ↓  relevance gate (word-start coverage ≥ 60 % — drops off-domain coincidental hits)
   ↓  soft gate (falls back to raw hits if gate empties everything)
   ↓  top-K results → presenter
 ```
+
+Two correctness details in the ranking layer:
+
+- **Exact command-path promotion** — BM25 length-normalization penalizes a documented command for having a long flag body, so a bare sibling (e.g. `node track`, empty body) could outrank the canonical `node create`. When the query text exactly equals a command's path, that command is promoted to rank 1. Fires only on exact equality, so concept/natural queries are untouched.
+- **Word-start gate matching** — the relevance gate counts a token as present only when it starts a word in the item's text (mirroring FTS5 prefix semantics). A raw substring test would let "node" match "anode" or "log" match "login", letting coincidental fragments clear the gate the gate exists to block.
+
 
 The **synonym map** (`corpus.ts`) normalises user vocabulary to the canonical terms used in command descriptions and help facts. Examples:
 
@@ -658,6 +665,22 @@ BM25 Recall@1 by query type:
 | troubleshooting | 100.0% | 100.0% |
 | flag-specific | 80.0% | 100.0% |
 
+### RAG-vs-LLM ablation
+
+`scripts/ablation.ts` answers a different question than the benchmark: **does the LLM earn its cost over bare retrieval, and is the gap real?** It runs four arms on the same query set — A0 RAG-top1, A1 RAG-top3, A2 LLM+context, A3 LLM closed-book — and reports decision-grade statistics:
+
+- **nDCG@5** — graded retrieval ranking (rewards the primary command ranked first, partial credit for acceptable alternatives), surfacing rank quality that Recall@k hides.
+- **Paired bootstrap CI** (5000 resamples) on the A2−A1 accuracy delta — effect size with uncertainty, complementing McNemar's significance test.
+- **Net decision accuracy** — folds answer-when-should and refuse-when-should into one number, so confident off-domain answers are punished.
+
+```bash
+bun run scripts/ablation.ts --runs 3           # all arms (requires LM)
+bun run scripts/ablation.ts --no-llm           # RAG arms + nDCG only (fast)
+bun run scripts/ablation.ts --lm-url http://host:port
+```
+
+Latest run (qwen2.5-coder-1.5b-q4): nDCG@5 **0.895**, A2 net decision accuracy **87.3%** vs A1 RAG-top3 **65.8%**, grounding lifts the model **87.3 pts** over closed-book (p<0.0001). The LLM advantage over bare retrieval is **19.2 pts** (95% CI 5.9–32.4, excludes 0). Report written to `ablation-report.md` (gitignored).
+
 ### BM25 retrieval quality (legacy audit)
 
 Measured against a 310-query audit suite covering all plugins, sub-options, natural-language phrasings, concept questions, and troubleshooting:
@@ -685,6 +708,7 @@ Run the audit scripts to verify the change does not regress other queries:
 ```bash
 bun run scripts/rag-eval.ts       # structured eval over the test corpus (legacy)
 bun run scripts/benchmark.ts      # comprehensive BM25 + LLM benchmark (recommended)
+bun run scripts/ablation.ts --no-llm   # RAG arms + nDCG@5 (fast regression check)
 bun test tests/docs-rag-stress.test.ts
 bun test tests/docs-search.test.ts
 ```
@@ -814,6 +838,7 @@ cloudbees/
 ├── scripts/
 │   ├── generate-help-index.ts  # regenerates src/generated/help-index.ts
 │   ├── benchmark.ts            # comprehensive BM25 + LLM quality benchmark
+│   ├── ablation.ts             # RAG-vs-LLM ablation (nDCG, bootstrap CI, net decision acc)
 │   └── rag-eval.ts             # BM25 retrieval quality eval (legacy)
 ├── src/
 │   ├── main.ts           # Entry: initDb → initPlugins → parse; --ui → launchTui()
