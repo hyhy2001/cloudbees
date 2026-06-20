@@ -358,6 +358,53 @@ function erfc(x: number): number {
   return y * Math.exp(-x * x);
 }
 
+/**
+ * nDCG@k — graded retrieval quality. Unlike Recall@k (binary: is the answer in
+ * top-k?), nDCG rewards ranking the BEST item highest and gives partial credit
+ * to acceptable-but-not-ideal items. Gain: 3 for the primary accepted command,
+ * 1 for any other accepted command, 0 otherwise. Discounted by log2(rank+1).
+ */
+function ndcgAtK(rankedIds: string[], accept: string[], k: number): number {
+  const gain = (id: string): number => {
+    if (id === accept[0]) return 3; // primary expected answer
+    if (accept.includes(id)) return 1; // acceptable alternative
+    return 0;
+  };
+  let dcg = 0;
+  for (let i = 0; i < Math.min(k, rankedIds.length); i++) {
+    dcg += gain(rankedIds[i]!) / Math.log2(i + 2);
+  }
+  // Ideal DCG: primary (3) first, then acceptables (1) — capped at k slots.
+  const ideal = [3, ...accept.slice(1).map(() => 1)].slice(0, k);
+  let idcg = 0;
+  for (let i = 0; i < ideal.length; i++) idcg += ideal[i]! / Math.log2(i + 2);
+  return idcg === 0 ? 0 : dcg / idcg;
+}
+
+/**
+ * Paired bootstrap 95% CI for the accuracy DELTA between two arms (A − B) on the
+ * same queries. Complements McNemar: McNemar says "is the difference real?",
+ * bootstrap says "how big, with what uncertainty?". Resamples queries with
+ * replacement R times and reports the 2.5/97.5 percentiles of the delta.
+ */
+function bootstrapDeltaCI(aPass: boolean[], bPass: boolean[], R = 5000): { lo: number; hi: number; mean: number } {
+  const n = aPass.length;
+  if (n === 0) return { lo: 0, hi: 0, mean: 0 };
+  const deltas: number[] = [];
+  for (let r = 0; r < R; r++) {
+    let a = 0, b = 0;
+    for (let i = 0; i < n; i++) {
+      const j = Math.floor(Math.random() * n);
+      if (aPass[j]) a++;
+      if (bPass[j]) b++;
+    }
+    deltas.push((a - b) / n);
+  }
+  deltas.sort((x, y) => x - y);
+  const mean = deltas.reduce((s, d) => s + d, 0) / R;
+  return { lo: deltas[Math.floor(0.025 * R)]!, hi: deltas[Math.floor(0.975 * R)]!, mean };
+}
+
 // ─── Per-arm aggregate ────────────────────────────────────────────────────────
 
 interface ArmAgg {
@@ -373,10 +420,18 @@ interface ArmAgg {
   totalMs: number; calls: number; promptChars: number; completionChars: number;
   // stratified
   byType: Record<string, { pass: number; total: number }>;
+  // retrieval ranking quality (RAG arms only; LLM arms emit text, not a ranking)
+  ndcgSum: number; ndcgN: number;
 }
 
 function newAgg(name: string, uses_llm: boolean): ArmAgg {
-  return { name, uses_llm, posPass: 0, posTotal: 0, perQueryPass: [], negRefused: 0, negTotal: 0, totalMs: 0, calls: 0, promptChars: 0, completionChars: 0, byType: {} };
+  return { name, uses_llm, posPass: 0, posTotal: 0, perQueryPass: [], negRefused: 0, negTotal: 0, totalMs: 0, calls: 0, promptChars: 0, completionChars: 0, byType: {}, ndcgSum: 0, ndcgN: 0 };
+}
+
+/** Full ranked id list (commands AND docs) from a RAG search, for nDCG. */
+function rankedIds(q: string, corpus: DocItem[], soft: boolean): string[] {
+  const hits = searchDocs(q, corpus, SEARCH_LIMIT, { gate: true, softGate: soft });
+  return hits.map((h) => canonicalId(h.id));
 }
 
 main().catch((err) => {
@@ -417,6 +472,9 @@ async function main(): Promise<void> {
       const pass = judgePositive(c, out);
       tallyPos(A1, c, pass, out, 1);
       A1.perQueryPass.push(pass);
+      // nDCG@5 on the full RAG ranking (raw path → softGate on, mirrors A1).
+      A1.ndcgSum += ndcgAtK(rankedIds(c.query, corpus, true), c.accept, 5);
+      A1.ndcgN++;
     }
     // A2 / A3 (LLM) — multi-run
     if (lmUp) {
@@ -543,6 +601,37 @@ function buildReport(corpusSize: number, arms: ArmAgg[], lmUp: boolean): string 
     L.push("");
     L.push(`- A2 vs ${bestRagArm.name}: A2-only wins=${m1.b}, ${bestRagArm.name}-only wins=${m1.c}, p=${m1.p}`);
     L.push(`- A2 vs A3 (closed-book): A2-only wins=${m2.b}, A3-only wins=${m2.c}, p=${m2.p}`);
+    L.push("");
+
+    // Paired bootstrap CI for the accuracy delta — size + uncertainty of the gap.
+    const bs = bootstrapDeltaCI(a2.perQueryPass, bestRagArm.perQueryPass);
+    L.push("### Effect size (paired bootstrap, 5000 resamples)");
+    L.push("");
+    L.push(`- A2 − ${bestRagArm.name} accuracy delta: **${(bs.mean * 100).toFixed(1)} pts** (95% CI ${(bs.lo * 100).toFixed(1)} to ${(bs.hi * 100).toFixed(1)})`);
+    L.push(`  ${bs.lo > 0 ? "CI excludes 0 → the LLM advantage is robust." : "CI includes 0 → advantage not robust at this sample size."}`);
+    L.push("");
+
+    // nDCG@5 — graded retrieval ranking quality (RAG arm only).
+    if (a1.ndcgN > 0) {
+      L.push("### Retrieval ranking quality (nDCG@5, RAG path)");
+      L.push("");
+      L.push(`- Mean nDCG@5 over ${a1.ndcgN} positive queries: **${(a1.ndcgSum / a1.ndcgN).toFixed(3)}** (1.0 = ideal ranking; rewards the primary command ranked first).`);
+      L.push("");
+    }
+
+    // Net decision accuracy — combine positives (answer correctly) and negatives
+    // (refuse correctly) into ONE number: does the system make the right call,
+    // INCLUDING knowing when to abstain? This is the metric that punishes a
+    // system for confidently answering off-domain queries.
+    L.push("### Net decision accuracy (answer-when-should + refuse-when-should)");
+    L.push("");
+    L.push("| Arm | Positives correct | Negatives refused | Net decision acc |");
+    L.push("|---|---|---|---|");
+    for (const a of arms) {
+      const correctDecisions = a.posPass + a.negRefused;
+      const totalDecisions = a.posTotal + a.negTotal;
+      L.push(`| ${a.name} | ${a.posPass}/${a.posTotal} | ${a.negRefused}/${a.negTotal} | **${pct(correctDecisions, totalDecisions)}** |`);
+    }
     L.push("");
 
     // ── Cost / latency ──────────────────────────────────────────────────────────
