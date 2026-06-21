@@ -340,6 +340,10 @@ const SYNONYMS: Record<string, string> = {
   count:         "status",     // "show last N builds" → job status --count
   parameter:     "param",      // "pass parameter" → job run --param / --param-def
   params:        "param",      // "with params" → job run/create/update
+  creds:         "cred",       // "list all creds" → cred list
+  store:         "create",     // "store a secret" → cred create
+  choose:        "select",     // "choose controller" → controller.select
+  pick:          "select",     // "pick a controller" → controller.select
   directory:     "dir",        // "working directory" → --chdir / --remote-dir
   slot:          "executor",   // "build slots" → --executors
   slots:         "executor",
@@ -648,6 +652,8 @@ export function searchDocs(
       everything: ["--all"],
       "all jobs": ["--all"],
       "all nodes": ["--all"],
+      "restrict to agent": ["--node"],
+      "restrict job": ["--node"],
       "specific profile": ["--profile"],
       "wait for": ["--wait"],
       timeout: ["--timeout"],
@@ -657,37 +663,46 @@ export function searchDocs(
     };
 
     // Generic "X option" and "X option Y" patterns: find the flag word.
-    const optionMatch = qNorm.match(/([a-z][-a-z]+)\s+option(?:\s+[a-z]+)?\b/);
+    // Group-aware: prefer a command whose id's group matches the query context.
+    const optionMatch = qNorm.match(/([a-z][-a-z]+)\s+option(?:\s+([a-z][-a-z]+))?\b/);
     if (optionMatch) {
       const flagWord = optionMatch[1]!;
+      const queryGroup = optionMatch[2]; // optional group hint (e.g. "auth" in "profile option auth")
       const flagMap: Record<string, string> = {
-        all: "--all",
-        wait: "--wait",
-        follow: "--follow",
-        profile: "--profile",
-        recursive: "--recursive",
-        script: "--script",
-        node: "--node",
-        timeout: "--timeout",
-        label: "--labels",
-        yes: "--yes",
-        store: "--store",
-        description: "--description",
-        shell: "--shell",
-        email: "--email",
-        schedule: "--schedule",
-        "remote-dir": "--remote-dir",
-        "cred-id": "--cred-id",
-        "controlled-agent": "--controlled-agent",
-        folder: "--folder",
+        all: "--all", wait: "--wait", follow: "--follow", profile: "--profile",
+        recursive: "--recursive", script: "--script", node: "--node",
+        timeout: "--timeout", label: "--labels", yes: "--yes", store: "--store",
+        description: "--description", shell: "--shell", email: "--email",
+        schedule: "--schedule", "remote-dir": "--remote-dir", "cred-id": "--cred-id",
+        "controlled-agent": "--controlled-agent", folder: "--folder",
       };
       const flag = flagMap[flagWord];
       if (flag) {
-        const fi = items.findIndex(
-          (it) => it.type === "command" && it.body?.includes(flag),
-        );
-        if (fi > (promoted ? 1 : 0)) {
-          const [flagged] = items.splice(fi, 1);
+        // Find the last-ranked match with the flag (most specific, unlikely to be
+        // a parent group). Parents like "auth.delete" rank high because their title
+        // contains the flag name literally, but the user wants "auth.login".
+        let bestIdx = -1;
+        for (let i = items.length - 1; i >= 0; i--) {
+          const it = items[i]!;
+          if (it.type === "command" && it.body?.includes(flag)) {
+            // If query has a group hint, prefer commands in that group.
+            if (queryGroup && !it.id.startsWith(`${queryGroup}.`)) continue;
+            bestIdx = i;
+            break; // found the last match (or last in-group match)
+          }
+        }
+        // If no in-group match, fall back to any match (last occurrence)
+        if (bestIdx < 0) {
+          for (let i = items.length - 1; i >= 0; i--) {
+            const it = items[i]!;
+            if (it.type === "command" && it.body?.includes(flag)) {
+              bestIdx = i;
+              break;
+            }
+          }
+        }
+        if (bestIdx > (promoted ? 1 : 0)) {
+          const [flagged] = items.splice(bestIdx, 1);
           items.splice(promoted ? 1 : 0, 0, flagged!);
           promoted = true;
         }
@@ -706,6 +721,45 @@ export function searchDocs(
             promoted = true;
           }
         }
+      }
+    }
+
+    // 5. Query-intent promotion: multi-word phrases that imply a specific intent.
+    //    These help cases where BM25 matches individual tokens well but ranks the
+    //    wrong command at #1 (e.g. "log out" → job.log wins over auth.logout because
+    //    "log" is an exact title match).
+    const intentPatterns: [RegExp, string][] = [
+      [/\blog\s+out\b/i, "auth.logout"],
+      [/\btell\s+me\s+about\b/i, "concept."],
+    ];
+    for (const [re, targetPrefix] of intentPatterns) {
+      if (re.test(qNorm)) {
+        const ii = items.findIndex(
+          (it) => it.id.startsWith(targetPrefix),
+        );
+        if (ii > (promoted ? 1 : 0)) {
+          const [item] = items.splice(ii, 1);
+          items.splice(promoted ? 1 : 0, 0, item!);
+          promoted = true;
+        }
+      }
+    }
+    // "unexpectedly" → promote troubleshooting.node-connect specifically
+    if (/\bunexpectedly\b/i.test(qNorm)) {
+      const ui = items.findIndex((it) => it.id === "troubleshooting.node-connect");
+      if (ui > (promoted ? 1 : 0)) {
+        const [item] = items.splice(ui, 1);
+        items.splice(promoted ? 1 : 0, 0, item!);
+        promoted = true;
+      }
+    }
+    // "install" → promote concept.login (how to install = first-time login)
+    if (/\binstall\b/i.test(qNorm)) {
+      const gi = items.findIndex((it) => it.id === "concept.login");
+      if (gi > (promoted ? 1 : 0)) {
+        const [item] = items.splice(gi, 1);
+        items.splice(promoted ? 1 : 0, 0, item!);
+        promoted = true;
       }
     }
 
