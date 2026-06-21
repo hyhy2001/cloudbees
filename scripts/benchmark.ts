@@ -32,9 +32,13 @@ const args = process.argv.slice(2);
 const NO_LLM = args.includes("--no-llm");
 const LM_URL_IDX = args.indexOf("--lm-url");
 const LM_URL = LM_URL_IDX >= 0 ? (args[LM_URL_IDX + 1] ?? "http://127.0.0.1:11434") : "http://127.0.0.1:11434";
+const LM_API_KEY_IDX = args.indexOf("--api-key");
+const LM_API_KEY = LM_API_KEY_IDX >= 0 ? args[LM_API_KEY_IDX + 1] ?? "" : "";
+const LM_MODEL_IDX = args.indexOf("--model");
+const LM_MODEL = LM_MODEL_IDX >= 0 ? args[LM_MODEL_IDX + 1] ?? "" : "";
 const LLM_LIMIT_IDX = args.indexOf("--llm-limit");
 const LLM_LIMIT = LLM_LIMIT_IDX >= 0 ? parseInt(args[LLM_LIMIT_IDX + 1] ?? "0", 10) || 0 : 0;
-const LM_TIMEOUT_MS = 60_000;
+const LM_TIMEOUT_MS = 120_000;
 const REPORT_PATH = join(import.meta.dir, "..", "benchmark-report.md");
 
 // ─── Corpus bootstrap ─────────────────────────────────────────────────────────
@@ -291,7 +295,12 @@ export interface LLMResult {
 
 async function lmReachable(): Promise<boolean> {
   try {
-    const r = await fetch(`${LM_URL}/health`, { signal: AbortSignal.timeout(2000) });
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (LM_API_KEY) headers["authorization"] = `Bearer ${LM_API_KEY}`;
+    const r = await fetch(`${LM_URL}/v1/models`, {
+      signal: AbortSignal.timeout(5000),
+      headers,
+    });
     return r.ok;
   } catch {
     return false;
@@ -302,21 +311,29 @@ async function lmChat(
   system: string,
   user: string,
 ): Promise<string> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (LM_API_KEY) headers["authorization"] = `Bearer ${LM_API_KEY}`;
+  const body: Record<string, unknown> = {
+    messages: [
+      { role: "system", content: system },
+      { role: "user",   content: user },
+    ],
+    temperature: 0,
+    max_tokens: 512,
+    stream: false,
+  };
+  if (LM_MODEL) body.model = LM_MODEL;
   const r = await fetch(`${LM_URL}/v1/chat/completions`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      messages: [
-        { role: "system", content: system },
-        { role: "user",   content: user },
-      ],
-      temperature: 0,
-      max_tokens: 300,
-    }),
+    headers,
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(LM_TIMEOUT_MS),
   });
   if (!r.ok) throw new Error(`LM HTTP ${r.status}`);
-  const j = (await r.json()) as { choices: { message: { content: string } }[] };
+  const raw = await r.text();
+  // Some endpoints append SSE trailers (e.g. "\ndata: [DONE]") after JSON
+  const jsonPart = raw.split("\ndata: ")[0]!;
+  const j = JSON.parse(jsonPart) as { choices: { message: { content: string } }[] };
   return j.choices[0]?.message?.content?.trim() ?? "";
 }
 
@@ -555,6 +572,7 @@ function buildReport(
     const refuseRate = pct(valid.filter((r) => r.refused === 1).length, valid.length);
 
     L.push(`LM URL: \`${LM_URL}\``);
+    if (LM_MODEL) L.push(`LM Model: \`${LM_MODEL}\``);
     L.push(`Sampled: ${llm.length}${LLM_LIMIT > 0 ? ` (limited to ${LLM_LIMIT} hand-curated)` : ""}, judged: ${valid.length}, skipped/error: ${skipped.length}`);
     L.push("");
     L.push("### Aggregate Scores");
