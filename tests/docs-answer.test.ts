@@ -231,9 +231,14 @@ describe("stripInventedCommands", () => {
     expect(stripInventedCommands(t, corpus)).toBe(t);
   });
 
-  it("leaves bee ask / bee help alone (not real corpus commands but valid)", () => {
+  it("leaves bee ask / bare bee help alone (not real corpus commands but valid)", () => {
     const t = "See `bee --help` or `bee ask`.";
     expect(stripInventedCommands(t, corpus)).toBe(t);
+  });
+
+  it("strips bee help <topic> (not a real command)", () => {
+    expect(stripInventedCommands("Use `bee help controlled-agent`.", corpus)).not.toContain("bee help");
+    expect(stripInventedCommands("Type: bee help foo", corpus)).not.toContain("bee help");
   });
 
   it("strips fake commands even when corpus has no commands (always keeps ask/help)", () => {

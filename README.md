@@ -693,12 +693,12 @@ Results are printed to the console and written to `benchmark-report.md` (gitigno
 | Metric | Score |
 |---|---|
 | BM25 Recall@1 | **75.0%** (689/919) |
-| BM25 Recall@3 | **97.2%** (893/919) |
-| BM25 Recall@5 | **99.3%** (913/919) |
-| BM25 MRR | **0.858** |
-| BM25 misses (top-10) | **0** |
-| LLM correct command | **87.5%** (63/72) |
-| LLM hallucination rate | **2.8%** (2/72) |
+| BM25 Recall@3 | **96.7%** (889/919) |
+| BM25 Recall@5 | **99.1%** (911/919) |
+| BM25 MRR | **0.856** |
+| BM25 misses (top-10) | **3** |
+| LLM correct command | **94.4%** (68/72) |
+| LLM hallucination rate | **1.4%** (1/72) |
 | LLM has required flag | **84.6%** (11/13) |
 | LLM wrong refusal | **1.4%** (1/72) |
 
@@ -706,12 +706,12 @@ LLM by query type:
 
 | Type | N | Correct | No-Hall. | Flag OK |
 |------|---|---|---|--------|
-| natural | 28 | 85.7% | 100.0% | 100.0% |
-| concept | 23 | 87.0% | 91.3% | — |
+| natural | 28 | 92.9% | 100.0% | 100.0% |
+| concept | 23 | 91.3% | 95.7% | — |
 | troubleshoot | 9 | 100.0% | 100.0% | — |
-| flag | 12 | 83.3% | 100.0% | 83.3% |
+| flag | 12 | 91.7% | 100.0% | 83.3% |
 
-Most "failures" are minor: e.g. "remove an agent" → `bee job remove-agent` (plausible but expected `node.delete`), "login to a specific profile" → `bee auth use` (instead of `auth login --profile`). The 2 hallucinated answers (`bee cred list --all` and `bee help controlled-agent`) are mild — the command concept exists but the specific flag/subcommand is invented. Only 1 query timed out.
+Halucination fixes applied: scoring bug (multi-dot expectedId), `stripInventedCommands` now strips `bee help <topic>` (allows bare `bee --help`), system prompt strengthened with rank-1 preference, explicit `bee help` ban, and action-verb matching rules. Remaining failures are edge cases: ambiguous "remove an agent" vs `node.delete`/`job.remove-agent`, and scorer limitations (`bee --ui` not matching command pattern, missing `--profile` in correct answer).
 
 Improvements since initial release:
 - BM25 retrieval: Recall@1 **+7.3%**, MRR **+0.054** (promotion layer for flag/cross-plugin/expert routing, synonym map expansion, corpus caching)

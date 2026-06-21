@@ -48,7 +48,8 @@ export function stripInventedCommands(text: string, corpus: DocItem[]): string {
   function isValidBeeCmd(group: string, sub?: string): boolean {
     const g = group.toLowerCase();
     const s = sub?.toLowerCase();
-    if (g === "ask" || g === "help") return true;
+    if (g === "ask") return true;
+    if (g === "help") return !s; // allow bare "bee help", strip "bee help <topic>"
     const id = s ? `${g}.${s}` : g;
     return valid.has(id);
   }

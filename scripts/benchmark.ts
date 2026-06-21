@@ -32,6 +32,8 @@ const args = process.argv.slice(2);
 const NO_LLM = args.includes("--no-llm");
 const LM_URL_IDX = args.indexOf("--lm-url");
 const LM_URL = LM_URL_IDX >= 0 ? (args[LM_URL_IDX + 1] ?? "http://127.0.0.1:11434") : "http://127.0.0.1:11434";
+const LLM_LIMIT_IDX = args.indexOf("--llm-limit");
+const LLM_LIMIT = LLM_LIMIT_IDX >= 0 ? parseInt(args[LLM_LIMIT_IDX + 1] ?? "0", 10) || 0 : 0;
 const LM_TIMEOUT_MS = 60_000;
 const REPORT_PATH = join(import.meta.dir, "..", "benchmark-report.md");
 
@@ -388,7 +390,7 @@ function scoreAnswer(
       mentioned.length > 0 && mentioned.some((cmd) => commandInContext(cmd, contextTitles)) ? 1 : 0;
   } else {
     // Pass if answer explicitly mentions the expected command
-    const expectedTitle = `bee ${gt.expectedId.replace(".", " ")}`;
+    const expectedTitle = `bee ${gt.expectedId.replace(/\./g, " ")}`;
     correct_command = answerLower.includes(expectedTitle) ? 1 : 0;
   }
 
@@ -405,14 +407,15 @@ function scoreAnswer(
   return { hallucinated, correct_command, has_flag, refused };
 }
 
-async function runPhaseB(corpus: DocItem[]): Promise<LLMResult[]> {
+async function runPhaseB(corpus: DocItem[], limit = 0): Promise<LLMResult[]> {
   const results: LLMResult[] = [];
 
   // Only test ground-truth entries that have a real LLM signal: concept, troubleshoot, flag, natural.
   // "exact" queries are too mechanical to measure LLM quality meaningfully.
-  const sample = GROUND_TRUTH.filter((gt) =>
+  const filtered = GROUND_TRUTH.filter((gt) =>
     ["natural", "concept", "troubleshoot", "flag"].includes(gt.queryType),
   );
+  const sample = limit > 0 ? filtered.slice(0, limit) : filtered;
 
   process.stdout.write(`  Running ${sample.length} LLM queries`);
 
@@ -552,7 +555,7 @@ function buildReport(
     const refuseRate = pct(valid.filter((r) => r.refused === 1).length, valid.length);
 
     L.push(`LM URL: \`${LM_URL}\``);
-    L.push(`Sampled: ${llm.length}, judged: ${valid.length}, skipped/error: ${skipped.length}`);
+    L.push(`Sampled: ${llm.length}${LLM_LIMIT > 0 ? ` (limited to ${LLM_LIMIT} hand-curated)` : ""}, judged: ${valid.length}, skipped/error: ${skipped.length}`);
     L.push("");
     L.push("### Aggregate Scores");
     L.push("");
@@ -893,8 +896,9 @@ async function main(): Promise<void> {
   } else if (!lmUp) {
     console.log(`\nPhase B — LM unreachable at ${LM_URL}, skipping`);
   } else {
-    console.log(`\nRunning Phase B — LLM at ${LM_URL}…`);
-    llmResults = await runPhaseB(corpus);
+    const sampleLabel = LLM_LIMIT > 0 ? ` (limited to ${LLM_LIMIT} queries)` : "";
+    console.log(`\nRunning Phase B — LLM at ${LM_URL}${sampleLabel}…`);
+    llmResults = await runPhaseB(corpus, LLM_LIMIT);
   }
 
   // Console summary
