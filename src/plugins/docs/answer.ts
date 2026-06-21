@@ -77,12 +77,17 @@ export function stripInventedCommands(text: string, corpus: DocItem[]): string {
  * the model's response text. Throw on hard errors (auth, network); return a
  * string on success (even if the model says "I don't know").
  *
+ * `stream(prompt)` is optional — if implemented, the CLI renders the response
+ * token-by-token as they arrive from the API. Falls back to `generate()` when
+ * not available.
+ *
  * `name` is displayed in the `--json` output so users can see which backend
  * is active.
  */
 export interface LMProvider {
   readonly name: string;
   generate(prompt: string): Promise<string>;
+  stream?(prompt: string): AsyncGenerator<string, void, unknown>;
 }
 
 // --- Active provider registry ------------------------------------------------
@@ -112,6 +117,10 @@ export interface AnswerResult {
   hits: DocItem[];
   /** Provider name when source="lm", undefined otherwise */
   provider?: string;
+  /** If true, use streamOutput() instead of reading text directly */
+  stream?: boolean;
+  /** Callback for streaming output — receives tokens as they arrive */
+  streamOutput?: (write: (chunk: string) => void) => Promise<string>;
 }
 
 // --- Orchestration -----------------------------------------------------------
@@ -159,11 +168,35 @@ export async function answer(
     }
   }
 
+  // Streaming path — caller (CLI) writes chunks as they arrive.
+  const streamFn = provider.stream;
+  if (streamFn) {
+    return {
+      source: "lm",
+      text: "",
+      hits,
+      provider: provider.name,
+      stream: true,
+      streamOutput: async (write: (chunk: string) => void): Promise<string> => {
+        const chunks: string[] = [];
+        try {
+          for await (const chunk of streamFn.call(provider, prompt)) {
+            write(chunk);
+            chunks.push(chunk);
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`[bee ask] LM stream error (${provider.name}): ${msg}\n`);
+          write("\n");
+        }
+        const full = chunks.join("");
+        return stripInventedCommands(full, corpus);
+      },
+    };
+  }
+
   try {
     const raw = await provider.generate(prompt);
-    // Validate emitted commands against the full command tree, not just the
-    // retrieved hits: the model may correctly name a real command that wasn't
-    // in the top-K, and we must not strip those.
     const text = stripInventedCommands(raw, corpus);
     return { source: "lm", text, hits, provider: provider.name };
   } catch (err) {

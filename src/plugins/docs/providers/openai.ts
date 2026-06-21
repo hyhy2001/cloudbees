@@ -32,7 +32,6 @@ export class OpenAICompatProvider {
    */
   async generate(prompt: string): Promise<string> {
     const headers: Record<string, string> = { "content-type": "application/json" };
-    // A local llama-server needs no auth; only send the header when we have a key.
     if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
 
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
@@ -47,7 +46,7 @@ export class OpenAICompatProvider {
         temperature: 0,
         max_tokens: 256,
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) {
@@ -58,6 +57,65 @@ export class OpenAICompatProvider {
       choices?: Array<{ message?: { content?: string } }>;
     };
     return json.choices?.[0]?.message?.content?.trim() ?? "";
+  }
+
+  /**
+   * Streaming variant: returns tokens via SSE as they arrive from the API.
+   */
+  async *stream(prompt: string): AsyncGenerator<string, void, unknown> {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
+
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0,
+        max_tokens: 256,
+        stream: true,
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`LM HTTP ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("LM response body is not readable");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === "data: [DONE]") continue;
+        if (!trimmed.startsWith("data: ")) continue;
+
+        try {
+          const json = JSON.parse(trimmed.slice(6)) as {
+            choices?: Array<{ delta?: { content?: string } }>;
+          };
+          const content = json.choices?.[0]?.delta?.content;
+          if (content) yield content;
+        } catch {
+          // skip malformed SSE line
+        }
+      }
+    }
   }
 }
 

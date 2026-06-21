@@ -339,6 +339,8 @@ const SYNONYMS: Record<string, string> = {
   slots:         "executor",
   scope:         "credential", // "credential scope" → cred create --scope
   assign:        "node",       // "assign job to node" → --node flag
+  // gate-recall synonyms (short queries the relevance-gate needs to match)
+  cache:         "ttl",        // "how does cache work" → cache doc mentions TTL
 };
 
 /**

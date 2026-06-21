@@ -43,8 +43,14 @@ export function registerDocsCommands(ctx: PluginContext): void {
         }
 
         if (opts.json) {
+          // When streaming, collect the full text first.
+          let fullText = result.text;
+          if (result.source === "lm" && result.stream && result.streamOutput) {
+            const chunks: string[] = [];
+            fullText = await result.streamOutput((chunk) => chunks.push(chunk));
+          }
           const presented = result.source === "lm"
-            ? result.text
+            ? fullText
             : presentAnswer(query, result.hits).text;
           printMessage(JSON.stringify({
             query,
@@ -63,6 +69,12 @@ export function registerDocsCommands(ctx: PluginContext): void {
         }
 
         if (result.source === "lm") {
+          if (result.stream && result.streamOutput) {
+            // Stream output char by char to stdout.
+            const fullText = await result.streamOutput((chunk) => process.stdout.write(chunk));
+            process.stdout.write("\n");
+            return;
+          }
           printMessage(result.text);
           return;
         }
