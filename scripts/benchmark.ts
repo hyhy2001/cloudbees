@@ -687,6 +687,185 @@ function printConsoleSummary(
   }
 }
 
+// ─── Automated query generator ─────────────────────────────────────────────────
+//
+// Generates additional GROUND_TRUTH queries from the corpus to expand coverage
+// beyond the hand-curated core set. Each command and help fact produces multiple
+// query variants using synonyms, paraphrases, and natural language patterns.
+
+/** Verb synonyms for generating natural-language queries. */
+const VERB_SYNONYMS: Record<string, string[]> = {
+  list: ["list", "show", "view", "see"],
+  create: ["create", "make", "add", "new"],
+  delete: ["delete", "remove", "erase"],
+  update: ["update", "edit", "change", "modify"],
+  run: ["run", "trigger", "start", "execute", "launch"],
+  stop: ["stop", "cancel", "abort", "halt"],
+  copy: ["copy", "clone"],
+  move: ["move", "relocate"],
+  track: ["track", "watch"],
+  untrack: ["untrack"],
+  get: ["get", "show", "view", "inspect"],
+  login: ["login", "log in", "sign in"],
+  logout: ["logout", "log out", "sign out"],
+  select: ["select", "choose", "switch to"],
+  approve: ["approve", "grant"],
+};
+
+/** Noun/object synonyms for command groups — only synonyms that appear in command descriptions. */
+const NOUN_SYNONYMS: Record<string, string[]> = {
+  job: ["job", "build", "pipeline"],
+  node: ["node", "agent"],
+  cred: ["credential", "secret", "token"],
+  auth: ["auth", "profile", "account"],
+  controller: ["controller", "server"],
+};
+
+/**
+ * Generate additional ground-truth queries from the corpus.
+ */
+function generateQueries(corpus: DocItem[]): GroundTruth[] {
+  const generated: GroundTruth[] = [];
+
+  // Categorize corpus items
+  const cmds = corpus.filter((c) => c.type === "command");
+  const docFacts = corpus.filter((c) => c.type === "doc" && c.source.startsWith("help:"));
+
+  // ── 1. For each command → generate exact + natural + flag variants ────────
+  for (const cmd of cmds) {
+    const parts = cmd.id.split(".");
+    const group = parts[0]!;
+    const verb = parts.slice(1).join(".");
+
+    // 1a. Exact: "{group} {verb}" and "bee {group} {verb}"
+    if (!GROUND_TRUTH.some((g) => g.query === `${group} ${verb}`)) {
+      generated.push({ query: `${group} ${verb}`, expectedId: cmd.id, label: cmd.title, queryType: "exact" });
+    }
+
+    // 1b. Flag queries: for each flag in the body, generate natural + exact queries
+    if (cmd.body) {
+      const flags = cmd.body.match(/--[a-z][-a-z]*/g);
+      if (flags) {
+        const seen = new Set<string>();
+        for (const flag of flags) {
+          if (seen.has(flag)) continue;
+          seen.add(flag);
+          const flagNames = new Set<string>();
+          // Extract flag name without -- for natural language generation
+          const flagName = flag.replace(/^--/, "");
+          // Generate flag description queries
+          const flagQueries: string[] = [
+            `${group} ${verb} ${flag}`,           // "job list --all"
+            `${verb} with ${flagName}`,             // "run with wait"
+            `how to ${verb} ${flagName}`,           // "how to run wait"
+            `${flagName} option ${group}`,          // "all option job"
+          ];
+          for (const fq of flagQueries) {
+            if (!generated.some((g) => g.query === fq) && !GROUND_TRUTH.some((g) => g.query === fq)) {
+              generated.push({
+                query: fq,
+                expectedId: cmd.id,
+                label: `${cmd.title} ${flag}`,
+                queryType: "flag",
+                mustContainFlag: flag,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // 1c. Natural: one synonym paraphrase (verb synonym only — keeps noun original)
+    const verbSyns = VERB_SYNONYMS[verb] ?? [verb];
+    for (const vs of verbSyns) {
+      if (vs === verb) continue;
+      const natQuery = `${vs} ${group}`;
+      if (!generated.some((g) => g.query === natQuery) && !GROUND_TRUTH.some((g) => g.query === natQuery)) {
+        generated.push({ query: natQuery, expectedId: cmd.id, label: cmd.title, queryType: "natural" });
+        break;
+      }
+    }
+
+    // 1d. Natural language variants with common user phrasings
+    const natVariants = [
+      `how to ${verb} ${group}`,
+      `how do i ${verb} ${group}`,
+      `i need to ${verb} ${group}`,
+      `i want to ${verb} ${group}`,
+      `can i ${verb} ${group}`,
+    ];
+    for (const nv of natVariants) {
+      if (!generated.some((g) => g.query === nv) && !GROUND_TRUTH.some((g) => g.query === nv)) {
+        generated.push({ query: nv, expectedId: cmd.id, label: cmd.title, queryType: "natural" });
+      }
+    }
+
+    // 1e. "help with" queries
+    const helpVariants = [
+      `help with ${verb} ${group}`,
+      `help ${verb} ${group}`,
+    ];
+    for (const hv of helpVariants) {
+      if (!generated.some((g) => g.query === hv) && !GROUND_TRUTH.some((g) => g.query === hv)) {
+        generated.push({ query: hv, expectedId: cmd.id, label: cmd.title, queryType: "natural" });
+      }
+    }
+
+    // 1f. Plural listing queries for list-style commands ("show all jobs", "list all agents")
+    if (verb === "list") {
+      const nounSyns = NOUN_SYNONYMS[group] ?? [group];
+      for (const ns of nounSyns) {
+        if (ns === group) continue;
+        const plural = ns.endsWith("s") ? ns : `${ns}s`;
+        const listVariants = [
+          `show all ${plural}`,
+          `list all ${plural}`,
+          `view all ${plural}`,
+        ];
+        for (const lv of listVariants) {
+          if (!generated.some((g) => g.query === lv) && !GROUND_TRUTH.some((g) => g.query === lv)) {
+            generated.push({ query: lv, expectedId: cmd.id, label: cmd.title, queryType: "natural" });
+          }
+        }
+      }
+    }
+  }
+
+  // ── 2. For each help fact → generate concept questions ────────────────────
+  for (const fact of docFacts) {
+    const title = fact.title;
+
+    // Natural language concept questions
+    const conceptVariants = [
+      `what is ${title}`,
+      `explain ${title}`,
+      `what does ${title} mean`,
+      `tell me about ${title}`,
+    ];
+    for (const cv of conceptVariants) {
+      if (!generated.some((g) => g.query === cv)) {
+        generated.push({ query: cv, expectedId: fact.id, label: `concept: ${title}`, queryType: "concept" });
+      }
+    }
+
+    // For troubleshooting facts, add scenario-based queries
+    if (fact.id.startsWith("troubleshooting")) {
+      const errQueries = [
+        `how to fix ${title}`,
+        `${title} problem`,
+        `troubleshoot ${title}`,
+      ];
+      for (const eq of errQueries) {
+        if (!generated.some((g) => g.query === eq)) {
+          generated.push({ query: eq, expectedId: fact.id, label: `troubleshoot: ${title}`, queryType: "troubleshoot" });
+        }
+      }
+    }
+  }
+
+  return generated;
+}
+
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -700,7 +879,20 @@ async function main(): Promise<void> {
     `(${corpus.filter((d) => d.type === "command").length} commands, ` +
     `${corpus.filter((d) => d.type === "doc").length} doc chunks)`,
   );
-  console.log(`Ground-truth queries: ${GROUND_TRUTH.length}`);
+  // Merge hand-curated + auto-generated queries
+  const generated = generateQueries(corpus);
+  const allQueries = [...GROUND_TRUTH, ...generated];
+  // Deduplicate by (query, expectedId)
+  const seen = new Set<string>();
+  const deduped = allQueries.filter((q) => {
+    const key = `${q.query}|${q.expectedId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  // Replace GROUND_TRUTH with merged set
+  (GROUND_TRUTH as GroundTruth[]).splice(0, GROUND_TRUTH.length, ...deduped);
+  console.log(`Ground-truth queries: ${GROUND_TRUTH.length} (${GROUND_TRUTH.length - generated.length} hand-curated + ${generated.length} auto-generated)`);
 
   // Phase A
   console.log("\nRunning Phase A — BM25 retrieval…");
