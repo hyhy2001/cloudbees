@@ -647,19 +647,19 @@ export function searchDocs(
     // 3. Flag-aware promotion: query phrases that imply a CLI flag.
     //    Maps natural phrases → flag name → commands whose body mentions it.
     //    Uses word-boundary regex so "label" doesn't match "labels".
-    const flagPhrases: Record<string, string[]> = {
-      "not just mine": ["--all"],
-      everything: ["--all"],
-      "all jobs": ["--all"],
-      "all nodes": ["--all"],
-      "restrict to agent": ["--node"],
-      "restrict job": ["--node"],
-      "specific profile": ["--profile"],
-      "wait for": ["--wait"],
-      timeout: ["--timeout"],
-      "specific node": ["--node"],
-      label: ["--labels"],
-      "remote dir": ["--remote-dir"],
+    const flagPhrases: Record<string, { flags: string[]; prefer?: string }> = {
+      "not just mine": { flags: ["--all"] },
+      everything: { flags: ["--all"] },
+      "all jobs": { flags: ["--all"] },
+      "all nodes": { flags: ["--all"] },
+      "restrict to agent": { flags: ["--node"] },
+      "restrict job": { flags: ["--node"] },
+      "specific profile": { flags: ["--profile"], prefer: "auth.login" },
+      "wait for": { flags: ["--wait"] },
+      timeout: { flags: ["--timeout"] },
+      "specific node": { flags: ["--node"] },
+      label: { flags: ["--labels"] },
+      "remote dir": { flags: ["--remote-dir"] },
     };
 
     // Generic "X option" and "X option Y" patterns: find the flag word.
@@ -708,23 +708,49 @@ export function searchDocs(
         }
       }
     }
-    for (const [phrase, flags] of Object.entries(flagPhrases)) {
+    for (const [phrase, spec] of Object.entries(flagPhrases)) {
       const phraseRe = new RegExp(`\\b${phrase}\\b`, "i");
       if (phraseRe.test(qNorm)) {
-        for (const flag of flags) {
-          const fi = items.findIndex(
-            (it) => it.type === "command" && it.body?.includes(flag),
+        // If a specific command is preferred, try that first.
+        let fi = -1;
+        if (spec.prefer) {
+          fi = items.findIndex((it) => it.id === spec.prefer);
+        }
+        if (fi <= (promoted ? 1 : 0)) {
+          fi = items.findIndex(
+            (it) => it.type === "command" && it.body?.includes(spec.flags[0]!),
           );
-          if (fi > (promoted ? 1 : 0)) {
-            const [flagged] = items.splice(fi, 1);
-            items.splice(promoted ? 1 : 0, 0, flagged!);
-            promoted = true;
-          }
+        }
+        if (fi > (promoted ? 1 : 0)) {
+          const [flagged] = items.splice(fi, 1);
+          items.splice(promoted ? 1 : 0, 0, flagged!);
+          promoted = true;
         }
       }
     }
 
-    // 5. Query-intent promotion: multi-word phrases that imply a specific intent.
+    // 5. "show X" / "inspect X" / "edit X" pattern: promote the matching command
+    //    in the same group. "show job" → job.list, "edit job" → job.update.
+    if (!promoted) {
+      const verbNounMatch = qNorm.match(/^(show|inspect|edit)\s+([a-z][-a-z]+)$/);
+      if (verbNounMatch) {
+        const verb = verbNounMatch[1]!;
+        const noun = verbNounMatch[2]!;
+        const verbToSuffix: Record<string, string> = {
+          show: "list", inspect: "get", edit: "update",
+        };
+        const suffix = verbToSuffix[verb] ?? "list";
+        const targetId = `${noun}.${suffix}`;
+        const si = items.findIndex((it) => it.id === targetId);
+        if (si > 0) {
+          const [item] = items.splice(si, 1);
+          items.unshift(item!);
+          promoted = true;
+        }
+      }
+    }
+
+    // 6. Query-intent promotion: multi-word phrases that imply a specific intent.
     //    These help cases where BM25 matches individual tokens well but ranks the
     //    wrong command at #1 (e.g. "log out" → job.log wins over auth.logout because
     //    "log" is an exact title match).
