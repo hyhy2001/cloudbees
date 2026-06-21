@@ -290,12 +290,14 @@ const SYNONYMS: Record<string, string> = {
   signin:      "login",
   "sign-in":   "login",
   logon:       "login",  // "logon to server" → auth.login
+  "log-out":   "logout", // "log out from server" → auth.logout
   // NOTE: "sign" alone not mapped — "sign out" would collapse to just "sign"→"login"
   // which incorrectly surfaces auth.login. auth.logout description contains "sign out".
   signout:     "logout",
   "sign-out":  "logout",
   signoff:     "logout",
   logout:      "logout",
+  out:         "logout", // "log out" → "logout"; token "out" maps to "logout"
   account:     "profile",
   user:        "profile",  // "switch user" → profile context
   switch:      "use",       // bee auth switch = bee auth use
@@ -324,6 +326,7 @@ const SYNONYMS: Record<string, string> = {
   var:         "variable",
   vars:        "variable",
   envvar:      "environment",
+  install:     "setup",   // "install bee on a server" → getting-started / login
   // misc
   tui:           "ui",
   interactive:   "ui",
@@ -653,11 +656,10 @@ export function searchDocs(
       "remote dir": ["--remote-dir"],
     };
 
-    // Generic "X option" pattern: if query has "<flagword> option", find the flag.
-    const optionMatch = qNorm.match(/([a-z][-a-z]+)\s+option\b/);
+    // Generic "X option" and "X option Y" patterns: find the flag word.
+    const optionMatch = qNorm.match(/([a-z][-a-z]+)\s+option(?:\s+[a-z]+)?\b/);
     if (optionMatch) {
       const flagWord = optionMatch[1]!;
-      // Map common flag words back to flag names
       const flagMap: Record<string, string> = {
         all: "--all",
         wait: "--wait",
@@ -670,7 +672,14 @@ export function searchDocs(
         label: "--labels",
         yes: "--yes",
         store: "--store",
+        description: "--description",
+        shell: "--shell",
+        email: "--email",
+        schedule: "--schedule",
         "remote-dir": "--remote-dir",
+        "cred-id": "--cred-id",
+        "controlled-agent": "--controlled-agent",
+        folder: "--folder",
       };
       const flag = flagMap[flagWord];
       if (flag) {
