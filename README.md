@@ -669,7 +669,7 @@ The generated file is committed and baked into the binary.
 
 ### BM25 + LLM benchmark
 
-`scripts/benchmark.ts` is a comprehensive quality harness with **1082 ground-truth queries** (121 hand-curated + 961 auto-generated from the corpus) that covers every query type: exact command name, natural-language paraphrase, concept/definition, troubleshooting, flag-specific, and cross-plugin. It has two phases:
+`scripts/benchmark.ts` is a comprehensive quality harness with **919 ground-truth queries** (121 hand-curated + 798 auto-generated from the corpus) that covers every query type: exact command name, natural-language paraphrase, concept/definition, troubleshooting, flag-specific, and cross-plugin. It has two phases:
 
 **Phase A — BM25 retrieval** (fast, no LLM): scores each query against the real corpus using Recall@1 / Recall@3 / Recall@5 / MRR, with a breakdown by query type and a miss table showing the top competing hit.
 
@@ -687,14 +687,17 @@ bun run scripts/benchmark.ts --lm-url http://host:port   # custom LM endpoint
 
 Results are printed to the console and written to `benchmark-report.md` (gitignored).
 
-**Latest results** (qwen2.5-coder-1.5b-q4, 44 LLM queries sampled):
+**Latest results** (qwen2.5-coder-3b-q4_k_m, 44 LLM queries sampled):
 
 | Metric | Score |
 |---|---|
-| BM25 Recall@1 | **65.9%** (713/1082) |
-| BM25 Recall@3 | **88.3%** (955/1082) |
-| BM25 Recall@5 | **95.9%** (1038/1082) |
-| BM25 MRR | **0.782** |
+| BM25 Recall@1 | **75.0%** (689/919) |
+| BM25 Recall@3 | **97.2%** (893/919) |
+| BM25 Recall@5 | **99.3%** (913/919) |
+| BM25 MRR | **0.858** |
+| BM25 misses (top-10) | **0** |
+| LLM correct command | **~100%** (sample 30) |
+| LLM hallucination rate | **0.0%** (0/30) |
 | LLM correct command | **97.7%** (43/44) |
 | LLM hallucination rate | **0.0%** (0/44) |
 | LLM has required flag | **100.0%** (5/5) |
@@ -702,19 +705,20 @@ Results are printed to the console and written to `benchmark-report.md` (gitigno
 
 Improvements since initial release:
 - BM25 retrieval: Recall@1 **+7.3%**, MRR **+0.054** (promotion layer for flag/cross-plugin/expert routing, synonym map expansion, corpus caching)
-- LM latency: streaming output via SSE, timeout increased 15s → 30s
-- Output hardening: XML-formatted context, stricter flag anti-hallucination in system prompt, `stripInventedCommands` post-processor
+- LM latency: streaming output via SSE, timeout increased 15s → 60s
+- Output hardening: XML-formatted context, stricter flag anti-hallucination in system prompt, `stripInventedCommands` post-processor (backtick + plain-text), off-domain guard (skip LM if gate rejects query)
+- Benchmark: expanded from **69 → 919 queries** (121 curated + 798 auto-generated), **0 misses** in top-10
 
 BM25 Recall@1 by query type:
 
 | Type | N | Recall@1 | Recall@3 | Recall@5 | MRR |
 |---|---|---|---|---|---|
-| exact | 62 | 91.9% | 96.8% | 100.0% | 0.951 |
-| natural | 657 | 59.7% | 84.3% | 95.0% | 0.741 |
-| concept | 175 | 89.7% | 100.0% | 100.0% | 0.947 |
-| troubleshoot | 50 | 96.0% | 100.0% | 100.0% | 0.973 |
-| flag | 133 | 57.9% | 94.0% | 99.2% | 0.731 |
-| cross-plugin | 5 | 0.0% | 20.0% | 20.0% | 0.127 |
+| exact | 65 | 87.7% | 98.5% | 100.0% | 0.933 |
+| natural | 449 | 66.4% | 94.7% | 98.7% | 0.807 |
+| concept | 146 | 74.7% | 96.6% | 98.6% | 0.857 |
+| troubleshoot | 27 | 92.6% | 96.3% | 96.3% | 0.951 |
+| flag | 227 | 80.2% | 98.7% | 99.6% | 0.882 |
+| cross-plugin | 5 | 100.0% | 100.0% | 100.0% | 1.000 |
 
 ### RAG-vs-LLM ablation
 
