@@ -542,8 +542,8 @@ Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful 
 
 `bee ask` answers questions about how to use `bee` without requiring network access or an LLM. It is backed by a **BM25/FTS5 retrieval engine** (SQLite) that searches across two sources simultaneously:
 
-1. **Live command tree** — every `bee <plugin> <subcommand>` entry with its flags, auto-derived from the same commander tree that powers the CLI.
-2. **Help facts** — 17 hand-authored entries covering concepts, troubleshooting steps, and cross-cutting topics (profiles, credential types, Mine vs All, build parameters, node labels, controlled agents, etc.).
+1. **Live command tree** — every `bee <plugin> <subcommand>` entry with its flags, auto-derived from the same commander tree that powers the CLI. Currently **53 commands** across 8 plugins.
+2. **Help facts** — 31 hand-authored entries covering concepts, troubleshooting steps, and cross-cutting topics (profiles, credential types, Mine vs All, build parameters, node labels, controlled agents, pipeline, etc.).
 
 ```bash
 bee ask "how do I log in"
@@ -626,7 +626,12 @@ The token exchange calls `POST /oidc/v1/token` with `grant_type=client_credentia
 
 ---
 
-Then build as usual (`make build`). The credentials are compiled into the binary via `--define`; end users never see them. When the LM is unavailable or returns an error, `bee ask` degrades gracefully to raw BM25 hits.
+Then build as usual (`make build`). The credentials are compiled into the binary via `--define`; end users never see them. When the LM is unavailable or returns an error, `bee ask` degrades gracefully to raw BM25 hits. The LM output is streamed via SSE tokens as they arrive, with a 30-second timeout (increased from 15 s for local models).
+
+**Hallucination defence (3 layers):**
+1. **Off-domain guard** — before calling the LM, a strict relevance gate (no soft fallback) checks the query. If the gate rejects it, the LM is skipped entirely; raw BM25 hits are returned instead.
+2. **Stripped invented commands** — every `bee <group> <sub>` span in the LM response (both backtick-wrapped and plain-text) is validated against the real command tree. Fake commands are removed, real ones (like `bee job run`) are kept.
+3. **System prompt hardening** — negative examples in the system instruction teach the model to refuse off-domain questions and never invent commands or flags.
 
 **Runtime env vars (override or set without rebuilding):**
 
@@ -686,24 +691,30 @@ Results are printed to the console and written to `benchmark-report.md` (gitigno
 
 | Metric | Score |
 |---|---|
-| BM25 Recall@1 | **76.8%** (53/69) |
-| BM25 Recall@3 | **89.9%** (62/69) |
-| BM25 Recall@5 | **92.8%** (64/69) |
-| BM25 MRR | **0.837** |
+| BM25 Recall@1 | **84.1%** (58/69) |
+| BM25 Recall@3 | **94.2%** (65/69) |
+| BM25 Recall@5 | **95.7%** (66/69) |
+| BM25 MRR | **0.891** |
 | LLM correct command | **97.7%** (43/44) |
 | LLM hallucination rate | **0.0%** (0/44) |
 | LLM has required flag | **100.0%** (5/5) |
 | LLM wrong refusal | **2.3%** (1/44) |
 
+Improvements since initial release:
+- BM25 retrieval: Recall@1 **+7.3%**, MRR **+0.054** (promotion layer for flag/cross-plugin/expert routing, synonym map expansion, corpus caching)
+- LM latency: streaming output via SSE, timeout increased 15s → 30s
+- Output hardening: XML-formatted context, stricter flag anti-hallucination in system prompt, `stripInventedCommands` post-processor
+
 BM25 Recall@1 by query type:
 
-| Type | Recall@1 | Recall@5 |
-|---|---|---|
-| exact | 77.3% | 95.5% |
-| natural language | 70.0% | 90.0% |
-| concept / definition | 91.7% | 100.0% |
-| troubleshooting | 100.0% | 100.0% |
-| flag-specific | 80.0% | 100.0% |
+| Type | N | Recall@1 | Recall@3 | Recall@5 | MRR |
+|---|---|---|---|---|---|
+| exact | 22 | 100.0% | 100.0% | 100.0% | 1.000 |
+| natural | 19 | 73.7% | 89.5% | 94.7% | 0.826 |
+| concept | 13 | 92.3% | 100.0% | 100.0% | 0.962 |
+| troubleshoot | 7 | 85.7% | 100.0% | 100.0% | 0.929 |
+| flag | 5 | 80.0% | 100.0% | 100.0% | 0.867 |
+| cross-plugin | 3 | 0.0% | 33.3% | 33.3% | 0.144 |
 
 ### RAG-vs-LLM ablation
 
@@ -719,7 +730,7 @@ bun run scripts/ablation.ts --no-llm           # RAG arms + nDCG only (fast)
 bun run scripts/ablation.ts --lm-url http://host:port
 ```
 
-Latest run (qwen2.5-coder-1.5b-q4): nDCG@5 **0.895**, A2 net decision accuracy **87.3%** vs A1 RAG-top3 **65.8%**, grounding lifts the model **87.3 pts** over closed-book (p<0.0001). The LLM advantage over bare retrieval is **19.2 pts** (95% CI 5.9–32.4, excludes 0). Report written to `ablation-report.md` (gitignored).
+Latest run (qwen2.5-coder-1.5b-q4): nDCG@5 **0.895**, A2 net decision accuracy **87.3%** vs A1 RAG-top3 **65.8%** (current A1: **76.5%** with improved retrieval), grounding lifts the model **87.3 pts** over closed-book (p<0.0001). Report written to `ablation-report.md` (gitignored).
 
 ### BM25 retrieval quality (legacy audit)
 
