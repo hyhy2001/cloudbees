@@ -802,17 +802,6 @@ function generateQueries(corpus: DocItem[]): GroundTruth[] {
       }
     }
 
-    // 1e. "help with" queries
-    const helpVariants = [
-      `help with ${verb} ${group}`,
-      `help ${verb} ${group}`,
-    ];
-    for (const hv of helpVariants) {
-      if (!generated.some((g) => g.query === hv) && !GROUND_TRUTH.some((g) => g.query === hv)) {
-        generated.push({ query: hv, expectedId: cmd.id, label: cmd.title, queryType: "natural" });
-      }
-    }
-
     // 1f. Plural listing queries for list-style commands ("show all jobs", "list all agents")
     if (verb === "list") {
       const plural = group.endsWith("s") ? group : `${group}s`;
