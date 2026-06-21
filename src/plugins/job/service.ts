@@ -10,6 +10,7 @@ import type { JobDTO, BuildDTO, QueueItemDTO } from "../../core/dtos/index";
 import {
   buildFreestyleXml,
   buildFolderXml,
+  buildPipelineXml,
   buildParametersProperty,
 } from "./xml-builder";
 import {
@@ -21,7 +22,8 @@ import {
 } from "../../domain/email";
 import { escapeXml, xmlParser } from "../../domain/xml";
 import { buildTimerTriggerBlock } from "../../domain/schedule";
-import type { JobConfigSummary, UpdateFreestyleOpts, CreateFreestyleOpts } from "./types";
+import type { JobConfigSummary, UpdateFreestyleOpts, CreateFreestyleOpts, CreatePipelineOpts, UpdatePipelineOpts } from "./types";
+import { injectAgent, parseParametersFromScript } from "../../domain/pipeline-parse";
 
 const _JOB_TREE = "jobs[_class,name,url,color,description,buildable,lastBuild[number,result,url]]";
 
@@ -446,6 +448,261 @@ export async function createFreestyleJob(
   });
 }
 
+/**
+ * Validate a Declarative Pipeline script using Jenkins Pipeline Validation API.
+ * POST /pipeline-model-converter/validate with the script content.
+ * Returns `{ valid: true }` on success, or `{ valid: false, errors: string[] }` on failure.
+ */
+export async function validatePipelineScript(
+  client: CloudBeesClient,
+  script: string,
+): Promise<{ valid: true } | { valid: false; errors: string[] }> {
+  try {
+    const body = new URLSearchParams({ jenkinsfile: script }).toString();
+    const result = await client.post<Record<string, unknown>>(
+      "/pipeline-model-converter/validate",
+      {
+        body,
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      },
+    );
+    if ((result as Record<string, unknown>)?.["result"] === "success") {
+      return { valid: true };
+    }
+    const errors: string[] = [];
+    const rawErrors = (result as Record<string, unknown>)?.["errors"];
+    if (Array.isArray(rawErrors)) {
+      for (const e of rawErrors) {
+        errors.push(typeof e === "string" ? e : String((e as Record<string, unknown>)?.["message"] ?? e));
+      }
+    }
+    return { valid: false, errors: errors.length > 0 ? errors : ["Pipeline script validation failed."] };
+  } catch (err) {
+    // If the validation endpoint is not available, skip validation (fail open).
+    return { valid: true };
+  }
+}
+
+/**
+ * Creates a Pipeline (WorkflowJob) via `/createItem` with a full config.xml built by
+ * `buildPipelineXml`. Auto-detects parameters from the script. Validates the script
+ * via the Jenkins Pipeline Validation API before creating.
+ */
+export async function createPipelineJob(
+  client: CloudBeesClient,
+  name: string,
+  opts: CreatePipelineOpts = {},
+  folder: string | null = null,
+): Promise<void> {
+  const {
+    desc = "",
+    script = "",
+    node = null,
+    schedule = null,
+    email = null,
+    emailCond = "failed",
+    emailKeywords = null,
+    emailRegex = null,
+    params = null,
+  } = opts;
+
+  if (!script) {
+    throw new ValidationError("Pipeline script is required. Provide --script <file|inline>.");
+  }
+
+  // Pre-process: inject agent before parsing params (node affects script).
+  const finalScript = node ? injectAgent(script, node) : script;
+
+  // Merge auto-detected params from script with explicitly provided params.
+  const detectedParams = parseParametersFromScript(finalScript);
+  const mergedParams = mergePipeParams(detectedParams, params);
+
+  // Validate script against Jenkins API.
+  const validation = await validatePipelineScript(client, script);
+  if (!validation.valid) {
+    const errMsg = validation.errors.join("; ");
+    throw new ValidationError(`Pipeline script validation failed: ${errMsg}`);
+  }
+
+  const keywords = normalizeKeywords(emailKeywords);
+  const regex = normalizeRegex(emailRegex);
+  validateRegex(regex);
+  if ((keywords.length > 0 || regex) && !(email && email.trim())) {
+    throw new ValidationError("Email filters require recipient email. Provide --email.");
+  }
+
+  const xml = buildPipelineXml({
+    desc,
+    script: finalScript,
+    schedule,
+    email,
+    emailCond,
+    emailKeywords: keywords,
+    emailRegex: regex,
+    params: mergedParams.length > 0 ? mergedParams : null,
+  });
+
+  const base = folder ? `/job/${jobSeg(folder)}` : "";
+  await client.postXml(`${base}/createItem?name=${encodeURIComponent(name)}`, xml, {
+    invalidate: "jobs.",
+  });
+}
+
+/** Merge auto-detected params with CLI-provided params. CLI values override detected ones. */
+function mergePipeParams(
+  detected: import("./types").StringParamDef[],
+  cli: import("./types").StringParamDef[] | null | undefined,
+): import("./types").StringParamDef[] {
+  if (!cli || cli.length === 0) return detected;
+  const cliMap = new Map(cli.map((p) => [p.name, p]));
+  const merged = detected.map((p) => cliMap.get(p.name) ?? p);
+  // Add CLI-only params not in detected.
+  for (const p of cli) {
+    if (!merged.some((m) => m.name === p.name)) merged.push(p);
+  }
+  return merged;
+}
+
+/**
+ * Update a Pipeline job's config.xml in-place (partial update).
+ * Validates the script before applying changes.
+ */
+export async function updatePipelineJob(
+  client: CloudBeesClient,
+  name: string,
+  opts: UpdatePipelineOpts = {},
+): Promise<void> {
+  const {
+    desc,
+    script,
+    node,
+    schedule,
+    email,
+    emailCond,
+    emailKeywords,
+    emailRegex,
+    clearEmailKeywords = false,
+    clearEmailRegex = false,
+    params,
+    clearParams = false,
+  } = opts;
+
+  const xmlStr = await client.getText(`/job/${jobSeg(name)}/config.xml`);
+  const doc = xmlParser.parse(xmlStr) as Record<string, unknown>;
+  const defn = doc["flow-definition"] as Record<string, unknown> | undefined;
+  if (!defn) {
+    throw new Error(`Job '${name}' is not a Pipeline (no <flow-definition> root).`);
+  }
+
+  const currentDef = defn["definition"] as Record<string, unknown> | undefined;
+  const currentScript = typeof currentDef?.["script"] === "string"
+    ? (currentDef["script"] as string)
+    : "";
+
+  // Read current values from XML.
+  const currentDesc = typeof defn["description"] === "string" ? (defn["description"] as string) : "";
+  const currentPublishers = defn["publishers"] as Record<string, unknown> | undefined;
+  const currentExtMail = currentPublishers?.["hudson.plugins.emailext.ExtendedEmailPublisher"] as Record<string, unknown> | undefined;
+  const currentEmail = typeof currentExtMail?.["recipientList"] === "string"
+    ? (currentExtMail["recipientList"] as string).trim()
+    : "";
+  const currentPresend = typeof currentExtMail?.["presendScript"] === "string"
+    ? (currentExtMail["presendScript"] as string)
+    : null;
+  const currentMeta = parseEmailFilterMetadata(currentPresend);
+  const currentKeywords = normalizeKeywords(currentMeta?.keywords);
+  const currentRegex = normalizeRegex(currentMeta?.regex);
+
+  const targetScript = script ?? currentScript;
+  const targetDesc = desc ?? currentDesc;
+
+  // Validate new script if provided.
+  if (script) {
+    const validation = await validatePipelineScript(client, script);
+    if (!validation.valid) {
+      const errMsg = validation.errors.join("; ");
+      throw new ValidationError(`Pipeline script validation failed: ${errMsg}`);
+    }
+  }
+
+  // Handle node: inject/replace agent in the target script.
+  let finalScript = targetScript;
+  if (node != null) {
+    finalScript = node ? injectAgent(finalScript, node) : targetScript;
+  }
+
+  // Merge params.
+  let targetParams: import("./types").StringParamDef[] | null = null;
+  if (clearParams) {
+    targetParams = [];
+  } else if (params != null && params.length > 0) {
+    const detectedParams = parseParametersFromScript(finalScript);
+    targetParams = mergePipeParams(detectedParams, params);
+  }
+
+  // Build updated XML from scratch with the merged values.
+  // Strategy: rebuild the whole config.xml (simpler than patching by parts like freestyle,
+  // since pipeline XML is smaller and less complex).
+  const mergedCond = emailCond ?? (currentMeta ? "custom" : "failed");
+
+  // Determine effective email values.
+  let targetEmail = email != null ? email.trim() : currentEmail;
+  let targetKeywords = [...currentKeywords];
+  let targetRegex: string | null = currentRegex;
+  if (clearEmailKeywords) targetKeywords = [];
+  if (clearEmailRegex) targetRegex = null;
+  if (emailKeywords != null) targetKeywords = normalizeKeywords(emailKeywords);
+  if (emailRegex != null) targetRegex = normalizeRegex(emailRegex);
+  validateRegex(targetRegex);
+
+  if ((targetKeywords.length > 0 || targetRegex) && !targetEmail) {
+    throw new ValidationError("Email filters require recipient email. Provide --email.");
+  }
+
+  // Schedule: read current from XML.
+  const currentTriggers = defn["triggers"] as Record<string, unknown> | undefined;
+  const currentTimer = currentTriggers?.["hudson.triggers.TimerTrigger"] as Record<string, unknown> | undefined;
+  const currentSchedule = typeof currentTimer?.["spec"] === "string" ? (currentTimer["spec"] as string) : "";
+  const targetSchedule = schedule ?? currentSchedule;
+
+  const newXml = buildPipelineXml({
+    desc: targetDesc,
+    script: finalScript,
+    schedule: targetSchedule || null,
+    email: targetEmail || null,
+    emailCond: mergedCond,
+    emailKeywords: targetKeywords.length > 0 ? targetKeywords : null,
+    emailRegex: targetRegex || null,
+    params: targetParams,
+  });
+
+  await client.postXml(`/job/${jobSeg(name)}/config.xml`, newXml, {
+    invalidate: "jobs.",
+  });
+}
+
+/**
+ * Fetch a Pipeline job's config.xml and extract the script content.
+ * Returns null if the job is not a pipeline or has no script.
+ */
+export async function getPipelineScript(
+  client: CloudBeesClient,
+  name: string,
+): Promise<string | null> {
+  try {
+    const xmlStr = await client.getText(`/job/${jobSeg(name)}/config.xml`);
+    const doc = xmlParser.parse(xmlStr) as Record<string, unknown>;
+    const flowDef = doc["flow-definition"] as Record<string, unknown> | undefined;
+    if (!flowDef) return null;
+    const definition = flowDef["definition"] as Record<string, unknown> | undefined;
+    if (!definition) return null;
+    const script = definition["script"];
+    return typeof script === "string" ? script : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Creates a CloudBees/Jenkins Folder via `/createItem` using the `com.cloudbees.hudson.plugins.folder.Folder` class XML. */
 export async function createFolder(
   client: CloudBeesClient,
@@ -547,135 +804,148 @@ export async function getJobConfigSummary(
     return summary;
   }
   const project = doc["project"] as Record<string, unknown> | undefined;
-  if (!project) return summary;
+  const flowDef = doc["flow-definition"] as Record<string, unknown> | undefined;
+  const root = project ?? flowDef;
+  if (!root) return summary;
+
+  function readTriggers(node: Record<string, unknown>): void {
+    const triggers = node["triggers"] as Record<string, unknown> | undefined;
+    if (!triggers) return;
+    const timer = triggers["hudson.triggers.TimerTrigger"] as
+      | Record<string, unknown>
+      | undefined;
+    if (timer) {
+      const spec = timer["spec"];
+      if (typeof spec === "string" && spec.trim()) {
+        summary.schedule = spec.trim();
+      }
+    }
+  }
+
+  function readPublishers(node: Record<string, unknown>): void {
+    const publishers = node["publishers"] as Record<string, unknown> | undefined;
+    if (!publishers) return;
+    const extMail = publishers[
+      "hudson.plugins.emailext.ExtendedEmailPublisher"
+    ] as Record<string, unknown> | undefined;
+
+    if (extMail) {
+      const rl = extMail["recipientList"];
+      if (typeof rl === "string" && rl.trim()) {
+        summary.email = rl.trim();
+      }
+
+      const configuredTriggers = extMail["configuredTriggers"] as
+        | Record<string, unknown>
+        | undefined;
+      const presendScript = extMail["presendScript"];
+      let _hasMeta = false;
+      if (typeof presendScript === "string") {
+        const meta = parseEmailFilterMetadata(presendScript);
+        if (meta) {
+          _hasMeta = true;
+          const kws = normalizeKeywords(meta.keywords);
+          const rx = normalizeRegex(meta.regex);
+          if (kws.length > 0) summary.email_keywords = kws.join(", ");
+          if (rx) summary.email_regex = rx;
+        }
+      }
+
+      if (configuredTriggers) {
+        const hasFailure = Boolean(
+          configuredTriggers["hudson.plugins.emailext.plugins.trigger.FailureTrigger"],
+        );
+        const hasSuccess = Boolean(
+          configuredTriggers["hudson.plugins.emailext.plugins.trigger.SuccessTrigger"],
+        );
+        if (hasFailure && hasSuccess && _hasMeta) summary.email_cond = "custom";
+        else if (hasFailure && hasSuccess) summary.email_cond = "always";
+        else if (hasSuccess) summary.email_cond = "success";
+        else summary.email_cond = "failed";
+      }
+    } else {
+      const mailer = publishers["hudson.tasks.Mailer"] as
+        | Record<string, unknown>
+        | undefined;
+      if (mailer) {
+        const rec = mailer["recipients"];
+        if (typeof rec === "string" && rec.trim()) {
+          summary.email = rec.trim() + " (Built-in Mailer)";
+        }
+      }
+    }
+  }
+
+  function readProperties(node: Record<string, unknown>): void {
+    const properties = node["properties"] as Record<string, unknown> | undefined;
+    if (!properties) return;
+    const paramsProp = properties["hudson.model.ParametersDefinitionProperty"] as
+      | Record<string, unknown>
+      | undefined;
+    if (!paramsProp) return;
+    const defs = paramsProp["parameterDefinitions"] as Record<string, unknown> | undefined;
+    if (!defs) return;
+    const raw = defs["hudson.model.StringParameterDefinition"];
+    const items: Array<Record<string, unknown>> = Array.isArray(raw)
+      ? (raw as Array<Record<string, unknown>>)
+      : raw
+      ? [raw as Record<string, unknown>]
+      : [];
+    summary.params = items
+      .map((d) => ({
+        name: typeof d["name"] === "string" ? d["name"] : "",
+        defaultValue: typeof d["defaultValue"] === "string" ? d["defaultValue"] : "",
+        description: typeof d["description"] === "string" ? d["description"] : undefined,
+      }))
+      .filter((d) => d.name.length > 0);
+  }
 
     // 1. Schedule
-    const triggers = project["triggers"] as Record<string, unknown> | undefined;
-    if (triggers) {
-      const timer = triggers["hudson.triggers.TimerTrigger"] as
-        | Record<string, unknown>
-        | undefined;
-      if (timer) {
-        const spec = timer["spec"];
-        if (typeof spec === "string" && spec.trim()) {
-          summary.schedule = spec.trim();
-        }
-      }
-    }
+    readTriggers(root);
 
     // 2. Email publisher
-    const publishers = project["publishers"] as Record<string, unknown> | undefined;
-    if (publishers) {
-      const extMail = publishers[
-        "hudson.plugins.emailext.ExtendedEmailPublisher"
-      ] as Record<string, unknown> | undefined;
-
-      if (extMail) {
-        const rl = extMail["recipientList"];
-        if (typeof rl === "string" && rl.trim()) {
-          summary.email = rl.trim();
-        }
-
-        // Infer email condition from triggers
-        const configuredTriggers = extMail["configuredTriggers"] as
-          | Record<string, unknown>
-          | undefined;
-        // Presend script / filter metadata — read before cond so we can detect "custom".
-        const presendScript = extMail["presendScript"];
-        let _hasMeta = false;
-        if (typeof presendScript === "string") {
-          const meta = parseEmailFilterMetadata(presendScript);
-          if (meta) {
-            _hasMeta = true;
-            const kws = normalizeKeywords(meta.keywords);
-            const rx = normalizeRegex(meta.regex);
-            if (kws.length > 0) summary.email_keywords = kws.join(", ");
-            if (rx) summary.email_regex = rx;
-          }
-        }
-
-        if (configuredTriggers) {
-          const hasFailure = Boolean(
-            configuredTriggers["hudson.plugins.emailext.plugins.trigger.FailureTrigger"],
-          );
-          const hasSuccess = Boolean(
-            configuredTriggers["hudson.plugins.emailext.plugins.trigger.SuccessTrigger"],
-          );
-          if (hasFailure && hasSuccess && _hasMeta) summary.email_cond = "custom";
-          else if (hasFailure && hasSuccess) summary.email_cond = "always";
-          else if (hasSuccess) summary.email_cond = "success";
-          else summary.email_cond = "failed";
-        }
-      } else {
-        // Built-in Mailer fallback
-        const mailer = publishers["hudson.tasks.Mailer"] as
-          | Record<string, unknown>
-          | undefined;
-        if (mailer) {
-          const rec = mailer["recipients"];
-          if (typeof rec === "string" && rec.trim()) {
-            summary.email = rec.trim() + " (Built-in Mailer)";
-          }
-        }
-      }
-    }
+    readPublishers(root);
 
     // 3. Description
-    const desc = project["description"];
+    const desc = root["description"];
     if (typeof desc === "string" && desc.trim()) summary.description = desc.trim();
 
-    // 4. Assigned node (empty when the job can roam)
-    const assigned = project["assignedNode"];
-    if (typeof assigned === "string" && assigned.trim()) summary.node = assigned.trim();
+    if (project) {
+      // 4. Assigned node (only for freestyle)
+      const assigned = project["assignedNode"];
+      if (typeof assigned === "string" && assigned.trim()) summary.node = assigned.trim();
 
-    // 5. Shell command (first hudson.tasks.Shell builder). Split a leading
-    //    `cd <dir> && <rest>` back into chdir + shell_cmd so the edit form shows
-    //    the same two fields the create form used.
-    const builders = project["builders"] as Record<string, unknown> | undefined;
-    if (builders) {
-      let shell = builders["hudson.tasks.Shell"] as Record<string, unknown> | undefined;
-      // Multiple shell builders parse as an array — take the first.
-      if (Array.isArray(shell)) shell = shell[0] as Record<string, unknown> | undefined;
-      const cmd = shell?.["command"];
-      if (typeof cmd === "string" && cmd.length > 0) {
-        // Match both the new quoted form `cd "..." && cmd` and the legacy
-        // unquoted form `cd /path && cmd`. Quotes (if present) are stripped.
-        const m = cmd.match(/^cd\s+"(.+?)"\s+&&\s+([\s\S]*)$/) ??
-          cmd.match(/^cd\s+(\S+)\s+&&\s+([\s\S]*)$/);
-        if (m) {
-          summary.chdir = m[1]!.trim();
-          summary.shell_cmd = m[2]!;
-        } else {
-          summary.shell_cmd = cmd;
+      // 5. Shell command (only for freestyle)
+      const builders = project["builders"] as Record<string, unknown> | undefined;
+      if (builders) {
+        let shell = builders["hudson.tasks.Shell"] as Record<string, unknown> | undefined;
+        if (Array.isArray(shell)) shell = shell[0] as Record<string, unknown> | undefined;
+        const cmd = shell?.["command"];
+        if (typeof cmd === "string" && cmd.length > 0) {
+          const m = cmd.match(/^cd\s+"(.+?)"\s+&&\s+([\s\S]*)$/) ??
+            cmd.match(/^cd\s+(\S+)\s+&&\s+([\s\S]*)$/);
+          if (m) {
+            summary.chdir = m[1]!.trim();
+            summary.shell_cmd = m[2]!;
+          } else {
+            summary.shell_cmd = cmd;
+          }
+        }
+      }
+    } else if (flowDef) {
+      // Pipeline: extract agent from script for display.
+      const definition = flowDef["definition"] as Record<string, unknown> | undefined;
+      if (definition) {
+        const scriptStr = typeof definition["script"] === "string" ? (definition["script"] as string) : "";
+        if (scriptStr) {
+          const agent = scriptStr.match(/agent\s+\{?[^}]*label\s+(['"])([^'"]+)\1/);
+          if (agent) summary.node = agent[2]!;
         }
       }
     }
 
-    // 6. Build parameters (hudson.model.ParametersDefinitionProperty)
-    const properties = project["properties"] as Record<string, unknown> | undefined;
-    if (properties) {
-      const paramsProp = properties["hudson.model.ParametersDefinitionProperty"] as
-        | Record<string, unknown>
-        | undefined;
-      if (paramsProp) {
-        const defs = paramsProp["parameterDefinitions"] as Record<string, unknown> | undefined;
-        if (defs) {
-          const raw = defs["hudson.model.StringParameterDefinition"];
-          const items: Array<Record<string, unknown>> = Array.isArray(raw)
-            ? (raw as Array<Record<string, unknown>>)
-            : raw
-            ? [raw as Record<string, unknown>]
-            : [];
-          summary.params = items
-            .map((d) => ({
-              name: typeof d["name"] === "string" ? d["name"] : "",
-              defaultValue: typeof d["defaultValue"] === "string" ? d["defaultValue"] : "",
-              description: typeof d["description"] === "string" ? d["description"] : undefined,
-            }))
-            .filter((d) => d.name.length > 0);
-        }
-      }
-    }
+    // 6. Build parameters (shared between freestyle and pipeline)
+    readProperties(root);
 
   return summary;
 }

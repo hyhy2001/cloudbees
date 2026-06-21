@@ -348,6 +348,107 @@ export const HELP_FACTS: HelpFact[] = [
     ]
   },
   {
+    "id": "concept.pipeline",
+    "kind": "concept",
+    "title": "pipeline job",
+    "terms": [
+      "pipeline",
+      "pipeline job",
+      "what is a pipeline",
+      "pipeline script",
+      "declarative pipeline",
+      "jenkins pipeline",
+      "workflow job",
+      "pipeline concept",
+      "pipeline vs freestyle"
+    ],
+    "answer": "A Pipeline job runs a Jenkins Pipeline script (Declarative or Scripted) instead of individual build steps. Use 'bee job create pipeline' to create one from a .groovy file or inline script. Parameters defined in the script are automatically detected.",
+    "commands": [
+      "bee job create pipeline <name> --script <file>",
+      "bee job update pipeline <name> --script <file>"
+    ],
+    "related": [
+      "bee job create freestyle",
+      "bee job run <name>",
+      "bee job list"
+    ]
+  },
+  {
+    "id": "concept.create-pipeline",
+    "kind": "concept",
+    "title": "create or update pipeline",
+    "terms": [
+      "create pipeline",
+      "update pipeline",
+      "pipeline create",
+      "how to create a pipeline",
+      "how to make a pipeline",
+      "pipeline from file",
+      "import pipeline",
+      "pipeline script file",
+      "new pipeline job"
+    ],
+    "answer": "Create a Pipeline with 'bee job create pipeline <name> --script <file>'. The --script flag accepts a file path or inline Groovy string. Use --node to override the agent, --schedule for cron, --email for notifications, and --param-def to add or override build parameters. The script is validated against the Jenkins server before creation.",
+    "commands": [
+      "bee job create pipeline <name> --script pipe.groovy",
+      "bee job create pipeline <name> --script 'pipeline { agent any; stages { ... } }'",
+      "bee job create pipeline <name> --script pipe.groovy --node linux --schedule \"H 8 * * *\"",
+      "bee job update pipeline <name> --script pipe.groovy"
+    ],
+    "related": [
+      "bee job create freestyle",
+      "bee job list",
+      "bee job run <name>"
+    ]
+  },
+  {
+    "id": "concept.pipeline-params",
+    "kind": "concept",
+    "title": "pipeline build parameters",
+    "terms": [
+      "pipeline parameters",
+      "pipeline param-def",
+      "auto detect parameters",
+      "parameters directive",
+      "pipeline param from script",
+      "pipeline parameters block",
+      "extract parameters from pipeline",
+      "parameters in pipeline script"
+    ],
+    "answer": "When creating a Pipeline job, parameters declared in the script's 'parameters {}' block are automatically detected and configured. Use --param-def to add extra parameters or override defaults. All types are supported: string, choice, booleanParam, text, and password.",
+    "commands": [
+      "bee job create pipeline <name> --script pipe.groovy",
+      "bee job create pipeline <name> --script pipe.groovy --param-def EXTRA=value"
+    ],
+    "related": [
+      "bee job run <name> -p KEY=value",
+      "bee job update pipeline <name>"
+    ]
+  },
+  {
+    "id": "troubleshooting.pipeline-validate",
+    "kind": "troubleshooting",
+    "title": "pipeline validation error",
+    "terms": [
+      "pipeline validation",
+      "invalid pipeline script",
+      "pipeline syntax error",
+      "pipeline validate failed",
+      "script not valid",
+      "pipeline error",
+      "validation failed",
+      "pipeline compile error",
+      "pipeline script error"
+    ],
+    "answer": "The pipeline script is validated against the Jenkins Pipeline Validation API before creation. If validation fails, fix the script syntax and try again. Common issues: missing 'pipeline' block, unmatched braces, invalid agent, or missing 'stages' section.",
+    "commands": [
+      "bee job create pipeline <name> --script pipe.groovy"
+    ],
+    "related": [
+      "bee job update pipeline <name> --script pipe.groovy"
+    ]
+  },
+  {
     "id": "concept.mine-vs-all",
     "kind": "concept",
     "title": "Mine vs tracked items",
@@ -427,6 +528,7 @@ export const HELP_FACTS: HelpFact[] = [
     "commands": [
       "bee job create folder <name>",
       "bee job create freestyle <name> --folder <path>",
+      "bee job create pipeline <name> --folder <path> --script <file>",
       "bee job move <source> <folder>"
     ],
     "related": [
@@ -473,11 +575,12 @@ export const HELP_FACTS: HelpFact[] = [
       "how to pass parameters",
       "what are build parameters"
     ],
-    "answer": "Pass build parameters to a job run with -p KEY=value (repeatable). Define parameters on the job itself with --param-def NAME=default when creating or updating.",
+    "answer": "Pass build parameters to a job run with -p KEY=value (repeatable). Define parameters on the job itself with --param-def NAME=default when creating or updating. For Pipeline jobs, parameters declared in the script are automatically detected.",
     "commands": [
       "bee job run <name> -p KEY=value",
       "bee job run <name> -p KEY=value -p OTHER=value",
-      "bee job create freestyle <name> --param-def VERSION=latest"
+      "bee job create freestyle <name> --param-def VERSION=latest",
+      "bee job create pipeline <name> --script pipe.groovy --param-def EXTRA=value"
     ],
     "related": [
       "bee job update freestyle <name> --param-def KEY=default",
@@ -677,10 +780,11 @@ export const HELP_FACTS: HelpFact[] = [
       "build task",
       "what does a job do"
     ],
-    "answer": "A job is a build configuration on the controller — a freestyle shell job, a folder, or a pipeline. You create jobs, run them to produce builds, and check their status. List your jobs with bee job list.",
+    "answer": "A job is a build configuration on the controller — a freestyle shell job, a folder, or a pipeline. You create jobs, run them to produce builds, and check their status. List your jobs with bee job list. Pipelines use a Groovy script instead of individual build steps.",
     "commands": [
       "bee job list",
       "bee job create freestyle <name>",
+      "bee job create pipeline <name> --script <file>",
       "bee job run <name>"
     ],
     "related": [

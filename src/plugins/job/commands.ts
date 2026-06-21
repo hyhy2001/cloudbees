@@ -24,16 +24,19 @@ import {
   waitForBuild,
   createFreestyleJob,
   createFolder,
+  createPipelineJob,
+  updateJobFreestyle,
+  updatePipelineJob,
   copyJob,
   moveJob,
   deleteJob,
   getJobConfigSummary,
-  updateJobFreestyle,
   approveAgentForFolder,
   listControlledAgents,
   removeAgentFromFolder,
 } from "./service";
 import type { StringParamDef } from "./types";
+import { existsSync, readFileSync } from "fs";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -284,6 +287,89 @@ export function registerJobCommands(ctx: PluginContext): void {
         process.exit(1);
       }
     });
+
+  createGrp
+    .command("pipeline")
+    .description("Create a Pipeline job from a Declarative Pipeline script (inline or .groovy file) with optional schedule, email, parameters, and node assignment")
+    .argument("<name>", "Job name")
+    .option("--script <script>", "Pipeline script (inline Groovy string, or path to a .groovy file)")
+    .option("--description <desc>", "Job description", "")
+    .option("--node <node>", "Restrict this job to a specific node or label (overrides agent in script)")
+    .option("--schedule <cron>", "Cron schedule to auto-trigger builds (e.g., 'H 8 * * *')")
+    .option("--email <emails>", "Email addresses to notify on build result (comma-separated)")
+    .option(
+      "--email-cond <cond>",
+      "When to send email notification: failed | success | always | custom",
+      "failed",
+    )
+    .option(
+      "--email-keyword <kw>",
+      "Send email only if build log contains this keyword (repeatable)",
+      (val: string, prev: string[]) => prev.concat([val]),
+      [] as string[],
+    )
+    .option("--email-regex <regex>", "Send email only if build log matches this regex")
+    .option("--folder <path>", "Create job inside this parent folder (e.g. 'team/backend')")
+    .option(
+      "--param-def <name=default>",
+      "Add a build parameter (repeatable, auto-detected from script; use to override defaults)",
+      (val: string, prev: string[]) => prev.concat([val]),
+      [] as string[],
+    )
+    .action(
+      async (
+        name: string,
+        opts: {
+          script?: string;
+          description: string;
+          node?: string;
+          schedule?: string;
+          email?: string;
+          emailCond: string;
+          emailKeyword: string[];
+          emailRegex?: string;
+          folder?: string;
+          paramDef: string[];
+        },
+      ) => {
+        try {
+          const client = await ctx.getClient({ useController: true });
+          const folder = opts.folder || null;
+
+          // Read script: file path or inline string.
+          let script = opts.script ?? "";
+          if (script && existsSync(script)) {
+            script = readFileSync(script, "utf-8");
+          }
+          if (!script.trim()) {
+            printError("Pipeline script is required. Provide --script <file|inline>.");
+            process.exit(1);
+          }
+
+          await createPipelineJob(client, name, {
+            desc: opts.description,
+            script,
+            node: opts.node ?? null,
+            schedule: opts.schedule ?? null,
+            email: opts.email ?? null,
+            emailCond: opts.emailCond,
+            emailKeywords: opts.emailKeyword.length > 0 ? opts.emailKeyword : null,
+            emailRegex: opts.emailRegex ?? null,
+            params: parseParamDefs(opts.paramDef),
+          }, folder);
+
+          const qualified = folder ? `${folder}/${name}` : name;
+          trackResource("job", qualified, profile, client.baseUrl, dbPath);
+          const nodeMsg = opts.node ? ` on node '${opts.node}'` : "";
+          printSuccess(`OK Pipeline job '${qualified}' created.${nodeMsg}`);
+          const url = `${client.baseUrl.replace(/\/$/, "")}/job/${qualified.split("/").join("/job/")}/`;
+          printMessage(`  Link: ${url}`);
+        } catch (err) {
+          printError(String(err instanceof Error ? err.message : err), err);
+          process.exit(1);
+        }
+      },
+    );
 
   // ── delete ────────────────────────────────────────────────────────────────
   grp
@@ -747,6 +833,97 @@ export function registerJobCommands(ctx: PluginContext): void {
           if (opts.node === "") {
             printWarning(`WARN Node cleared — job will run on any available agent.`);
           }
+        } catch (err) {
+          printError(String(err instanceof Error ? err.message : err), err);
+          process.exit(1);
+        }
+      },
+    );
+
+  updateGrp
+    .command("pipeline")
+    .description("Update / reconfigure an existing Pipeline job: replace the script, change node assignment, schedule, email, or parameters")
+    .argument("<name>", "Job name")
+    .option("--script <script>", "Replace pipeline script (inline string or .groovy file path)")
+    .option("--description <desc>", "Update job description")
+    .option("--node <node>", "Change node assignment (overrides agent in script, or '' to clear)")
+    .option("--schedule <cron>", "Change cron build schedule (e.g., 'H 8 * * *', or '' to remove)")
+    .option("--email <emails>", "Add or change email notification recipients, or '' to remove")
+    .option(
+      "--email-cond <cond>",
+      "Change when to send email notification: failed | success | always | custom",
+    )
+    .option(
+      "--email-keyword <kw>",
+      "Replace email keyword filters (repeatable)",
+      (val: string, prev: string[]) => prev.concat([val]),
+      [] as string[],
+    )
+    .option("--email-regex <regex>", "Replace email regex filter (case-insensitive)")
+    .option("--clear-email-keywords", "Remove all email keyword filters from job", false)
+    .option("--clear-email-regex", "Remove the email regex filter from job", false)
+    .option(
+      "--param-def <name=default>",
+      "Add or replace build parameters (repeatable, NAME or NAME=default)",
+      (val: string, prev: string[]) => prev.concat([val]),
+      [] as string[],
+    )
+    .option("--clear-params", "Remove all build parameters from job", false)
+    .action(
+      async (
+        name: string,
+        opts: {
+          script?: string;
+          description?: string;
+          node?: string;
+          schedule?: string;
+          email?: string;
+          emailCond?: string;
+          emailKeyword: string[];
+          emailRegex?: string;
+          clearEmailKeywords: boolean;
+          clearEmailRegex: boolean;
+          paramDef: string[];
+          clearParams: boolean;
+        },
+      ) => {
+        try {
+          const client = await ctx.getClient({ useController: true });
+
+          // Read script: file path or inline string.
+          let script: string | null = null;
+          if (opts.script != null) {
+            script = opts.script;
+            if (script && existsSync(script)) {
+              script = readFileSync(script, "utf-8");
+            }
+            if (script != null && !script.trim()) {
+              printError("Pipeline script cannot be empty. Provide a valid script or omit --script.");
+              process.exit(1);
+            }
+          }
+
+          const emailKeywordsInput =
+            opts.emailKeyword.length > 0 ? opts.emailKeyword : null;
+          const paramsInput =
+            opts.paramDef.length > 0 ? parseParamDefs(opts.paramDef) : null;
+
+          await updatePipelineJob(client, name, {
+            desc: opts.description ?? null,
+            script,
+            node: opts.node ?? null,
+            schedule: opts.schedule ?? null,
+            email: opts.email ?? null,
+            emailCond: opts.emailCond ?? null,
+            emailKeywords: emailKeywordsInput,
+            emailRegex: opts.emailRegex ?? null,
+            clearEmailKeywords: opts.clearEmailKeywords,
+            clearEmailRegex: opts.clearEmailRegex,
+            params: paramsInput,
+            clearParams: opts.clearParams,
+          });
+
+          printSuccess(`OK Pipeline job '${name}' updated.`);
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
           process.exit(1);

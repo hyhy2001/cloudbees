@@ -12,7 +12,7 @@
 import { escapeXml, xmlParser } from "../../domain/xml";
 import { buildEmailPublisherBlock } from "../../domain/email";
 import { buildTimerTriggerBlock } from "../../domain/schedule";
-import type { StringParamDef } from "./types";
+import type { StringParamDef, PipelineXmlOpts } from "./types";
 
 /**
  * Build the `<properties>` block for a job. When `params` is empty, returns the
@@ -137,6 +137,52 @@ export function buildFolderXml(desc = ""): string {
     "  <healthMetrics/>",
     "</com.cloudbees.hudson.plugins.folder.Folder>",
   ];
+  return lines.join("\n");
+}
+
+/**
+ * Build a Pipeline (WorkflowJob) config.xml.
+ * Uses CpsFlowDefinition (inline script) with optional publishers and triggers.
+ */
+export function buildPipelineXml(opts: PipelineXmlOpts): string {
+  const {
+    desc = "",
+    script = "pipeline { agent any; stages { stage('Build') { steps { echo 'hello' } } } }",
+    schedule = null,
+    email = null,
+    emailCond = "failed",
+    emailKeywords = null,
+    emailRegex = null,
+    params = null,
+  } = opts;
+
+  const lines: string[] = [
+    "<?xml version='1.1' encoding='UTF-8'?>",
+    '<flow-definition plugin="workflow-job@2.40">',
+    `  <description>${escapeXml(desc)}</description>`,
+    "  <keepDependencies>false</keepDependencies>",
+    buildParametersProperty(params, "  "),
+    `  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.90">`,
+    `    <script>${escapeXml(script)}</script>`,
+    "    <sandbox>true</sandbox>",
+    "  </definition>",
+    "  <triggers>",
+  ];
+
+  const timer = buildTimerTriggerBlock(schedule, "    ");
+  if (timer) lines.push(timer);
+
+  lines.push("  </triggers>");
+  lines.push("  <publishers>");
+
+  if (email) {
+    lines.push(buildEmailPublisherBlock(email, emailCond, emailKeywords, emailRegex, "    "));
+  }
+
+  lines.push("  </publishers>");
+  lines.push("  <disabled>false</disabled>");
+  lines.push("</flow-definition>");
+
   return lines.join("\n");
 }
 

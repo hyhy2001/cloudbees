@@ -28,10 +28,10 @@ async function runCli(args: string[]): Promise<{ code: number; out: string }> {
 }
 
 describe("job create help surface", () => {
-  test("create group has no 'pipeline'", async () => {
+  test("create group has 'pipeline' subcommand", async () => {
     const { code, out } = await runCli(["job", "create", "--help"]);
     expect(code).toBe(0);
-    expect(out.toLowerCase()).not.toContain("pipeline");
+    expect(out.toLowerCase()).toContain("pipeline");
   });
 
   test("create freestyle exposes email filter options", async () => {
@@ -43,10 +43,10 @@ describe("job create help surface", () => {
 });
 
 describe("job update help surface", () => {
-  test("update group has no 'pipeline'", async () => {
+  test("update group has 'pipeline' subcommand", async () => {
     const { code, out } = await runCli(["job", "update", "--help"]);
     expect(code).toBe(0);
-    expect(out.toLowerCase()).not.toContain("pipeline");
+    expect(out.toLowerCase()).toContain("pipeline");
   });
 
   test("update freestyle exposes email filter + clear flags", async () => {

@@ -42,15 +42,18 @@ import {
   deleteJob,
   createFreestyleJob,
   createFolder,
+  createPipelineJob,
+  updateJobFreestyle,
+  updatePipelineJob,
+  copyJob,
+  moveJob,
   streamLastBuildLog,
   streamBuildLog,
   getBuildHistory,
-  updateJobFreestyle,
-  copyJob,
-  moveJob,
   listControlledAgents,
   approveAgentForFolder,
   removeControlledAgentGrant,
+  getPipelineScript,
 } from "./service";
 import type { ControlledAgentGrant } from "./service";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
@@ -315,6 +318,95 @@ const LogViewer: FC<LogViewerProps> = ({ ctx, jobName, onClose }) => {
   );
 };
 
+// ─── Script viewer overlay (pipeline script) ──────────────────────────────────
+
+interface ScriptViewerProps {
+  ctx: TuiContext;
+  jobName: string;
+  onClose: () => void;
+}
+
+const ScriptViewer: FC<ScriptViewerProps> = ({ ctx, jobName, onClose }) => {
+  const [script, setScript] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const { rows: termRows, columns: termCols } = useDimensions();
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        const s = await getPipelineScript(client, jobName);
+        if (!cancelled) setScript(s ?? "(no script found)");
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ctx, jobName]);
+
+  const lines = (script ?? "").split("\n");
+  const contentHeight = Math.max(5, termRows - 8);
+  const effectiveTop = Math.min(scrollTop, Math.max(0, lines.length - contentHeight));
+  const visible = lines.slice(effectiveTop, effectiveTop + contentHeight);
+  const canScrollUp = effectiveTop > 0;
+  const canScrollDown = effectiveTop + contentHeight < lines.length;
+
+  const scrollBy = useCallback((delta: number) => {
+    setScrollTop((prev) => {
+      const max = Math.max(0, lines.length - contentHeight);
+      return Math.max(0, Math.min(prev + delta, max));
+    });
+  }, [lines.length, contentHeight]);
+
+  useEffect(() => {
+    ctx.setInputCaptured(true);
+    return () => ctx.setInputCaptured(false);
+  }, [ctx]);
+
+  useKeymap(
+    [
+      { key: "Esc", label: "back", group: "nav", run: onClose },
+      { key: "down",   label: "↓",    group: "nav", hidden: true, when: () => canScrollDown, run: () => scrollBy(1) },
+      { key: "up",     label: "↑",    group: "nav", hidden: true, when: () => canScrollUp,   run: () => scrollBy(-1) },
+      { key: "ctrl+f", label: "pgdn", group: "nav", hidden: true, when: () => canScrollDown, run: () => scrollBy(contentHeight) },
+      { key: "ctrl+b", label: "pgup", group: "nav", hidden: true, when: () => canScrollUp,   run: () => scrollBy(-contentHeight) },
+      { key: "Home",   label: "top",  group: "nav", hidden: true, run: () => setScrollTop(0) },
+      { key: "End",    label: "bottom", group: "nav", hidden: true, run: () => setScrollTop(Math.max(0, lines.length - contentHeight)) },
+    ],
+    { isActive: true },
+  );
+
+  return (
+    <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} height={termRows - 4}>
+      <Text>
+        {SYM.arrow} Pipeline Script: <Text bold>{jobName}</Text>
+      </Text>
+      <Box flexDirection="row" marginTop={1} flexGrow={1}>
+        <Box flexDirection="column" flexGrow={1}>
+          {error ? (
+            <Text color={THEME.error}>{SYM.fail} {error}</Text>
+          ) : script === null ? (
+            <Text color={THEME.dim}>Loading…</Text>
+          ) : (
+            visible.map((line, i) => (
+              <Text key={i} color={THEME.normal} wrap="truncate-end">
+                {(effectiveTop + i + 1).toString().padStart(4, " ")}  {line || " "}
+              </Text>
+            ))
+          )}
+        </Box>
+      </Box>
+      <Text color={THEME.dim}>
+        {lines.length > 0
+          ? `lines ${effectiveTop + 1}–${Math.min(effectiveTop + contentHeight, lines.length)}/${lines.length}${scrollTop > 0 && effectiveTop + contentHeight >= lines.length ? " [end]" : ""} · `
+          : " "}↑/↓ scroll · Home/End top/bottom · Esc back
+      </Text>
+    </Box>
+  );
+};
+
 // ─── Jobs screen ─────────────────────────────────────────────────────────────
 
 const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
@@ -335,6 +427,8 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   // Overlays local to this tab.
   const [logJob, setLogJob] = useState<string | null>(null);
+  // Pipeline script viewer overlay.
+  const [scriptJob, setScriptJob] = useState<string | null>(null);
   // Job whose build parameters are being edited (ParamListEditor overlay).
   const [paramJob, setParamJob] = useState<string | null>(null);
   // Job whose schedule is being edited (ScheduleBuilder overlay). Holds the
@@ -798,11 +892,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           title={`${SYM.gear} Create New Job${currentFolder ? ` in /${currentFolder}` : ""}`}
           fields={[
             { name: "name", label: "Job Name", required: true, hint: "unique id" },
-            { name: "job_type", label: "Type", options: ["freestyle", "folder"], initial: "freestyle", hint: "freestyle/folder" },
+            { name: "job_type", label: "Type", options: ["freestyle", "folder", "pipeline"], initial: "freestyle", hint: "freestyle/folder/pipeline" },
             { name: "desc", label: "Description" },
             { name: "shell_cmd", label: "Shell Command", placeholder: "freestyle only", hint: "shell to run" },
             { name: "chdir", label: "Working Dir", placeholder: "cd <dir> && before command", path: true, hint: "Tab completes local FS" },
             { name: "node", label: "Node/Label", options: nodeOptions, searchable: true, initial: NONE_OPTION, hint: "where it runs" },
+            { name: "script_file", label: "Pipeline Script", placeholder: "path to .groovy file", path: true, hint: "Tab completes local FS" },
           ]}
           onResult={resolve}
         />
@@ -816,6 +911,38 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       const qualified = currentFolder ? `${currentFolder}/${result.name}` : result.name;
       if (jobType === "folder") {
         await createFolder(client, result.name, result.desc ?? "", currentFolder);
+        trackResource("job", qualified, ctx.profile, client.baseUrl, ctx.dbPath);
+        ctx.notify(`${SYM.ok} Created folder: ${qualified}`, "success");
+        const leaf = currentFolder ? qualified.slice(currentFolder.length + 1) : qualified;
+        ctx.logCommand(`bee job create folder ${leaf}${currentFolder ? ` --folder "${currentFolder}"` : ""}${result.desc ? ` --description "${result.desc}"` : ""}`);
+      } else if (jobType === "pipeline") {
+        // Read script file.
+        const scriptFile = result.script_file ?? "";
+        if (!scriptFile) {
+          ctx.notify(`${SYM.fail} Pipeline script file is required`, "error");
+          return;
+        }
+        let script: string;
+        try {
+          const { existsSync, readFileSync } = await import("fs");
+          if (!existsSync(scriptFile)) {
+            ctx.notify(`${SYM.fail} Script file not found: ${scriptFile}`, "error");
+            return;
+          }
+          script = readFileSync(scriptFile, "utf-8");
+        } catch (err) {
+          ctx.notify(`${SYM.fail} Could not read script file: ${err instanceof Error ? err.message : String(err)}`, "error");
+          return;
+        }
+        await createPipelineJob(client, result.name, {
+          desc: result.desc ?? "",
+          script,
+          node: result.node && result.node !== NONE_OPTION ? result.node : null,
+        }, currentFolder);
+        trackResource("job", qualified, ctx.profile, client.baseUrl, ctx.dbPath);
+        ctx.notify(`${SYM.ok} Created pipeline: ${qualified}`, "success");
+        const leaf = currentFolder ? qualified.slice(currentFolder.length + 1) : qualified;
+        ctx.logCommand(`bee job create pipeline ${leaf}${currentFolder ? ` --folder "${currentFolder}"` : ""}${result.desc ? ` --description "${result.desc}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node "${result.node}"` : ""} --script "${scriptFile}"`);
       } else {
         await createFreestyleJob(client, result.name, {
             desc: result.desc ?? "",
@@ -823,17 +950,15 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             chdir: result.chdir || null,
             node: result.node && result.node !== NONE_OPTION ? result.node : null,
           }, currentFolder);
+        trackResource("job", qualified, ctx.profile, client.baseUrl, ctx.dbPath);
+        if (!result.node || result.node === NONE_OPTION) {
+          ctx.notify(`${SYM.warn} Job created with no node assigned — will run on any available agent`, "warning");
+        } else {
+          ctx.notify(`${SYM.ok} Created freestyle: ${qualified}`, "success");
+        }
+        const leaf = currentFolder ? qualified.slice(currentFolder.length + 1) : qualified;
+        ctx.logCommand(`bee job create freestyle ${leaf}${currentFolder ? ` --folder "${currentFolder}"` : ""}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node "${result.node}"` : ""}`);
       }
-      trackResource("job", qualified, ctx.profile, client.baseUrl, ctx.dbPath);
-      if (jobType === "freestyle" && (!result.node || result.node === NONE_OPTION)) {
-        ctx.notify(`${SYM.warn} Job created with no node assigned — will run on any available agent`, "warning");
-      } else {
-        ctx.notify(`${SYM.ok} Created ${jobType}: ${qualified}`, "success");
-      }
-      const leaf = currentFolder ? qualified.slice(currentFolder.length + 1) : qualified;
-      ctx.logCommand(jobType === "folder"
-        ? `bee job create folder ${leaf}${currentFolder ? ` --folder "${currentFolder}"` : ""}${result.desc ? ` --description "${result.desc}"` : ""}`
-        : `bee job create freestyle ${leaf}${currentFolder ? ` --folder "${currentFolder}"` : ""}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node "${result.node}"` : ""}`);
       void refetch();
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
@@ -843,6 +968,55 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const editJob = useCallback(
     async (job: JobDTO): Promise<false | void> => {
       const s = summary;
+      if (job.jobType === "PL") {
+        // Pipeline edit: script file (optional) + node + description.
+        const result = await ctx.openModal<Record<string, string>>({
+          id: "edit-pipeline",
+          render: (resolve) => (
+            <FormModal
+              title={`${SYM.gear} Edit Pipeline: ${job.name}`}
+              fields={[
+                { name: "desc", label: "Description", initial: s?.description || job.description || "", hint: "free text" },
+                { name: "script_file", label: "Pipeline Script", path: true, hint: "leave blank to keep current" },
+                { name: "node", label: "Node/Label", options: nodeOptions, searchable: true, initial: s?.node && s.node !== "-" ? s.node : NONE_OPTION, hint: "where it runs" },
+              ]}
+              onResult={resolve}
+            />
+          ),
+        });
+        if (!result) return false;
+        try {
+          let script: string | null = null;
+          const scriptFile = result.script_file ?? "";
+          if (scriptFile) {
+            const { existsSync, readFileSync } = await import("fs");
+            if (!existsSync(scriptFile)) {
+              ctx.notify(`${SYM.fail} Script file not found: ${scriptFile}`, "error");
+              return false;
+            }
+            script = readFileSync(scriptFile, "utf-8");
+          }
+
+          const client = await ctx.getClient({ useController: true });
+          await updatePipelineJob(client, job.name, {
+            desc: result.desc ?? null,
+            script,
+            node: result.node && result.node !== NONE_OPTION ? result.node : null,
+          });
+          ctx.notify(`${SYM.ok} Updated: ${job.name}`, "success");
+          invalidateSummary(job.name);
+          const parts = [`bee job update pipeline ${job.name}`];
+          if (script) parts.push(`--script "${scriptFile}"`);
+          if (result.node !== NONE_OPTION && s?.node !== result.node) parts.push(`--node "${result.node}"`);
+          ctx.logCommand(parts.join(" "));
+          void refetch();
+        } catch (err) {
+          ctx.notify(err instanceof Error ? err.message : String(err), "error");
+        }
+        return false;
+      }
+
+      // Freestyle edit (existing behaviour).
       const result = await ctx.openModal<Record<string, string>>({
         id: "edit-job",
         render: (resolve) => (
@@ -1102,19 +1276,23 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Declarative keymap — the single source for both dispatch and footer hints.
   // `F` (not `f`) toggles auto-refresh so it can't collide with the table's
   // Ctrl+f paging.
+  const isPipeline = current?.jobType === "PL";
+
   const menuActions = useMemo(
     () => [
       // Every action returns false so menuOpen stays true. Overlay actions
-      // (ViewLog/Params/Schedule/Email) set their own state, which early-returns
+      // (ViewLog/Params/Schedule/Email/Script) set their own state, which early-returns
       // the overlay ahead of the menu render; closing the overlay re-renders with
       // menuOpen still set, so Esc lands back on the menu, not the bare list.
       { label: "View Log",   icon: SYM.iconLog,      run: () => { if (current) setLogJob(current.name); return false as const; } },
+      { label: "View Script", icon: SYM.iconEdit,    when: () => current?.jobType === "PL", run: () => { if (current) setScriptJob(current.name); return false as const; } },
       { label: "Run",        icon: SYM.iconPlay,      run: async () => { if (!current) return false as const; return await runJob(current.name); } },
       { label: "Stop",       icon: SYM.iconStop,      run: async () => { if (!current) return false as const; return await stopJob(current); } },
       { label: "Edit",       icon: SYM.iconEdit,      run: async () => { if (!current) return false as const; return await editJob(current); } },
-      { label: "Params",     icon: SYM.iconParams,    run: () => { if (current) setParamJob(current.name); return false as const; } },
-      { label: "Schedule",   icon: SYM.iconSchedule,  run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); return false as const; } },
-      { label: "Email",      icon: SYM.iconEmail,     run: () => {
+      // Params/Schedule/Email use updateJobFreestyle internally — only show for FS.
+      { label: "Params",     icon: SYM.iconParams,    when: () => current?.jobType === "FS", run: () => { if (current) setParamJob(current.name); return false as const; } },
+      { label: "Schedule",   icon: SYM.iconSchedule,  when: () => current?.jobType === "FS", run: () => { if (current) setScheduleJob({ name: current.name, cron: (summary?.schedule && summary.schedule !== "-") ? summary.schedule : "" }); return false as const; } },
+      { label: "Email",      icon: SYM.iconEmail,     when: () => current?.jobType === "FS", run: () => {
         if (!current) return false as const;
         const s = summary;
         const hasEmail = s?.email && s.email !== "-";
@@ -1131,14 +1309,15 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         return false as const;
       } },
       { label: "Delete",     icon: SYM.iconDelete,    danger: true, run: async (): Promise<false | void> => { if (!current) return false; await removeJob(current.name); } },
-      { label: "Move",       icon: SYM.arrow,          when: () => canCreate, run: async () => { if (!current) return false as const; return await moveJobCb(); } },
+      { label: "Move",       icon: SYM.arrow,          when: () => canCreate && !isPipeline, run: async () => { if (!current) return false as const; return await moveJobCb(); } },
+      { label: "Clone",      icon: SYM.iconEdit,      when: () => canCreate && current?.jobType === "FS", run: async () => { if (!current) return false as const; return await cloneJob(); } },
       { label: "Controlled Agents", icon: SYM.iconSchedule, when: () => current?.jobType === "FD", run: (): false => {
         if (!current) return false;
         setAgentsFolder(current.name);
         return false;
       } },
     ],
-    [current, summary, canCreate, runJob, stopJob, editJob, removeJob, moveJobCb],
+    [current, summary, canCreate, isPipeline, runJob, stopJob, editJob, removeJob, moveJobCb, cloneJob],
   );
 
   // Multi-select mode: when rows are checked via Space, the footer collapses to
@@ -1147,15 +1326,14 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   const multi = selected.size > 0;
   const bindings = useMemo<KeyBinding[]>(
     () => [
-      // Enter drills into a container (FD/MB) or opens the action menu for a
-      // Freestyle leaf. Other leaf types (Pipeline, etc.) aren't supported yet,
-      // so refuse with a notice instead of opening an FS-only menu.
-      { key: "Enter", label: isFolder ? "open" : current?.jobType === "FS" ? "menu" : "n/a", group: "action", hidden: multi, when: () => !multi && current !== undefined && !menuOpen, run: () => {
+      // Enter drills into a container (FD/MB) or opens the action menu for
+      // Freestyle / Pipeline leaf jobs. Other leaf types get a notice.
+      { key: "Enter", label: isFolder ? "open" : current?.jobType === "FS" || current?.jobType === "PL" ? "menu" : "n/a", group: "action", hidden: multi, when: () => !multi && current !== undefined && !menuOpen, run: () => {
         if (!current) return;
         if (isFolder) { drillIn(current.name); return; }
-        if (current.jobType === "FS") { setMenuOpen(true); return; }
+        if (current.jobType === "FS" || current.jobType === "PL") { setMenuOpen(true); return; }
         const cls = current.jobClass ? current.jobClass.split(".").at(-1)! : current.jobType;
-        ctx.notify(`${SYM.warn} ${cls} isn't supported yet — only Freestyle and Folder.`, "warning");
+        ctx.notify(`${SYM.warn} ${cls} isn't supported yet — only Freestyle, Pipeline, and Folder.`, "warning");
       } },
       { key: "backspace", label: "up", group: "nav", hidden: multi, when: () => !multi && folderStack.length > 0, run: () => goUp() },
       { key: "ctrl+d", label: "delete", group: "action",
@@ -1186,13 +1364,17 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   // While typing in the search box, the search hook owns input — suspend the
   // action keymap (and the table's nav) so letters don't trigger actions.
-  useKeymap(bindings, { isActive: active && !logJob && !paramJob && !scheduleJob && !emailJob && !menuOpen && !agentsFolder && !search.editing });
+  useKeymap(bindings, { isActive: active && !logJob && !scriptJob && !paramJob && !scheduleJob && !emailJob && !menuOpen && !agentsFolder && !search.editing });
 
   useEffect(() => {
     if (!active) return;
-    if (logJob || paramJob || scheduleJob || emailJob || menuOpen || agentsFolder) ctx.setActiveKeyHints([]);
+    if (logJob || scriptJob || paramJob || scheduleJob || emailJob || menuOpen || agentsFolder) ctx.setActiveKeyHints([]);
     else ctx.setActiveKeyHints(bindingsToHints(bindings));
-  }, [active, logJob, paramJob, scheduleJob, emailJob, menuOpen, agentsFolder, bindings, ctx]);
+  }, [active, logJob, scriptJob, paramJob, scheduleJob, emailJob, menuOpen, agentsFolder, bindings, ctx]);
+
+  if (scriptJob) {
+    return <ScriptViewer ctx={ctx} jobName={scriptJob} onClose={() => setScriptJob(null)} />;
+  }
 
   if (agentsFolder) {
     return (

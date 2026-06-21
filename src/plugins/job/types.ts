@@ -32,6 +32,46 @@ export interface StringParamDef {
   description?: string;
 }
 
+/** Options for createPipelineJob / updatePipelineJob. */
+export interface CreatePipelineOpts {
+  desc?: string;
+  script?: string;
+  node?: string | null;
+  schedule?: string | null;
+  email?: string | null;
+  emailCond?: string;
+  emailKeywords?: string[] | null;
+  emailRegex?: string | null;
+  params?: StringParamDef[] | null;
+}
+
+export interface UpdatePipelineOpts {
+  desc?: string | null;
+  script?: string | null;
+  node?: string | null;
+  schedule?: string | null;
+  email?: string | null;
+  emailCond?: string | null;
+  emailKeywords?: string[] | null;
+  emailRegex?: string | null;
+  clearEmailKeywords?: boolean;
+  clearEmailRegex?: boolean;
+  params?: StringParamDef[] | null;
+  clearParams?: boolean;
+}
+
+export interface PipelineXmlOpts {
+  desc?: string;
+  script?: string;
+  node?: string | null;
+  schedule?: string | null;
+  email?: string | null;
+  emailCond?: string;
+  emailKeywords?: string[] | null;
+  emailRegex?: string | null;
+  params?: StringParamDef[] | null;
+}
+
 /** Options for createFreestyleJob. */
 export interface CreateFreestyleOpts {
   desc?: string;

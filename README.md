@@ -196,9 +196,29 @@ bee job create freestyle <name> \
   [--email-keyword <keyword> ...] \
   [--email-regex "<regex>"]
 
+# Pipeline — Declarative Pipeline script (file or inline)
+bee job create pipeline <name> \
+  --script <file_path|inline_string> \
+  [--description <text>] \
+  [--node <label_or_node>] \
+  [--folder <parent_folder>] \
+  [--schedule "<cron_expr>"] \
+  [--param-def NAME=default ...] \
+  [--email "a@x.com,b@y.com"] \
+  [--email-cond success|failed|always|custom] \
+  [--email-keyword <keyword> ...] \
+  [--email-regex "<regex>"]
+
 # Folder
 bee job create folder <name> [--description <text>] [--folder <parent_folder>]
 ```
+
+Pipeline notes:
+- `--script` accepts a file path (reads the `.groovy` file) or an inline Groovy string.
+- Parameters declared in the script's `parameters {}` block are auto-detected and configured as `ParametersDefinitionProperty`. Use `--param-def` to add extra or override defaults.
+- `--node` overrides the `agent` directive in the script (injects `agent { label '...' }`).
+- The script is validated against the Jenkins Pipeline Validation API before creation.
+- To use inline script: `--script 'pipeline { agent any; stages { stage("Build") { steps { echo "ok" } } } }'`
 
 Update jobs (partial — only the flags you pass change):
 
@@ -217,7 +237,27 @@ bee job update freestyle <name> \
   [--email-regex "<regex>"] \
   [--clear-email-keywords] \
   [--clear-email-regex]
+
+# Pipeline — update script, node, schedule, email, parameters
+bee job update pipeline <name> \
+  [--script <file_path|inline_string>] \
+  [--description <text>] \
+  [--node <label_or_node>] \
+  [--schedule "<cron_expr>|''"] \
+  [--param-def NAME=default ...] \
+  [--clear-params] \
+  [--email "a@x.com,b@y.com|''"] \
+  [--email-cond success|failed|always|custom] \
+  [--email-keyword <keyword> ...] \
+  [--email-regex "<regex>"] \
+  [--clear-email-keywords] \
+  [--clear-email-regex]
 ```
+
+Pipeline update notes:
+- Only the flags you pass are changed; omitted fields stay as-is.
+- The script is validated against the Jenkins Pipeline Validation API before applying.
+- Parameters are re-parsed from the updated script and merged with any `--param-def` overrides.
 
 String parameters:
 
@@ -463,7 +503,7 @@ Edit / Track / Untrack live inside the `Enter` action menu, not as standalone ke
 
 | Tab | Key | Action |
 |---|---|---|
-| Jobs | `Enter` | On a folder: drill in. On a freestyle job: open the action menu |
+| Jobs | `Enter` | On a folder: drill in. On a freestyle or pipeline job: open the action menu |
 | Jobs | `Backspace` | Go up one folder level |
 | Jobs | `c` | Clone the cursor job (freestyle only) |
 | Jobs | `m` | Move the cursor job to another folder (freestyle only) |
@@ -738,7 +778,8 @@ bun test tests/docs-search.test.ts
    └── tui/          Ink framework (app, context, keymap, components, data hooks)
       │
   domain/            pure leaf logic — imports NOTHING from core/ or plugins/
-                     xml.ts (escaping) · email.ts (presend filter) · schedule.ts (cron)
+                      xml.ts (escaping) · email.ts (presend filter) · schedule.ts (cron) ·
+                      pipeline-parse.ts (pipeline script parameter/agent extraction)
 ```
 
 The same `service.ts` layer backs both the CLI command and the TUI screen for each plugin, so the two front-ends can never drift in behaviour — only in presentation.
@@ -856,7 +897,8 @@ cloudbees/
 │   ├── domain/           # Shared leaf logic (never imports core/ or plugins/)
 │   │   ├── xml.ts        # escapeXml
 │   │   ├── email.ts      # email-ext publisher + anti-spam presend filter
-│   │   └── schedule.ts   # cron model + TimerTrigger XML
+│   │   ├── schedule.ts   # cron model + TimerTrigger XML
+│   │   └── pipeline-parse.ts  # pipeline script parameter/agent extraction
 │   ├── plugins/          # auth · controller · job · node · credential · system · foldersplus
 │   │   └── docs/         # bee ask — BM25 retrieval, presenter, LM provider, config
 │   │       └── providers/
