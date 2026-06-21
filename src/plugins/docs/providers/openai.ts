@@ -46,7 +46,7 @@ export class OpenAICompatProvider {
         temperature: 0,
         max_tokens: 256,
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(60000),
     });
 
     if (!response.ok) {
@@ -79,7 +79,7 @@ export class OpenAICompatProvider {
         max_tokens: 256,
         stream: true,
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(60000),
     });
 
     if (!response.ok) {

@@ -32,7 +32,7 @@ const args = process.argv.slice(2);
 const NO_LLM = args.includes("--no-llm");
 const LM_URL_IDX = args.indexOf("--lm-url");
 const LM_URL = LM_URL_IDX >= 0 ? (args[LM_URL_IDX + 1] ?? "http://127.0.0.1:11434") : "http://127.0.0.1:11434";
-const LM_TIMEOUT_MS = 30_000;
+const LM_TIMEOUT_MS = 60_000;
 const REPORT_PATH = join(import.meta.dir, "..", "benchmark-report.md");
 
 // ─── Corpus bootstrap ─────────────────────────────────────────────────────────

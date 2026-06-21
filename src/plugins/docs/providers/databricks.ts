@@ -54,7 +54,7 @@ export class DatabricksOAuthProvider {
         temperature: 0,
         max_tokens: 256,
       }),
-      signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(60000),
     }).catch(() => {
       // Fallback: try OpenAI-compatible path if serving-endpoints 404s
       return fetch(`${base}/v1/chat/completions`, {
@@ -72,7 +72,7 @@ export class DatabricksOAuthProvider {
           temperature: 0,
           max_tokens: 256,
         }),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(60000),
       });
     });
 
