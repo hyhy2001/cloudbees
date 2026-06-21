@@ -683,11 +683,12 @@ The generated file is committed and baked into the binary.
 bun run scripts/benchmark.ts               # Phase A + B (requires LM at http://127.0.0.1:11434)
 bun run scripts/benchmark.ts --no-llm      # Phase A only (fast, no LM needed)
 bun run scripts/benchmark.ts --lm-url http://host:port   # custom LM endpoint
+bun run scripts/benchmark.ts --llm-limit 73               # Phase B on hand-curated queries only
 ```
 
 Results are printed to the console and written to `benchmark-report.md` (gitignored).
 
-**Latest results** (qwen2.5-coder-3b-q4_k_m, 44 LLM queries sampled):
+**Latest results** (qwen2.5-coder-3b-q4_k_m, 72 LLM queries judged):
 
 | Metric | Score |
 |---|---|
@@ -696,12 +697,21 @@ Results are printed to the console and written to `benchmark-report.md` (gitigno
 | BM25 Recall@5 | **99.3%** (913/919) |
 | BM25 MRR | **0.858** |
 | BM25 misses (top-10) | **0** |
-| LLM correct command | **~100%** (sample 30) |
-| LLM hallucination rate | **0.0%** (0/30) |
-| LLM correct command | **97.7%** (43/44) |
-| LLM hallucination rate | **0.0%** (0/44) |
-| LLM has required flag | **100.0%** (5/5) |
-| LLM wrong refusal | **2.3%** (1/44) |
+| LLM correct command | **87.5%** (63/72) |
+| LLM hallucination rate | **2.8%** (2/72) |
+| LLM has required flag | **84.6%** (11/13) |
+| LLM wrong refusal | **1.4%** (1/72) |
+
+LLM by query type:
+
+| Type | N | Correct | No-Hall. | Flag OK |
+|------|---|---|---|--------|
+| natural | 28 | 85.7% | 100.0% | 100.0% |
+| concept | 23 | 87.0% | 91.3% | — |
+| troubleshoot | 9 | 100.0% | 100.0% | — |
+| flag | 12 | 83.3% | 100.0% | 83.3% |
+
+Most "failures" are minor: e.g. "remove an agent" → `bee job remove-agent` (plausible but expected `node.delete`), "login to a specific profile" → `bee auth use` (instead of `auth login --profile`). The 2 hallucinated answers (`bee cred list --all` and `bee help controlled-agent`) are mild — the command concept exists but the specific flag/subcommand is invented. Only 1 query timed out.
 
 Improvements since initial release:
 - BM25 retrieval: Recall@1 **+7.3%**, MRR **+0.054** (promotion layer for flag/cross-plugin/expert routing, synonym map expansion, corpus caching)
