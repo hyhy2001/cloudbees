@@ -29,3 +29,6 @@ ablation-report.md
 
 # LM endpoint config baked into the binary at build time (contains API key)
 bee.lm.json
+
+# agent instruction files (AI-generated, project-local)
+AGENTS.md
