@@ -31,40 +31,42 @@ beforeEach(() => {
 // ─── context.ts ─────────────────────────────────────────────────────────────
 
 describe("formatDocItem — command type", () => {
-  it("renders title in header line", () => {
+  it("renders XML command tag with escaped id", () => {
     const out = formatDocItem(JOB_RUN);
-    expect(out.split("\n")[0]).toContain("bee job run <name>");
+    expect(out).toContain('<command id="bee job run &lt;name&gt;">');
   });
 
-  it("includes description", () => {
+  it("includes description in <desc> tag", () => {
     const out = formatDocItem(JOB_RUN);
+    expect(out).toContain("<desc>");
     expect(out).toContain("Trigger a job build");
   });
 
-  it("includes flags from body", () => {
+  it("includes flags as <flag> elements", () => {
     const out = formatDocItem(JOB_RUN);
-    expect(out).toContain("--wait");
+    expect(out).toContain("<flag>--wait</flag>");
+    expect(out).toContain("<flag>--timeout</flag>");
   });
 
   it("handles item with empty body", () => {
     const noBody: DocItem = { ...JOB_RUN, body: "" };
     const out = formatDocItem(noBody);
-    expect(out).not.toContain("--");
+    expect(out).not.toContain("<flag>");
   });
 
   it("handles item with no description", () => {
     const noDesc: DocItem = { ...JOB_RUN, description: "" };
     const out = formatDocItem(noDesc);
-    expect(out.split("\n")[0]).toContain("bee job run <name>");
-    expect(out).toContain("--wait");
+    expect(out).toContain('<command id="bee job run &lt;name&gt;">');
+    expect(out).toContain("<flag>--wait</flag>");
   });
 });
 
 describe("formatDocItem — doc type", () => {
-  it("renders source + heading label", () => {
+  it("renders info tag with escaped id", () => {
     const out = formatDocItem(CONCEPTS_PROFILE);
+    expect(out).toContain("<info id=");
     expect(out).toContain("concepts.md");
-    expect(out).toContain("Profiles");
   });
 
   it("includes body prose", () => {
@@ -76,8 +78,8 @@ describe("formatDocItem — doc type", () => {
 describe("formatContext", () => {
   it("joins multiple items with blank line", () => {
     const out = formatContext([JOB_RUN, CONCEPTS_PROFILE]);
-    expect(out).toContain("bee job run <name>");
-    expect(out).toContain("Profiles");
+    expect(out).toContain("<command id");
+    expect(out).toContain("<info id");
     expect(out).toContain("\n\n");
   });
 
@@ -99,19 +101,16 @@ describe("buildPrompt", () => {
 
   it("contains formatted context", () => {
     const p = buildPrompt("how to run a job", [JOB_RUN]);
-    expect(p).toContain("bee job run <name>");
-    expect(p).toContain("--wait");
+    expect(p).toContain("<command id=\"bee job run &lt;name&gt;\">");
+    expect(p).toContain("<flag>--wait</flag>");
   });
 
-  it("ends with answer instruction", () => {
+  it("ends with Answer:", () => {
     const p = buildPrompt("test", [JOB_RUN]);
     expect(p.trimEnd()).toMatch(/Answer:\s*$/);
   });
 
   it("example format uses a real command, not a fake placeholder", () => {
-    // The placeholder "bee X Y <arg>" taught the small model to echo it verbatim
-    // on ambiguous meta-queries, inventing non-existent commands. The example
-    // must show a real command path so the model copies something valid.
     const p = buildPrompt("test", [JOB_RUN]);
     expect(p).not.toContain("bee X Y");
   });
@@ -154,6 +153,7 @@ describe("answer() — with provider", () => {
       generate: async (prompt) => {
         expect(prompt).toContain("run a job");
         expect(prompt).toContain("bee job run");
+        expect(prompt).toContain("<context>");
         return "Use `bee job run <name>`.";
       },
     };

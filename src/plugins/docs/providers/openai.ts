@@ -45,7 +45,7 @@ export class OpenAICompatProvider {
           { role: "user", content: prompt },
         ],
         temperature: 0,
-        max_tokens: 512,
+        max_tokens: 256,
       }),
       signal: AbortSignal.timeout(15000),
     });

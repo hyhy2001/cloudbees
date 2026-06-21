@@ -52,7 +52,7 @@ export class DatabricksOAuthProvider {
           { role: "user", content: prompt },
         ],
         temperature: 0,
-        max_tokens: 512,
+        max_tokens: 256,
       }),
       signal: AbortSignal.timeout(15000),
     }).catch(() => {
@@ -70,7 +70,7 @@ export class DatabricksOAuthProvider {
             { role: "user", content: prompt },
           ],
           temperature: 0,
-          max_tokens: 512,
+          max_tokens: 256,
         }),
         signal: AbortSignal.timeout(15000),
       });

@@ -54,38 +54,45 @@ function stripTermsFromBody(body: string): string {
 }
 
 /**
- * Render one DocItem as a compact, LM-friendly block.
+ * Render one DocItem as an XML-like structured block for the LM.
  *
- * Commands: COMMAND header, description, then flags (each on own line).
- * Doc/help facts: INFO header, prose answer, then example commands.
- * Clear section labels help small models distinguish commands from explanation.
+ * XML tags give the LM clear boundaries between items, making it harder to
+ * confuse or merge context from different entries. The model sees:
+ *   <command id="bee job run">
+ *     <usage>bee job run <name></usage>
+ *     <desc>...</desc>
+ *     <flag>--param</flag>
+ *   </command>
+ *   <info id="concept.profile">...</info>
  */
 export function formatDocItem(item: DocItem): string {
   if (item.type === "doc") {
-    const kind = item.source.startsWith("help:") ? "INFO" : "DOC";
-    const label = item.source.startsWith("help:")
-      ? (item.title ?? item.source)
-      : item.title
-        ? `${item.source} › ${item.title}`
-        : item.source;
-    const head = `[${kind}: ${label}]`;
+    const id = item.id ?? (item.source.startsWith("help:") ? item.title ?? item.source : item.source);
+    const head = `<info id="${escapeXmlAttr(id)}">`;
     const body = stripTermsFromBody(item.body);
-    return body ? `${head}\n${body}` : head;
+    return body ? `${head}\n${body}\n</info>` : `${head}\n</info>`;
   }
 
-  // Command item — structured block so the model can extract usage + flags
   const lines: string[] = [];
-  lines.push(`[COMMAND: ${item.title}]`);
-  if (item.description) lines.push(`Description: ${item.description}`);
+  lines.push(`<command id="${escapeXmlAttr(item.title)}">`);
+  if (item.description) lines.push(`  <desc>${escapeXmlAttr(item.description)}</desc>`);
   if (item.body) {
     const bodyLines = item.body.split("\n").map((l) => l.trimEnd()).filter(Boolean);
     const flags = bodyLines.filter((l) => l.trimStart().startsWith("-"));
     if (flags.length > 0) {
-      lines.push("Flags:");
-      for (const f of flags) lines.push(`  ${f.trimStart()}`);
+      for (const f of flags) {
+        const flagName = f.trimStart().split(/\s+/)[0] ?? f.trimStart();
+        lines.push(`  <flag>${escapeXmlAttr(flagName)}</flag>`);
+      }
     }
   }
+  lines.push(`</command>`);
   return lines.join("\n");
+}
+
+/** Minimal XML attribute escaping. */
+function escapeXmlAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /** Join the rendered items into a single context section. */
@@ -106,16 +113,29 @@ export function formatContext(items: DocItem[]): string {
 export const SYSTEM_PROMPT = [
   "You are a help assistant for the `bee` CLI tool (CloudBees / Jenkins).",
   "",
-  "Answer questions about how to use bee commands. Use ONLY the commands in the context.",
-  "- For how-to questions: explain in 1 sentence, then show the exact command with flags.",
-  "- For concept/definition questions: explain briefly, then list the relevant commands.",
-  "- For troubleshooting: say what to check, then list the relevant commands.",
-  "- ALWAYS end your answer with the relevant command(s) from the context, even for definitions.",
-  "- ALWAYS use the FULL command name exactly as written in [COMMAND] or [INFO] blocks (e.g. `bee job list`, not `bee list`).",
-  "- NEVER shorten or abbreviate command names.",
-  "- NEVER make up commands. Only use commands shown in [COMMAND] or [INFO] blocks.",
-  "- If context has no answer: say \"No info available — try `bee --help`\"",
-  "- Do not answer questions unrelated to bee. Say \"I only help with bee usage.\"",
+  "Answer ONLY from the <command> and <info> blocks in the context below.",
+  "",
+  "Rules:",
+  "- ALWAYS use the FULL command name as shown in <command id=\"...\"> (e.g. `bee job list`, never `bee list`).",
+  "- NEVER make up commands. Only use commands present in <command> blocks.",
+  "- NEVER make up flags. Only mention flags listed in <flag> elements. If you are unsure about a flag, omit it.",
+  "- If no <command> or <info> block is relevant, say: \"No info available — try `bee --help`\"",
+  "- Do not answer questions unrelated to bee. Say: \"I only help with bee usage.\"",
+  "",
+  "Output format: 1–2 sentences explaining what to do, then the exact command(s) on their own line.",
+  "Format: <explanation>",
+  "        `bee <command> <args> <flags>`",
+  "",
+  "Example outputs:",
+  "  To list all jobs on the current controller:",
+  "  `bee job list --all`",
+  "",
+  "  A profile stores your login for one CloudBees server. Switch profiles with:",
+  "  `bee auth use <profile>`",
+  "",
+  "  If you get a 403 error, check your permissions and active controller:",
+  "  `bee controller current`",
+  "  `bee auth profiles`",
 ].join("\n");
 
 /**
@@ -128,14 +148,11 @@ export const SYSTEM_PROMPT = [
 export function buildUserPrompt(query: string, corpus: DocItem[]): string {
   const context = formatContext(corpus);
   return [
-    "=== bee commands and help facts (use ONLY these) ===",
+    "<context>",
     context,
-    "=== end of context ===",
+    "</context>",
     "",
     `Question: ${query}`,
-    "",
-    "Instructions: Answer briefly. Always end your answer by listing the relevant command(s) on a new line, copied verbatim from the context above.",
-    "Example format: \"<explanation>\\nUse: `bee job list`\"",
     "",
     "Answer:",
   ].join("\n");

@@ -143,7 +143,22 @@ export async function answer(
     return { source: "raw", text: "", hits };
   }
 
-  const prompt = buildUserPrompt(query, hits);
+  // Estimate token count (conservative: ~3 chars/token for mixed text).
+  // If context exceeds ~80% of a conservative 2048-token window, truncate
+  // from the bottom (furthest from query).
+  const MAX_INPUT_CHARS = 2048 * 3 * 0.8; // ~4915 chars
+  let contextHits = hits;
+  let prompt = buildUserPrompt(query, contextHits);
+  if (prompt.length > MAX_INPUT_CHARS && hits.length > 1) {
+    // Drop hits from the end until we fit, but keep at least 1.
+    let trimIdx = hits.length - 1;
+    while (trimIdx > 0 && prompt.length > MAX_INPUT_CHARS) {
+      contextHits = hits.slice(0, trimIdx);
+      prompt = buildUserPrompt(query, contextHits);
+      trimIdx--;
+    }
+  }
+
   try {
     const raw = await provider.generate(prompt);
     // Validate emitted commands against the full command tree, not just the
