@@ -595,21 +595,90 @@ export function searchDocs(
       source: r.source,
     }));
 
-    // Exact command-path promotion. BM25 length-normalization penalizes a
-    // canonical CRUD command for HAVING documentation: "node create" ranks
-    // node.track (empty body) above node.create (914-char flag body) even though
-    // node.create matches more query tokens. When the query's content tokens
-    // exactly equal a command's path (its id with "." → " ", e.g. "node.create"
-    // → "node create"), that command is unambiguously the target — promote it to
-    // the front, stably. Fires only on exact path equality, so concept/natural
-    // queries (which never equal a command path) are untouched.
+    // ── Combined promotion layer (exact path + flag + cross-plugin + expert) ─────
     const qNorm = query.toLowerCase().replace(/\s+/g, " ").trim();
+    let promoted = false;
+
+    // 1. Exact command-path promotion: query exactly equals a command's id.
     const exactIdx = items.findIndex(
       (it) => it.type === "command" && it.id.replace(/\./g, " ") === qNorm,
     );
     if (exactIdx > 0) {
       const [exact] = items.splice(exactIdx, 1);
       items.unshift(exact!);
+      promoted = true;
+    }
+
+    // 2. Expert routing: query contains a `<group> <verb>` pattern matching a
+    //    command id (e.g. "how to node create" or "job list"). Boosts the first
+    //    matching command above non-command docs. Only fires when exact-match
+    //    didn't already run, so "node create" (exact) → promotion #1,
+    //    "how to node create" (inexact) → caught here.
+    if (!promoted) {
+      const cmdPattern = /\b([a-z]{2,})\.([a-z]{2,})\b|([a-z]{2,})\s+([a-z]{2,})\b/g;
+      let cm: RegExpExecArray | null;
+      while ((cm = cmdPattern.exec(qNorm)) !== null) {
+        const a = cm[1] ?? cm[3]!;
+        const b = cm[2] ?? cm[4]!;
+        const targetId = `${a}.${b}`;
+        const cmdIdx = items.findIndex(
+          (it) => it.type === "command" && it.id === targetId,
+        );
+        if (cmdIdx > 1) {
+          // Move to position 1 (right after the #1 exact match, if any).
+          const [cmd] = items.splice(cmdIdx, 1);
+          items.splice(1, 0, cmd!);
+          promoted = true;
+          break;
+        }
+      }
+    }
+
+    // 3. Flag-aware promotion: query phrases that imply a CLI flag.
+    //    Maps natural phrases → flag name → commands whose body mentions it.
+    //    Uses word-boundary regex so "label" doesn't match "labels".
+    const flagPhrases: Record<string, string[]> = {
+      "not just mine": ["--all"],
+      everything: ["--all"],
+      "all jobs": ["--all"],
+      "all nodes": ["--all"],
+      "specific profile": ["--profile"],
+      "wait for": ["--wait"],
+      timeout: ["--timeout"],
+      "specific node": ["--node"],
+      label: ["--labels"],
+      "remote dir": ["--remote-dir"],
+    };
+    for (const [phrase, flags] of Object.entries(flagPhrases)) {
+      const phraseRe = new RegExp(`\\b${phrase}\\b`, "i");
+      if (phraseRe.test(qNorm)) {
+        for (const flag of flags) {
+          const fi = items.findIndex(
+            (it) => it.type === "command" && it.body?.includes(flag),
+          );
+          if (fi > (promoted ? 1 : 0)) {
+            const [flagged] = items.splice(fi, 1);
+            items.splice(promoted ? 1 : 0, 0, flagged!);
+            promoted = true;
+          }
+        }
+      }
+    }
+
+    // 4. Cross-plugin routing: "what commands are available" → promote .list
+    //    commands (job.list, node.list, cred.list) to the front.
+    if (!promoted) {
+      const listingRe = /\b(what|all|available)\s+commands?\b/;
+      if (listingRe.test(qNorm)) {
+        // Extract list commands in reverse order so splice indexes stay valid.
+        for (let i = items.length - 1; i >= 0; i--) {
+          if (items[i]!.type === "command" && /\.list$/.test(items[i]!.id)) {
+            const [cmd] = items.splice(i, 1);
+            items.unshift(cmd!);
+            promoted = true;
+          }
+        }
+      }
     }
 
     const gated = opts.gate
