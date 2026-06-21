@@ -791,16 +791,26 @@ export function searchDocs(
 
     // 4. Cross-plugin routing: "what commands are available" → promote .list
     //    commands (job.list, node.list, cred.list) to the front.
+    //    If BM25 didn't include them (ranked too low), fetch them from the full
+    //    corpus. Priorities: job.list first (most generic), then controller, node, cred.
     if (!promoted) {
       const listingRe = /\b(what|all|available)\s+commands?\b/;
       if (listingRe.test(qNorm)) {
-        // Extract list commands in reverse order so splice indexes stay valid.
-        for (let i = items.length - 1; i >= 0; i--) {
-          if (items[i]!.type === "command" && /\.list$/.test(items[i]!.id)) {
-            const [cmd] = items.splice(i, 1);
+        const listPriority = ["job.list", "controller.list", "node.list", "cred.list"];
+        for (const target of listPriority) {
+          let li = items.findIndex((it) => it.id === target);
+          // If not in BM25 results, find it in the original corpus
+          if (li < 0) {
+            const fullItem = corpus.find((c) => c.id === target);
+            if (fullItem) {
+              items.unshift(fullItem);
+              li = 0;
+            }
+          } else {
+            const [cmd] = items.splice(li, 1);
             items.unshift(cmd!);
-            promoted = true;
           }
+          if (li >= 0) promoted = true;
         }
       }
     }
