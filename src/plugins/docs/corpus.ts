@@ -218,7 +218,10 @@ const SYNONYMS: Record<string, string> = {
   // build output / history
   // NOTE: "follow" not mapped here — too ambiguous ("follow a credential" = cred.track)
   // job.log description contains "follow" explicitly for --follow flag
-  watch:       "log",
+  monitor:     "track",  // "monitor a job" → job.track
+  watch:       "track",  // "watch job" → job.track, not job.log
+  // NOTE: "watch" was previously mapped to "log" which caused "watch job"
+  // to surface job.log instead of job.track. Changed to "track".
   tail:        "log",
   stream:      "log",
   output:      "log",
@@ -649,6 +652,38 @@ export function searchDocs(
       label: ["--labels"],
       "remote dir": ["--remote-dir"],
     };
+
+    // Generic "X option" pattern: if query has "<flagword> option", find the flag.
+    const optionMatch = qNorm.match(/([a-z][-a-z]+)\s+option\b/);
+    if (optionMatch) {
+      const flagWord = optionMatch[1]!;
+      // Map common flag words back to flag names
+      const flagMap: Record<string, string> = {
+        all: "--all",
+        wait: "--wait",
+        follow: "--follow",
+        profile: "--profile",
+        recursive: "--recursive",
+        script: "--script",
+        node: "--node",
+        timeout: "--timeout",
+        label: "--labels",
+        yes: "--yes",
+        store: "--store",
+        "remote-dir": "--remote-dir",
+      };
+      const flag = flagMap[flagWord];
+      if (flag) {
+        const fi = items.findIndex(
+          (it) => it.type === "command" && it.body?.includes(flag),
+        );
+        if (fi > (promoted ? 1 : 0)) {
+          const [flagged] = items.splice(fi, 1);
+          items.splice(promoted ? 1 : 0, 0, flagged!);
+          promoted = true;
+        }
+      }
+    }
     for (const [phrase, flags] of Object.entries(flagPhrases)) {
       const phraseRe = new RegExp(`\\b${phrase}\\b`, "i");
       if (phraseRe.test(qNorm)) {

@@ -705,7 +705,7 @@ const VERB_SYNONYMS: Record<string, string[]> = {
   move: ["move", "relocate"],
   track: ["track", "watch"],
   untrack: ["untrack"],
-  get: ["get", "show", "view", "inspect"],
+  get: ["get", "show", "inspect"],
   login: ["login", "log in", "sign in"],
   logout: ["logout", "log out", "sign out"],
   select: ["select", "choose", "switch to"],
@@ -732,7 +732,9 @@ function generateQueries(corpus: DocItem[]): GroundTruth[] {
   const docFacts = corpus.filter((c) => c.type === "doc" && c.source.startsWith("help:"));
 
   // ── 1. For each command → generate exact + natural + flag variants ────────
-  for (const cmd of cmds) {
+  // Skip bare group commands (id="job", "node", etc.) — too generic for queries.
+  const subCmds = cmds.filter((c) => c.id.includes("."));
+  for (const cmd of subCmds) {
     const parts = cmd.id.split(".");
     const group = parts[0]!;
     const verb = parts.slice(1).join(".");
@@ -813,19 +815,14 @@ function generateQueries(corpus: DocItem[]): GroundTruth[] {
 
     // 1f. Plural listing queries for list-style commands ("show all jobs", "list all agents")
     if (verb === "list") {
-      const nounSyns = NOUN_SYNONYMS[group] ?? [group];
-      for (const ns of nounSyns) {
-        if (ns === group) continue;
-        const plural = ns.endsWith("s") ? ns : `${ns}s`;
-        const listVariants = [
-          `show all ${plural}`,
-          `list all ${plural}`,
-          `view all ${plural}`,
-        ];
-        for (const lv of listVariants) {
-          if (!generated.some((g) => g.query === lv) && !GROUND_TRUTH.some((g) => g.query === lv)) {
-            generated.push({ query: lv, expectedId: cmd.id, label: cmd.title, queryType: "natural" });
-          }
+      const plural = group.endsWith("s") ? group : `${group}s`;
+      const listVariants = [
+        `show all ${plural}`,
+        `list all ${plural}`,
+      ];
+      for (const lv of listVariants) {
+        if (!generated.some((g) => g.query === lv) && !GROUND_TRUTH.some((g) => g.query === lv)) {
+          generated.push({ query: lv, expectedId: cmd.id, label: cmd.title, queryType: "natural" });
         }
       }
     }
