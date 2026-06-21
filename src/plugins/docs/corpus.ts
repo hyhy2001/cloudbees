@@ -518,6 +518,48 @@ export interface SearchOptions {
   softGate?: boolean;
 }
 
+// ─── Corpus cache (avoid rebuilding FTS5 table on every call) ────────────────
+
+interface CorpusCache {
+  db: Database;
+  items: DocItem[];
+}
+let _corpusCache: CorpusCache | null = null;
+
+/**
+ * Get or create the cached FTS5 database for the given corpus items.
+ * When the same array reference is passed, reuses the cached DB.
+ */
+function getCorpusDb(corpus: DocItem[]): Database {
+  if (_corpusCache && _corpusCache.items === corpus) {
+    return _corpusCache.db;
+  }
+  // Close previous cache if the corpus changed (new reference).
+  if (_corpusCache) {
+    try { _corpusCache.db.close(); } catch { /* ignore */ }
+  }
+  const db = new Database(":memory:");
+  db.run(`CREATE VIRTUAL TABLE docs USING fts5(
+    id          UNINDEXED,
+    type        UNINDEXED,
+    title,
+    description,
+    body,
+    source      UNINDEXED
+  )`);
+  const insert = db.prepare(
+    "INSERT INTO docs (id, type, title, description, body, source) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+  const insertAll = db.transaction((items: DocItem[]) => {
+    for (const d of items) {
+      insert.run(d.id, d.type, d.title, d.description, d.body, d.source);
+    }
+  });
+  insertAll(corpus);
+  _corpusCache = { db, items: corpus };
+  return db;
+}
+
 export function searchDocs(
   query: string,
   corpus: DocItem[],
@@ -527,29 +569,7 @@ export function searchDocs(
   const match = buildMatchExpr(query);
   if (match === "" || corpus.length === 0) return [];
 
-  const db = new Database(":memory:");
-  try {
-    // UNINDEXED columns (id, type, source) are not tokenised and skipped by
-    // bm25() — weights are positional over the indexed columns: title,
-    // description, body.
-    db.run(`CREATE VIRTUAL TABLE docs USING fts5(
-      id          UNINDEXED,
-      type        UNINDEXED,
-      title,
-      description,
-      body,
-      source      UNINDEXED
-    )`);
-
-    const insert = db.prepare(
-      "INSERT INTO docs (id, type, title, description, body, source) VALUES (?, ?, ?, ?, ?, ?)",
-    );
-    const insertAll = db.transaction((items: DocItem[]) => {
-      for (const d of items) {
-        insert.run(d.id, d.type, d.title, d.description, d.body, d.source);
-      }
-    });
-    insertAll(corpus);
+  const db = getCorpusDb(corpus);
 
     // When gating, over-fetch then filter: the gate may drop several top hits,
     // so a raw LIMIT would starve the result. Cap the over-fetch to avoid
@@ -603,7 +623,4 @@ export function searchDocs(
     const final = opts.gate && opts.softGate && gated.length === 0 ? items : gated;
 
     return final.slice(0, limit);
-  } finally {
-    db.close();
-  }
 }
