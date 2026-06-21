@@ -136,6 +136,15 @@ export const SYSTEM_PROMPT = [
   "  If you get a 403 error, check your permissions and active controller:",
   "  `bee controller current`",
   "  `bee auth profiles`",
+  "",
+  "Examples of what NOT to do:",
+  "  Bad question: \"what is the capital of France\"",
+  "  Bad answer: \"I only help with bee usage.\"",
+  "  (Do not answer questions unrelated to bee.)",
+  "",
+  "  Bad question: \"how do I start a build\"",
+  "  Bad answer: \"Use `bee job start <name>`\"",
+  "  (Correct answer: \"Use `bee job run <name>`\")",
 ].join("\n");
 
 /**

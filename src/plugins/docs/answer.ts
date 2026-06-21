@@ -22,49 +22,69 @@ import { searchDocs, type DocItem } from "./corpus";
  * confident wrong command the user will paste and run) is the worst kind.
  * Model-agnostic, so it holds regardless of which model or prompt is in use.
  *
- * Strips any backtick-wrapped `bee ...` span whose command path is not a real
- * command id in the corpus, then cleans up the ", " / "Use:" debris the removal
- * leaves behind. Real commands (including bare group names like `bee job` and
- * sub-commands like `bee job run`) are left untouched. Non-command spans (flags,
- * prose) are never touched.
+ * Two passes:
+ *   1. Backtick-wrapped `bee ...` spans — cross-reference each against the
+ *      corpus of real command ids. Remove invented ones, keep real ones.
+ *   2. Non-backtick `bee <group> <sub>` commands (e.g. "Use bee job list") —
+ *      same validation; remove invented ones.
+ * In both passes, "bee ask" and "bee help" are always valid.
  */
 export function stripInventedCommands(text: string, corpus: DocItem[]): string {
   const valid = new Set<string>();
   for (const item of corpus) {
     if (item.type !== "command") continue;
     valid.add(item.id);
-    // A bare group name (`bee job`) is valid when any command lives under it.
     const dot = item.id.indexOf(".");
     if (dot > 0) valid.add(item.id.slice(0, dot));
   }
+  // Always allow ask/help even without commands in corpus.
+  valid.add("ask");
+  valid.add("help");
   if (valid.size === 0) return text;
 
-  const SENT = ""; // Private Use Area sentinel; never appears in model text
-  const replaced = text.replace(/`([^`]*)`/g, (full, inner: string) => {
-    // Command path: group + optional sub (2 levels is enough; a real 3-level
-    // command like "bee job create freestyle" still matches at "job.create").
+  const SENT = "";
+
+  /** Check if `group` (and optional `sub`) is a valid command path. */
+  function isValidBeeCmd(group: string, sub?: string): boolean {
+    const g = group.toLowerCase();
+    const s = sub?.toLowerCase();
+    if (g === "ask" || g === "help") return true;
+    const id = s ? `${g}.${s}` : g;
+    return valid.has(id);
+  }
+
+  // Pass 1: backtick-wrapped commands
+  let result = text.replace(/`([^`]*)`/g, (_full, inner: string) => {
     const m = inner.match(/^\s*bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?/i);
-    if (!m) return full; // not a bee-command span; leave alone
-    const group = m[1]!.toLowerCase();
-    const sub = m[2]?.toLowerCase();
-    if (group === "ask" || group === "help") return full;
-    const id = sub ? `${group}.${sub}` : group;
-    return valid.has(id) ? full : SENT;
+    if (!m) return _full;
+    return isValidBeeCmd(m[1]!, m[2]) ? _full : SENT;
   });
 
-  if (!replaced.includes(SENT)) return text; // nothing invented; return original
+  // Pass 2: non-backtick commands. Match `bee <group> <sub?>` that appear
+  // after a sentence boundary (":", ".", newline, or at string start) and are
+  // followed by optional args. This catches "Use bee job list" patterns.
+  result = result.replace(
+    /(^|[.:;\n])\s*(bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?)/gi,
+    (_full, boundary: string, cmd: string, group: string, sub?: string) => {
+      return isValidBeeCmd(group, sub) ? _full : `${boundary} ${SENT}`;
+    },
+  );
 
-  return replaced
-    .replace(/\s*,\s*/g, "") // ", <removed>"
-    .replace(/\s*,\s*/g, "") // "<removed>, "
-    .replace(/\s+and\s+/gi, "") // " and <removed>"
+  if (!result.includes(SENT)) return text; // nothing invented; return original
+
+  return result
+    .replace(/\s*,\s*/g, "")       // ", <removed>"
+    .replace(/\s*,\s*/g, "")       // "<removed>, "
+    .replace(/\s+and\s+/gi, "")   // " and <removed>"
     .replace(/\s+and\s+/gi, "")
-    .replace(//g, "") // any lone marker left
-    .replace(/,\s*,/g, ",") // collapsed double commas
-    .replace(/\s+([.,])/g, "$1") // space before punctuation
-    .replace(/\bUse:\s*$/gim, "") // dangling "Use:" with nothing after
-    .replace(/[ \t]{2,}/g, " ") // runs of spaces
-    .replace(/[ \t]+$/gm, "") // trailing spaces per line
+    .replace(/\s+or\s+/gi, "")    // " or <removed>"
+    .replace(/\s+or\s+/gi, "")
+    .replace(/,?\s*/g, "")        // any sentinel with optional comma before
+    .replace(/,\s*,/g, ",")        // collapsed double commas
+    .replace(/\s+([.,])/g, "$1")   // space before punctuation
+    .replace(/\bUse:\s*$/gim, "")  // dangling "Use:" with nothing after
+    .replace(/[ \t]{2,}/g, " ")    // runs of spaces
+    .replace(/[ \t]+$/gm, "")      // trailing spaces per line
     .trim();
 }
 
@@ -147,6 +167,17 @@ export async function answer(
   // feeding coincidental hits to the model produces confident hallucinations on
   // off-domain queries. So: soft gate only when there is no provider.
   const hits = searchDocs(query, corpus, limit, { gate: true, softGate: !provider });
+
+  // Off-domain guard: if the strict gate (no soft rescue) would return empty,
+  // the query is likely off-domain. Skip the LM call even when a provider is
+  // configured — feeding rescues to a small model produces hallucination.
+  if (provider) {
+    const strictHits = searchDocs(query, corpus, limit, { gate: true, softGate: false });
+    if (strictHits.length === 0 && hits.length > 0) {
+      // Gate blocked everything; soft gate rescued it — off-domain query.
+      return { source: "raw", text: "", hits };
+    }
+  }
 
   if (!provider || hits.length === 0) {
     return { source: "raw", text: "", hits };

@@ -236,14 +236,16 @@ describe("stripInventedCommands", () => {
     expect(stripInventedCommands(t, corpus)).toBe(t);
   });
 
-  it("returns text unchanged when corpus has no commands", () => {
+  it("strips fake commands even when corpus has no commands (always keeps ask/help)", () => {
     const t = "Use `bee whatever made up`.";
-    expect(stripInventedCommands(t, [CONCEPTS_PROFILE])).toBe(t);
+    const result = stripInventedCommands(t, [CONCEPTS_PROFILE]);
+    // The fake command `bee whatever made up` is stripped
+    expect(result).not.toContain("bee whatever");
   });
 });
 
 describe("answer() — strips invented commands from lm output", () => {
-  it("removes a fake command the model emitted", async () => {
+  it("removes a fake backtick command", async () => {
     const p: LMProvider = {
       name: "mock",
       generate: async () => "Run it. Use: `bee job run <name>`, `bee job start <name>`",

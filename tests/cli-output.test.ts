@@ -63,7 +63,7 @@ describe("jsonFormatter", () => {
   });
 
   test("message renders as JSON with message key", () => {
-    const out = jsonFormatter.message("done");
+    const out = jsonFormatter.message("done", "info" as const);
     expect(JSON.parse(out)).toEqual({ message: "done" });
   });
 });

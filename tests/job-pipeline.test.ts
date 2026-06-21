@@ -508,7 +508,7 @@ describe("createPipelineJob", () => {
   test("throws when script is empty", async () => {
     const client = asClient(new FakePipelineClient());
     expect(
-      createPipelineJob(asClient(client), "bad", { script: "" }),
+      createPipelineJob(client, "bad", { script: "" }),
     ).rejects.toThrow("Pipeline script is required");
   });
 
