@@ -669,7 +669,7 @@ The generated file is committed and baked into the binary.
 
 ### BM25 + LLM benchmark
 
-`scripts/benchmark.ts` is a comprehensive quality harness with **69 hand-curated ground-truth queries** that covers every query type: exact command name, natural-language paraphrase, concept/definition, troubleshooting, flag-specific, and cross-plugin. It has two phases:
+`scripts/benchmark.ts` is a comprehensive quality harness with **123 hand-curated ground-truth queries** (expanded from 69) that covers every query type: exact command name, natural-language paraphrase, concept/definition, troubleshooting, flag-specific, and cross-plugin. It has two phases:
 
 **Phase A — BM25 retrieval** (fast, no LLM): scores each query against the real corpus using Recall@1 / Recall@3 / Recall@5 / MRR, with a breakdown by query type and a miss table showing the top competing hit.
 
@@ -691,10 +691,10 @@ Results are printed to the console and written to `benchmark-report.md` (gitigno
 
 | Metric | Score |
 |---|---|
-| BM25 Recall@1 | **84.1%** (58/69) |
-| BM25 Recall@3 | **94.2%** (65/69) |
-| BM25 Recall@5 | **95.7%** (66/69) |
-| BM25 MRR | **0.891** |
+| BM25 Recall@1 | **76.4%** (94/123) |
+| BM25 Recall@3 | **91.9%** (113/123) |
+| BM25 Recall@5 | **93.5%** (115/123) |
+| BM25 MRR | **0.846** |
 | LLM correct command | **97.7%** (43/44) |
 | LLM hallucination rate | **0.0%** (0/44) |
 | LLM has required flag | **100.0%** (5/5) |
@@ -709,12 +709,12 @@ BM25 Recall@1 by query type:
 
 | Type | N | Recall@1 | Recall@3 | Recall@5 | MRR |
 |---|---|---|---|---|---|
-| exact | 22 | 100.0% | 100.0% | 100.0% | 1.000 |
-| natural | 19 | 73.7% | 89.5% | 94.7% | 0.826 |
-| concept | 13 | 92.3% | 100.0% | 100.0% | 0.962 |
-| troubleshoot | 7 | 85.7% | 100.0% | 100.0% | 0.929 |
-| flag | 5 | 80.0% | 100.0% | 100.0% | 0.867 |
-| cross-plugin | 3 | 0.0% | 33.3% | 33.3% | 0.144 |
+| exact | 46 | 91.3% | 97.8% | 100.0% | 0.944 |
+| natural | 27 | 74.1% | 88.9% | 92.6% | 0.826 |
+| concept | 20 | 90.0% | 100.0% | 100.0% | 0.950 |
+| troubleshoot | 9 | 88.9% | 100.0% | 100.0% | 0.944 |
+| flag | 12 | 75.0% | 100.0% | 100.0% | 0.853 |
+| cross-plugin | 5 | 0.0% | 20.0% | 20.0% | 0.127 |
 
 ### RAG-vs-LLM ablation
 

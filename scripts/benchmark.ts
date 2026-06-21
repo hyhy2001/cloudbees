@@ -150,6 +150,74 @@ export const GROUND_TRUTH: GroundTruth[] = [
   { query: "show everything on the server",       expectedId: "job.list",   label: "list commands",     queryType: "cross-plugin" },
   { query: "what commands are available",         expectedId: "job.list",   label: "list commands",     queryType: "cross-plugin" },
   { query: "manage jenkins nodes and jobs",       expectedId: "node.list",  label: "node/job list",     queryType: "cross-plugin" },
+
+  // ── pipeline commands (new in v2) ──────────────────────────────────────────
+  { query: "create pipeline",         expectedId: "job.create.pipeline",  label: "bee job create pipeline",    queryType: "exact" },
+  { query: "update pipeline",         expectedId: "job.update.pipeline",  label: "bee job update pipeline",    queryType: "exact" },
+  { query: "create a pipeline job",   expectedId: "job.create.pipeline",  label: "bee job create pipeline",    queryType: "natural", mustContainFlag: "--script" },
+  { query: "make a pipeline from a script", expectedId: "job.create.pipeline", label: "bee job create pipeline", queryType: "natural" },
+
+  // ── more exact: extend coverage ────────────────────────────────────────────
+  { query: "job create freestyle",    expectedId: "job.create.freestyle", label: "bee job create freestyle",    queryType: "exact" },
+  { query: "job create folder",       expectedId: "job.create.folder",    label: "bee job create folder",       queryType: "exact" },
+  { query: "job copy",               expectedId: "job.copy",             label: "bee job copy",                queryType: "exact" },
+  { query: "job move",               expectedId: "job.move",             label: "bee job move",                queryType: "exact" },
+  { query: "job track",              expectedId: "job.track",            label: "bee job track",               queryType: "exact" },
+  { query: "job untrack",            expectedId: "job.untrack",          label: "bee job untrack",             queryType: "exact" },
+  { query: "node update",            expectedId: "node.update",          label: "bee node update",             queryType: "exact" },
+  { query: "node copy",              expectedId: "node.copy",            label: "bee node copy",               queryType: "exact" },
+  { query: "cred get",               expectedId: "cred.get",             label: "bee cred get",                queryType: "exact" },
+  { query: "cred track",             expectedId: "cred.track",           label: "bee cred track",              queryType: "exact" },
+  { query: "cred untrack",           expectedId: "cred.untrack",         label: "bee cred untrack",            queryType: "exact" },
+  { query: "auth use",               expectedId: "auth.use",             label: "bee auth use",                queryType: "exact" },
+  { query: "auth delete profile",    expectedId: "auth.delete",          label: "bee auth delete --profile",   queryType: "exact" },
+  { query: "controller current",     expectedId: "controller.current",   label: "bee controller current",       queryType: "exact" },
+  { query: "controller info",        expectedId: "controller.info",      label: "bee controller info",          queryType: "exact" },
+  { query: "restrict job to agent",   expectedId: "job.create.freestyle", label: "bee job create --node",        queryType: "exact" },
+  { query: "approve agent to folder", expectedId: "job.approve-agent",    label: "bee job approve-agent",        queryType: "exact" },
+  { query: "job list agents",        expectedId: "job.list-agents",      label: "bee job list-agents",          queryType: "exact" },
+  { query: "job approve agent",      expectedId: "job.approve-agent",    label: "bee job approve-agent",        queryType: "exact" },
+  { query: "job remove agent",       expectedId: "job.remove-agent",     label: "bee job remove-agent",         queryType: "exact" },
+  { query: "cred list system store", expectedId: "cred.list",            label: "bee cred list --store system", queryType: "exact" },
+
+  // ── more natural: paraphrases ──────────────────────────────────────────────
+  { query: "clone a job",                 expectedId: "job.copy",       label: "bee job copy",            queryType: "natural" },
+  { query: "move job to folder",          expectedId: "job.move",       label: "bee job move",            queryType: "natural" },
+  { query: "duplicate a build config",    expectedId: "job.copy",       label: "bee job copy",            queryType: "natural" },
+  { query: "change freestyle job",        expectedId: "job.update.freestyle", label: "bee job update freestyle", queryType: "natural" },
+  { query: "add a build parameter",       expectedId: "job.update.freestyle", label: "bee job update --param-def", queryType: "natural" },
+  { query: "modify a node config",        expectedId: "node.update",    label: "bee node update",         queryType: "natural" },
+  { query: "switch user account",         expectedId: "auth.use",       label: "bee auth use",            queryType: "natural" },
+  { query: "list approved agents",            expectedId: "job.list-agents", label: "bee job list-agents", queryType: "natural" },
+
+  // ── more concept: new pipeline + existing help facts ───────────────────────
+  { query: "what is a pipeline job",              expectedId: "concept.pipeline",        label: "concept: pipeline",           queryType: "concept" },
+  { query: "how do I create a pipeline",          expectedId: "concept.create-pipeline", label: "concept: create pipeline",    queryType: "concept" },
+  { query: "pipeline build parameters",           expectedId: "concept.pipeline-params", label: "concept: pipeline params",    queryType: "concept" },
+  { query: "how to get started with bee",         expectedId: "concept.getting-started", label: "concept: getting started",    queryType: "concept" },
+  { query: "what credentials does bee support",   expectedId: "concept.credential-types",label: "concept: credential types",   queryType: "concept" },
+  { query: "what is the TUI",                     expectedId: "concept.tui",             label: "concept: TUI",                queryType: "concept" },
+  { query: "how to install bee on a server",      expectedId: "concept.login",           label: "concept: login",              queryType: "concept" },
+  { query: "what is a job",                       expectedId: "concept.what-is-job",     label: "concept: what is a job",      queryType: "concept" },
+  { query: "what is a node",                      expectedId: "concept.what-is-node",    label: "concept: what is a node",     queryType: "concept" },
+  { query: "how to add a build machine",          expectedId: "concept.add-node",        label: "concept: add node",           queryType: "concept" },
+
+  // ── more troubleshoot ──────────────────────────────────────────────────────
+  { query: "agent went offline unexpectedly",     expectedId: "troubleshooting.node-connect", label: "troubleshoot: node offline", queryType: "troubleshoot" },
+  { query: "pipeline script validation failed",   expectedId: "troubleshooting.pipeline-validate", label: "troubleshoot: pipeline validate", queryType: "troubleshoot" },
+
+  // ── more flag: existing + new flags ────────────────────────────────────────
+  { query: "list all nodes not just tracked", expectedId: "node.list",    label: "bee node list --all",   queryType: "flag", mustContainFlag: "--all" },
+  { query: "recursive job listing",           expectedId: "job.list",     label: "bee job list --recursive", queryType: "flag", mustContainFlag: "--recursive" },
+  { query: "delete without confirmation",     expectedId: "job.delete",   label: "bee job delete --yes",  queryType: "flag", mustContainFlag: "--yes" },
+  { query: "switch to a specific profile",    expectedId: "auth.use",     label: "bee auth use --profile", queryType: "flag", mustContainFlag: "--profile" },
+  { query: "specify pipeline script",         expectedId: "job.create.pipeline", label: "bee job create pipeline --script", queryType: "flag", mustContainFlag: "--script" },
+  { query: "restrict job to agent",           expectedId: "job.create.freestyle", label: "bee job create freestyle --node", queryType: "flag", mustContainFlag: "--node" },
+  { query: "list credentials in system store", expectedId: "cred.list",   label: "bee cred list --store", queryType: "flag", mustContainFlag: "--store" },
+
+  // ── more cross-plugin: broader coverage ────────────────────────────────────
+  { query: "how to list everything",          expectedId: "job.list",     label: "list commands",         queryType: "cross-plugin" },
+  { query: "see all resources",               expectedId: "job.list",     label: "list commands",         queryType: "cross-plugin" },
 ];
 
 // ─── Phase A: BM25 retrieval scoring ─────────────────────────────────────────
