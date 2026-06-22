@@ -151,22 +151,32 @@ export class DatabricksOAuthProvider {
     throw new Error("OIDC discovery failed — verify workspace URL");
   }
 
-  /** Discover Azure AD tenant by following the OAuth2 authorize redirect. */
+  /**
+   * Discover Azure AD tenant by trying multiple endpoints (same as Python SDK):
+   *   - {host}/aad/auth — Databricks Azure login page redirect
+   *   - {host}/oidc/v1/authorize — OAuth authorize endpoint redirect
+   *   - DATABRICKS_AZURE_TENANT_ID env var
+   */
   private async discoverAzureTenant(): Promise<string> {
     if (this.azureTenant) return this.azureTenant;
     const tenant = process.env["DATABRICKS_AZURE_TENANT_ID"] ?? "";
     if (tenant) { this.azureTenant = tenant; return tenant; }
-    try {
-      const r = await fetch(`${this.host}/oidc/v1/authorize`, {
-        method: "GET", redirect: "manual", signal: AbortSignal.timeout(10000),
-      });
-      const location = r.headers.get("location");
-      if (location) {
+
+    const candidates: string[] = [];
+    for (const path of ["/aad/auth", "/oidc/v1/authorize"]) {
+      try {
+        const r = await fetch(`${this.host}${path}`, {
+          method: "GET", redirect: "manual", signal: AbortSignal.timeout(10000),
+        });
+        const location = r.headers.get("location") ?? r.headers.get("Location") ?? "";
         const m = location.match(/login\.microsoftonline\.com\/([^/?]+)/);
-        if (m?.[1]) { this.azureTenant = m[1]; return m[1]; }
-      }
-    } catch { /* fall through */ }
-    return "";
+        if (m?.[1]) candidates.push(m[1]);
+      } catch { /* try next */ }
+    }
+    if (candidates.length > 0) {
+      this.azureTenant = candidates[0]!;
+    }
+    return this.azureTenant;
   }
 
   /** POST to OIDC token endpoint with URL-encoded Basic Auth (RFC 6749 §2.3.1). */
