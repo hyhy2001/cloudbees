@@ -113,37 +113,48 @@ export class DatabricksOAuthProvider {
   }
 
   /**
-   * Azure: first fetch OIDC metadata for the workspace to discover the tenant,
-   * token endpoint, and the Databricks resource app ID (scope). Then exchange
-   * credentials via Azure AD.
+   * Azure: fetch OIDC metadata to discover the tenant & token endpoint, then
+   * exchange credentials via Azure AD.
    *
-   * The OIDC metadata endpoint returns:
-   *   { tenant_id, token_endpoint, resource_app_id? }
-   *
-   * resource_app_id is the Azure AD App ID for Databricks (a well-known GUID).
-   * If the metadata omits it, we fall back to the documented constant:
+   * The well-known endpoint may not be available on all workspaces — when it
+   * 404s we fall back to the AZURE_TENANT_ID from env (set by the user).
+   * The Databricks resource app ID (scope) is a well-known constant:
    *   2ff814a6-3304-4ab8-85cb-cd0e6f879c1d
-   * (Databricks' Azure Enterprise Application client ID).
+   * (Databricks Azure Enterprise Application client ID, documented by Databricks).
    */
   private async fetchAzureToken(): Promise<string> {
-    // 1. Fetch OIDC metadata
-    const metaUrl = `${this.host}/api/2.0/oidc/well-known`;
-    const metaResp = await fetch(metaUrl, { signal: AbortSignal.timeout(10000) });
-    if (!metaResp.ok) {
-      throw new Error(`Azure OIDC metadata fetch failed (HTTP ${metaResp.status})`);
-    }
-    const meta = (await metaResp.json()) as {
-      tenant_id?: string;
-      token_endpoint?: string;
-      resource_app_id?: string;
-    };
-    const tenant = meta.tenant_id;
-    if (!tenant) throw new Error("Azure OIDC metadata missing tenant_id");
+    // 1. Try to discover tenant from OIDC metadata (two possible endpoints)
+    let tenant = "";
+    let tokenEndpoint = "";
 
-    // 2. Build scope — prefer metadata resource_app_id, fall back to constant
-    const appId = meta.resource_app_id ?? "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
+    for (const path of ["/api/2.0/oidc/well-known", "/oidc/v1/well-known"]) {
+      try {
+        const r = await fetch(`${this.host}${path}`, { signal: AbortSignal.timeout(5000) });
+        if (r.ok) {
+          const meta = (await r.json()) as { tenant_id?: string; token_endpoint?: string };
+          if (meta.tenant_id) tenant = meta.tenant_id;
+          if (meta.token_endpoint) tokenEndpoint = meta.token_endpoint;
+          if (tenant) break;
+        }
+      } catch { /* try next */ }
+    }
+
+    // 2. Fall back to DATABRICKS_AZURE_TENANT_ID env var
+    if (!tenant) {
+      tenant = process.env["DATABRICKS_AZURE_TENANT_ID"] ?? "";
+    }
+
+    if (!tenant) {
+      throw new Error(
+        "Azure tenant ID not found. Set DATABRICKS_AZURE_TENANT_ID env var " +
+        "(find it in Azure AD -> App registrations -> your app -> Directory (tenant) ID).",
+      );
+    }
+
+    // 3. Exchange credentials via Azure AD
+    const appId = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
     const scope = `${appId}/.default`;
-    const tokenUrl = meta.token_endpoint ?? `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
+    const tokenUrl = tokenEndpoint || `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
 
     const resp = await fetch(tokenUrl, {
       method: "POST",
@@ -184,4 +195,9 @@ function detectCloud(host: string): Cloud {
   if (h.includes("azuredatabricks") || h.includes("azure")) return "azure";
   if (h.includes("gcp") || h.includes("google")) return "gcp";
   return "aws";
+}
+
+// Exported for index.ts to check whether we should attempt OAuth at all.
+export function isDatabricksHost(host: string): boolean {
+  return /databricks|cloud\.databricks/i.test(host) || !!process.env["DATABRICKS_AZURE_TENANT_ID"];
 }

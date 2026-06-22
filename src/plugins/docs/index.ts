@@ -3,7 +3,7 @@ import { registerDocsCommands } from "./commands";
 import { LM_URL, LM_API_KEY, LM_MODEL, LM_CLIENT_ID, LM_CLIENT_SECRET } from "./config";
 import { setProvider, getProvider } from "./answer";
 import { OpenAICompatProvider } from "./providers/openai";
-import { DatabricksOAuthProvider } from "./providers/databricks";
+import { DatabricksOAuthProvider, isDatabricksHost } from "./providers/databricks";
 
 export const docsPlugin: Plugin = {
   meta: {
@@ -26,8 +26,7 @@ export const docsPlugin: Plugin = {
     // Client credentials from env (CB_CLIENT_ID / CB_CLIENT_SECRET) may belong
     // to another tool — only attempt OAuth when the URL is clearly Databricks.
     if (LM_URL) {
-      const isDatabricks = /databricks|cloud\.databricks/i.test(LM_URL);
-      if (isDatabricks && LM_CLIENT_ID && LM_CLIENT_SECRET) {
+      if (isDatabricksHost(LM_URL) && LM_CLIENT_ID && LM_CLIENT_SECRET) {
         const prov = new DatabricksOAuthProvider(LM_URL, LM_CLIENT_ID, LM_CLIENT_SECRET, LM_MODEL);
         if (await prov.validate()) {
           setProvider(prov);
