@@ -1,13 +1,11 @@
 /**
  * Databricks OAuth M2M provider for `bee ask`.
  *
- * Uses the same flow as the Python Databricks SDK for all clouds:
- *   1. Discover OIDC endpoints: GET {host}/oidc/.well-known/oauth-authorization-server
- *   2. Exchange credentials:   POST {token_endpoint} with Basic Auth
- *   3. Call serving endpoint:  POST {host}/serving-endpoints/{model}/invocations
- *
- * For Azure Databricks, the workspace OIDC endpoint acts as a proxy to Azure AD
- * — no direct Azure AD calls needed.
+ * Tries multiple auth strategies in order:
+ *   1. Direct Databricks OIDC token endpoint (Basic Auth, RFC 6749 URL-encoded)
+ *   2. Azure AD v1.0 (resource param) — follows /oidc/v1/authorize redirect
+ *   3. Azure AD v2.0 (scope param)
+ *   4. Common tenant fallback for Azure AD
  */
 import { SYSTEM_PROMPT } from "../context";
 
@@ -23,8 +21,11 @@ export class DatabricksOAuthProvider {
   private clientId: string;
   private clientSecret: string;
   private model: string;
-  private tokenEndpoint = "";
   private cache: TokenCache | null = null;
+
+  // Cached discovery results
+  private tokenEndpoint = "";
+  private azureTenant = "";
 
   public constructor(host: string, clientId: string, clientSecret: string, model: string) {
     this.host = host.replace(/\/$/, "");
@@ -65,19 +66,15 @@ export class DatabricksOAuthProvider {
     return json.choices?.[0]?.message?.content?.trim() ?? "";
   }
 
-  /** Verify credentials by attempting a token exchange. */
   async validate(): Promise<boolean> {
     try {
       await this.getToken();
       return true;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[docs] Databricks OAuth validation failed: ${msg}\n`);
+      process.stderr.write(`[docs] Databricks OAuth: ${err instanceof Error ? err.message : String(err)}\n`);
       return false;
     }
   }
-
-  // ── Token management ────────────────────────────────────────────────────
 
   private async getToken(): Promise<string> {
     const now = Date.now();
@@ -85,126 +82,126 @@ export class DatabricksOAuthProvider {
     return this.fetchToken();
   }
 
-  /**
-   * Discover OIDC endpoint, then exchange credentials.
-   *
-   * For Azure workspaces, try two approaches:
-   *   A. Direct token exchange via Basic Auth (RFC 6749 §2.3.1 URL-encoded)
-   *   B. If A fails, follow the authorize redirect to discover the real
-   *      Azure AD token endpoint and send credentials in the body.
-   */
   private async fetchToken(): Promise<string> {
+    // Strategy 1: Direct OIDC token endpoint with Basic Auth
     if (!this.tokenEndpoint) await this.discoverTokenEndpoint();
-
-    // Approach A: direct token exchange via Databricks OIDC endpoint
     try {
-      return await this.exchangeToken(this.tokenEndpoint!);
-    } catch {
-      // Fall through to Azure AD discovery
+      return await this.doBasicAuthExchange(this.tokenEndpoint!);
+    } catch { /* try next */ }
+
+    // Strategy 2: Azure AD via redirect discovery
+    const tenant = await this.discoverAzureTenant();
+    if (tenant) {
+      // v1.0 endpoint with resource param (Python SDK's azure_service_principal)
+      const appId = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
+      const v1Url = `https://login.microsoftonline.com/${tenant}/oauth2/token`;
+      try {
+        const r = await fetch(v1Url, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "client_credentials",
+            client_id: this.clientId,
+            client_secret: this.clientSecret,
+            resource: appId,
+          }).toString(),
+          signal: AbortSignal.timeout(10000),
+        });
+        return this.parseTokenResponse(r, "resource");
+      } catch { /* try next */ }
+
+      // v2.0 endpoint with scope param
+      const v2Url = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
+      try {
+        const r = await fetch(v2Url, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "client_credentials",
+            client_id: this.clientId,
+            client_secret: this.clientSecret,
+            scope: `${appId}/.default`,
+          }).toString(),
+          signal: AbortSignal.timeout(10000),
+        });
+        return this.parseTokenResponse(r, "scope");
+      } catch { /* try next */ }
     }
 
-    // Approach B: Azure AD — follow /oidc/v1/authorize redirect, then
-    // send credentials in body (Azure AD expects body params, not Basic Auth)
-    const resp = await fetch(`${this.host}/oidc/v1/authorize`, {
-      method: "GET", redirect: "manual", signal: AbortSignal.timeout(10000),
-    });
-    const location = resp.headers.get("location");
-    if (!location) throw new Error("Token exchange failed (401) — check credentials");
-    const adTokenUrl = location.replace("/authorize", "/token").split("?")[0]!;
-    const adResp = await fetch(adTokenUrl, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        scope: "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/.default",
-      }).toString(),
-      signal: AbortSignal.timeout(10000),
-    });
-    return this.parseTokenResponse(adResp);
+    throw new Error("Token exchange failed (401) — check credentials");
   }
 
-  private async exchangeToken(url: string): Promise<string> {
+  /** Discover OIDC token endpoint from the workspace. */
+  private async discoverTokenEndpoint(): Promise<void> {
+    for (const path of ["/.well-known/databricks-config", "/oidc/.well-known/oauth-authorization-server"]) {
+      try {
+        const r = await fetch(`${this.host}${path}`, { signal: AbortSignal.timeout(5000) });
+        if (!r.ok) continue;
+        if (path.includes("databricks-config")) {
+          const meta = (await r.json()) as { oidc_endpoint?: string };
+          if (!meta.oidc_endpoint) continue;
+          const ep = await fetch(meta.oidc_endpoint, { signal: AbortSignal.timeout(5000) });
+          if (!ep.ok) continue;
+          const oidc = (await ep.json()) as { token_endpoint?: string };
+          if (oidc.token_endpoint) { this.tokenEndpoint = oidc.token_endpoint; return; }
+        } else {
+          const oidc = (await r.json()) as { token_endpoint?: string };
+          if (oidc.token_endpoint) { this.tokenEndpoint = oidc.token_endpoint; return; }
+        }
+      } catch { /* try next */ }
+    }
+    throw new Error("OIDC discovery failed — verify workspace URL");
+  }
+
+  /** Discover Azure AD tenant by following the OAuth2 authorize redirect. */
+  private async discoverAzureTenant(): Promise<string> {
+    if (this.azureTenant) return this.azureTenant;
+    const tenant = process.env["DATABRICKS_AZURE_TENANT_ID"] ?? "";
+    if (tenant) { this.azureTenant = tenant; return tenant; }
+    try {
+      const r = await fetch(`${this.host}/oidc/v1/authorize`, {
+        method: "GET", redirect: "manual", signal: AbortSignal.timeout(10000),
+      });
+      const location = r.headers.get("location");
+      if (location) {
+        const m = location.match(/login\.microsoftonline\.com\/([^/?]+)/);
+        if (m?.[1]) { this.azureTenant = m[1]; return m[1]; }
+      }
+    } catch { /* fall through */ }
+    return "";
+  }
+
+  /** POST to OIDC token endpoint with URL-encoded Basic Auth (RFC 6749 §2.3.1). */
+  private async doBasicAuthExchange(url: string): Promise<string> {
     const encodedId = encodeURIComponent(this.clientId);
     const encodedSecret = encodeURIComponent(this.clientSecret);
     const basic = Buffer.from(`${encodedId}:${encodedSecret}`).toString("base64");
-
-    const resp = await fetch(url, {
+    const r = await fetch(url, {
       method: "POST",
       headers: {
         "content-type": "application/x-www-form-urlencoded",
         authorization: `Basic ${basic}`,
       },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        scope: "all-apis",
-      }).toString(),
+      body: new URLSearchParams({ grant_type: "client_credentials", scope: "all-apis" }).toString(),
       signal: AbortSignal.timeout(10000),
     });
-    return this.parseTokenResponse(resp);
+    return this.parseTokenResponse(r, "basic");
   }
 
-  /**
-   * Discover the OIDC token endpoint (same as Python SDK's
-   * cfg.databricks_oidc_endpoints).
-   */
-  private async discoverTokenEndpoint(): Promise<string> {
-    // First try /.well-known/databricks-config
-    try {
-      const r = await fetch(`${this.host}/.well-known/databricks-config`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      if (r.ok) {
-        const meta = (await r.json()) as { oidc_endpoint?: string };
-        if (meta.oidc_endpoint) {
-          const ep = await fetch(meta.oidc_endpoint, { signal: AbortSignal.timeout(5000) });
-          if (ep.ok) {
-            const oidc = (await ep.json()) as { token_endpoint?: string };
-            if (oidc.token_endpoint) {
-              this.tokenEndpoint = oidc.token_endpoint;
-              return oidc.token_endpoint;
-            }
-          }
-        }
-      }
-    } catch { /* fall through */ }
-
-    // Fall back to standard workspace OIDC endpoint
-    const url = `${this.host}/oidc/.well-known/oauth-authorization-server`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!resp.ok) {
-      throw new Error(
-        `OIDC discovery failed (HTTP ${resp.status}). ` +
-        `Verify the workspace URL and ensure OAuth is enabled.`
-      );
-    }
-    const data = (await resp.json()) as { token_endpoint?: string };
-    const tokenEndpoint = data.token_endpoint;
-    if (!tokenEndpoint) throw new Error("OIDC metadata missing token_endpoint");
-    this.tokenEndpoint = tokenEndpoint;
-    return tokenEndpoint;
-  }
-
-  private async parseTokenResponse(resp: Response): Promise<string> {
+  private async parseTokenResponse(resp: Response, label = ""): Promise<string> {
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
-      throw new Error(`Databricks OAuth failed (HTTP ${resp.status})${body ? `: ${body.slice(0, 200)}` : ""}`);
+      throw new Error(`Databricks OAuth failed${label ? ` [${label}]` : ""} (HTTP ${resp.status})${body ? `: ${body.slice(0, 200)}` : ""}`);
     }
-    const json = (await resp.json()) as {
-      access_token?: string;
-      expires_in?: number;
-    };
+    const json = (await resp.json()) as { access_token?: string; expires_in?: number };
     const token = json.access_token;
     if (!token) throw new Error("Databricks OAuth: no access_token in response");
-
     const expiresIn = typeof json.expires_in === "number" ? json.expires_in : 3600;
     this.cache = { token, expiresAt: Date.now() + (expiresIn - 60) * 1000 };
     return token;
   }
 }
 
-/** True when the host looks like a Databricks workspace. */
 export function isDatabricksHost(host: string): boolean {
   return /databricks|cloud\.databricks/i.test(host);
 }
