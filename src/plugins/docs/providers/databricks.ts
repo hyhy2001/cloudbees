@@ -1,18 +1,91 @@
 /**
- * Databricks OAuth M2M provider for `bee ask`.
+ * Databricks providers for `bee ask`.
  *
- * Tries multiple auth strategies in order:
- *   1. Direct Databricks OIDC token endpoint (Basic Auth, RFC 6749 URL-encoded)
- *   2. Azure AD v1.0 (resource param) — follows /oidc/v1/authorize redirect
- *   3. Azure AD v2.0 (scope param)
- *   4. Common tenant fallback for Azure AD
+ * Three auth strategies:
+ *   1. Azure CLI — runs `az account get-access-token` (no config needed)
+ *   2. OAuth M2M — client_id + client_secret via Databricks OIDC endpoint
+ *   3. PAT — static token (CB_API_KEY)
  */
 import { SYSTEM_PROMPT } from "../context";
+
+// ── Shared helpers ─────────────────────────────────────────────────────────
 
 interface TokenCache {
   token: string;
   expiresAt: number;
 }
+
+const APP_ID = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
+
+async function servingCall(host: string, model: string, token: string, prompt: string): Promise<string> {
+  const url = `${host}/serving-endpoints/${encodeURIComponent(model)}/invocations`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 256,
+      temperature: 0,
+    }),
+    signal: AbortSignal.timeout(60000),
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Databricks LM error (HTTP ${response.status})${body ? `: ${body.slice(0, 200)}` : ""}`);
+  }
+  const json = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  return json.choices?.[0]?.message?.content?.trim() ?? "";
+}
+
+// ── Azure CLI provider ─────────────────────────────────────────────────────
+
+export class AzureCliProvider {
+  public readonly name = "azure-cli";
+
+  private host: string;
+  private model: string;
+
+  public constructor(host: string, model: string) {
+    this.host = host.replace(/\/$/, "");
+    this.model = model;
+  }
+
+  async generate(prompt: string): Promise<string> {
+    const { token } = await this.getToken();
+    return servingCall(this.host, this.model, token, prompt);
+  }
+
+  async validate(): Promise<boolean> {
+    try {
+      await this.getToken();
+      return true;
+    } catch (err) {
+      process.stderr.write(`[docs] Azure CLI auth failed: ${err instanceof Error ? err.message : String(err)}\n`);
+      return false;
+    }
+  }
+
+  private async getToken(): Promise<{ token: string; expiresAt: number }> {
+    const proc = Bun.spawn(["az", "account", "get-access-token", "--resource", APP_ID, "--output", "json"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const out = await new Response(proc.stdout).text();
+    const errText = await new Response(proc.stderr).text();
+    const code = await proc.exited;
+    if (code !== 0) {
+      throw new Error(`az CLI failed (exit ${code}): ${errText.trim() || out.trim()}`);
+    }
+    const json = JSON.parse(out) as { accessToken: string; expiresOn: string };
+    const expiresAt = Date.parse(json.expiresOn);
+    return { token: json.accessToken, expiresAt: isNaN(expiresAt) ? 0 : expiresAt };
+  }
+}
+
+// ── OAuth M2M provider ─────────────────────────────────────────────────────
 
 export class DatabricksOAuthProvider {
   public readonly name = "databricks-oauth";
@@ -21,11 +94,8 @@ export class DatabricksOAuthProvider {
   private clientId: string;
   private clientSecret: string;
   private model: string;
-  private cache: TokenCache | null = null;
-
-  // Cached discovery results
   private tokenEndpoint = "";
-  private azureTenant = "";
+  private cache: TokenCache | null = null;
 
   public constructor(host: string, clientId: string, clientSecret: string, model: string) {
     this.host = host.replace(/\/$/, "");
@@ -36,34 +106,7 @@ export class DatabricksOAuthProvider {
 
   async generate(prompt: string): Promise<string> {
     const token = await this.getToken();
-    const url = `${this.host}/serving-endpoints/${encodeURIComponent(this.model)}/invocations`;
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: prompt },
-        ],
-        max_tokens: 256,
-        temperature: 0,
-      }),
-      signal: AbortSignal.timeout(60000),
-    });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(`Databricks LM error (HTTP ${response.status})${body ? `: ${body.slice(0, 200)}` : ""}`);
-    }
-
-    const json = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    return json.choices?.[0]?.message?.content?.trim() ?? "";
+    return servingCall(this.host, this.model, token, prompt);
   }
 
   async validate(): Promise<boolean> {
@@ -83,17 +126,16 @@ export class DatabricksOAuthProvider {
   }
 
   private async fetchToken(): Promise<string> {
-    // Strategy 1: Direct OIDC token endpoint with Basic Auth
     if (!this.tokenEndpoint) await this.discoverTokenEndpoint();
-    try {
-      return await this.doBasicAuthExchange(this.tokenEndpoint!);
-    } catch { /* try next */ }
 
-    // Strategy 2: Azure AD — try v2.0 (scope) then v1.0 (resource)
+    // Strategy 1: Direct OIDC with Basic Auth (RFC 6749 URL-encoded)
+    try {
+      return await this.basicAuthExchange(this.tokenEndpoint!);
+    } catch { /* try Azure AD */ }
+
+    // Strategy 2: Azure AD via redirect discovery
     const tenants = [(await this.discoverAzureTenant()), "common"].filter(Boolean);
-    const appId = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
     for (const tenant of tenants) {
-      // Azure AD v2.0 with scope param (supports 'common' tenant)
       try {
         const r = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
           method: "POST",
@@ -102,14 +144,13 @@ export class DatabricksOAuthProvider {
             grant_type: "client_credentials",
             client_id: this.clientId,
             client_secret: this.clientSecret,
-            scope: `${appId}/.default`,
+            scope: `${APP_ID}/.default`,
           }).toString(),
           signal: AbortSignal.timeout(10000),
         });
         return this.parseTokenResponse(r, `scope(${tenant})`);
       } catch { /* try next */ }
 
-      // Azure AD v1.0 with resource param
       try {
         const r = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/token`, {
           method: "POST",
@@ -118,7 +159,7 @@ export class DatabricksOAuthProvider {
             grant_type: "client_credentials",
             client_id: this.clientId,
             client_secret: this.clientSecret,
-            resource: appId,
+            resource: APP_ID,
           }).toString(),
           signal: AbortSignal.timeout(10000),
         });
@@ -129,7 +170,6 @@ export class DatabricksOAuthProvider {
     throw new Error("Token exchange failed (401) — check credentials");
   }
 
-  /** Discover OIDC token endpoint from the workspace. */
   private async discoverTokenEndpoint(): Promise<void> {
     for (const path of ["/.well-known/databricks-config", "/oidc/.well-known/oauth-authorization-server"]) {
       try {
@@ -151,18 +191,10 @@ export class DatabricksOAuthProvider {
     throw new Error("OIDC discovery failed — verify workspace URL");
   }
 
-  /**
-   * Discover Azure AD tenant by trying multiple endpoints (same as Python SDK):
-   *   - {host}/aad/auth — Databricks Azure login page redirect
-   *   - {host}/oidc/v1/authorize — OAuth authorize endpoint redirect
-   *   - DATABRICKS_AZURE_TENANT_ID env var
-   */
   private async discoverAzureTenant(): Promise<string> {
-    if (this.azureTenant) return this.azureTenant;
+    if (this.cache) return ""; // not cached means we haven't succeeded yet
     const tenant = process.env["DATABRICKS_AZURE_TENANT_ID"] ?? "";
-    if (tenant) { this.azureTenant = tenant; return tenant; }
-
-    const candidates: string[] = [];
+    if (tenant) return tenant;
     for (const path of ["/aad/auth", "/oidc/v1/authorize"]) {
       try {
         const r = await fetch(`${this.host}${path}`, {
@@ -170,26 +202,19 @@ export class DatabricksOAuthProvider {
         });
         const location = r.headers.get("location") ?? r.headers.get("Location") ?? "";
         const m = location.match(/login\.microsoftonline\.com\/([^/?]+)/);
-        if (m?.[1]) candidates.push(m[1]);
+        if (m?.[1]) return m[1];
       } catch { /* try next */ }
     }
-    if (candidates.length > 0) {
-      this.azureTenant = candidates[0]!;
-    }
-    return this.azureTenant;
+    return "";
   }
 
-  /** POST to OIDC token endpoint with URL-encoded Basic Auth (RFC 6749 §2.3.1). */
-  private async doBasicAuthExchange(url: string): Promise<string> {
+  private async basicAuthExchange(url: string): Promise<string> {
     const encodedId = encodeURIComponent(this.clientId);
     const encodedSecret = encodeURIComponent(this.clientSecret);
     const basic = Buffer.from(`${encodedId}:${encodedSecret}`).toString("base64");
     const r = await fetch(url, {
       method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-        authorization: `Basic ${basic}`,
-      },
+      headers: { "content-type": "application/x-www-form-urlencoded", authorization: `Basic ${basic}` },
       body: new URLSearchParams({ grant_type: "client_credentials", scope: "all-apis" }).toString(),
       signal: AbortSignal.timeout(10000),
     });

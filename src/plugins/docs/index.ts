@@ -3,7 +3,7 @@ import { registerDocsCommands } from "./commands";
 import { LM_URL, LM_API_KEY, LM_MODEL, LM_CLIENT_ID, LM_CLIENT_SECRET } from "./config";
 import { setProvider, getProvider } from "./answer";
 import { OpenAICompatProvider } from "./providers/openai";
-import { DatabricksOAuthProvider, isDatabricksHost } from "./providers/databricks";
+import { AzureCliProvider, DatabricksOAuthProvider, isDatabricksHost } from "./providers/databricks";
 
 export const docsPlugin: Plugin = {
   meta: {
@@ -32,6 +32,15 @@ export const docsPlugin: Plugin = {
           setProvider(prov);
         } else {
           process.stderr.write("[docs] WARN Databricks OAuth token exchange failed — check client_id and client_secret.\n");
+        }
+      }
+      if (!getProvider()) {
+        // Try Azure CLI auth (az login) as fallback for Azure Databricks
+        if (isDatabricksHost(LM_URL)) {
+          const cliProv = new AzureCliProvider(LM_URL, LM_MODEL);
+          if (await cliProv.validate()) {
+            setProvider(cliProv);
+          }
         }
       }
       if (!getProvider()) {
