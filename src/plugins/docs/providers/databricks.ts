@@ -88,23 +88,27 @@ export class DatabricksOAuthProvider {
   /**
    * Same flow for all clouds (AWS, Azure, GCP):
    *   1. Discover OIDC endpoints from the workspace
-   *   2. Exchange client_id + client_secret (in request body per RFC 6749)
+   *   2. Exchange credentials via Basic Auth (per RFC 6749 §2.3.1)
    *
-   * The Python SDK uses use_header=True (Basic Auth) for the Databricks OIDC
-   * endpoint, but client_secret may contain special characters that break the
-   * Basic Auth format (RFC 6749 §2.3.1). Sending credentials in the body avoids
-   * this issue and works with all token endpoint implementations.
+   * Per RFC 6749 §2.3.1, client_id and client_secret MUST be URL-encoded
+   * individually before being combined into the Basic Auth value, so that
+   * special characters (:, @, etc.) in the secret don't break parsing.
    */
   private async fetchToken(): Promise<string> {
     const endpoint = this.tokenEndpoint || await this.discoverTokenEndpoint();
 
+    const encodedId = encodeURIComponent(this.clientId);
+    const encodedSecret = encodeURIComponent(this.clientSecret);
+    const basic = Buffer.from(`${encodedId}:${encodedSecret}`).toString("base64");
+
     const resp = await fetch(endpoint, {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        authorization: `Basic ${basic}`,
+      },
       body: new URLSearchParams({
         grant_type: "client_credentials",
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
         scope: "all-apis",
       }).toString(),
       signal: AbortSignal.timeout(10000),
