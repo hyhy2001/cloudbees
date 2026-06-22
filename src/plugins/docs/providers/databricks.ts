@@ -209,9 +209,8 @@ export class DatabricksOAuthProvider {
   }
 
   private async basicAuthExchange(url: string): Promise<string> {
-    const encodedId = encodeURIComponent(this.clientId);
-    const encodedSecret = encodeURIComponent(this.clientSecret);
-    const basic = Buffer.from(`${encodedId}:${encodedSecret}`).toString("base64");
+    // Same as Python SDK's requests.HTTPBasicAuth — no URL-encoding
+    const basic = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
     const r = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", authorization: `Basic ${basic}` },
