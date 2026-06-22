@@ -31,9 +31,19 @@ function pick(baked: string | undefined, envKey: string): string {
   return process.env[envKey] ?? "";
 }
 
-export const LM_URL = pick(
-  typeof BEE_LM_URL !== "undefined" ? BEE_LM_URL : undefined,
-  "CB_DATABRICK_URL",
+/** Ensure a URL-like string has a protocol prefix; fetch() requires one. */
+function ensureProtocol(url: string): string {
+  if (!url) return url;
+  // Already has protocol or looks like a path (relative URL).
+  if (/^https?:\/\//i.test(url) || url.startsWith("/")) return url;
+  return `https://${url}`;
+}
+
+export const LM_URL = ensureProtocol(
+  pick(
+    typeof BEE_LM_URL !== "undefined" ? BEE_LM_URL : undefined,
+    "CB_DATABRICK_URL",
+  ),
 );
 export const LM_API_KEY = pick(
   typeof BEE_LM_API_KEY !== "undefined" ? BEE_LM_API_KEY : undefined,
