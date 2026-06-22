@@ -40,51 +40,6 @@ async function servingCall(host: string, model: string, token: string, prompt: s
   return json.choices?.[0]?.message?.content?.trim() ?? "";
 }
 
-// ── Azure CLI provider ─────────────────────────────────────────────────────
-
-export class AzureCliProvider {
-  public readonly name = "azure-cli";
-
-  private host: string;
-  private model: string;
-
-  public constructor(host: string, model: string) {
-    this.host = host.replace(/\/$/, "");
-    this.model = model;
-  }
-
-  async generate(prompt: string): Promise<string> {
-    const { token } = await this.getToken();
-    return servingCall(this.host, this.model, token, prompt);
-  }
-
-  async validate(): Promise<boolean> {
-    try {
-      await this.getToken();
-      return true;
-    } catch (err) {
-      process.stderr.write(`[docs] Azure CLI auth failed: ${err instanceof Error ? err.message : String(err)}\n`);
-      return false;
-    }
-  }
-
-  private async getToken(): Promise<{ token: string; expiresAt: number }> {
-    const proc = Bun.spawn(["az", "account", "get-access-token", "--resource", APP_ID, "--output", "json"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const out = await new Response(proc.stdout).text();
-    const errText = await new Response(proc.stderr).text();
-    const code = await proc.exited;
-    if (code !== 0) {
-      throw new Error(`az CLI failed (exit ${code}): ${errText.trim() || out.trim()}`);
-    }
-    const json = JSON.parse(out) as { accessToken: string; expiresOn: string };
-    const expiresAt = Date.parse(json.expiresOn);
-    return { token: json.accessToken, expiresAt: isNaN(expiresAt) ? 0 : expiresAt };
-  }
-}
-
 // ── OAuth M2M provider ─────────────────────────────────────────────────────
 
 export class DatabricksOAuthProvider {
