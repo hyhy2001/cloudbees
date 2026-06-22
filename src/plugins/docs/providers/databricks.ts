@@ -144,17 +144,13 @@ export class DatabricksOAuthProvider {
       tenant = process.env["DATABRICKS_AZURE_TENANT_ID"] ?? "";
     }
 
-    if (!tenant) {
-      throw new Error(
-        "Azure tenant ID not found. Set DATABRICKS_AZURE_TENANT_ID env var " +
-        "(find it in Azure AD -> App registrations -> your app -> Directory (tenant) ID).",
-      );
-    }
-
     // 3. Exchange credentials via Azure AD
     const appId = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
     const scope = `${appId}/.default`;
-    const tokenUrl = tokenEndpoint || `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
+    // Use the discovered tenant or 'organizations' which auto-routes based on
+    // the client ID (no tenant ID required from the user).
+    const tenantId = tenant || "organizations";
+    const tokenUrl = tokenEndpoint || `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
 
     const resp = await fetch(tokenUrl, {
       method: "POST",
