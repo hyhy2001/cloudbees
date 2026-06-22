@@ -41,7 +41,8 @@ export class DatabricksOAuthProvider {
     try {
       await this.getToken();
       return true;
-    } catch {
+    } catch (err) {
+      process.stderr.write(`[docs] Databricks OAuth validation failed: ${err instanceof Error ? err.message : String(err)}\n`);
       return false;
     }
   }
