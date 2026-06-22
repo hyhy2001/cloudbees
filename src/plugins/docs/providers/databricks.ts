@@ -114,22 +114,37 @@ export class DatabricksOAuthProvider {
 
   /**
    * Azure: first fetch OIDC metadata for the workspace to discover the tenant,
-   * then POST to Azure AD to exchange credentials for a token.
+   * token endpoint, and the Databricks resource app ID (scope). Then exchange
+   * credentials via Azure AD.
+   *
+   * The OIDC metadata endpoint returns:
+   *   { tenant_id, token_endpoint, resource_app_id? }
+   *
+   * resource_app_id is the Azure AD App ID for Databricks (a well-known GUID).
+   * If the metadata omits it, we fall back to the documented constant:
+   *   2ff814a6-3304-4ab8-85cb-cd0e6f879c1d
+   * (Databricks' Azure Enterprise Application client ID).
    */
   private async fetchAzureToken(): Promise<string> {
-    // 1. Discover tenant via OIDC metadata endpoint
+    // 1. Fetch OIDC metadata
     const metaUrl = `${this.host}/api/2.0/oidc/well-known`;
     const metaResp = await fetch(metaUrl, { signal: AbortSignal.timeout(10000) });
     if (!metaResp.ok) {
       throw new Error(`Azure OIDC metadata fetch failed (HTTP ${metaResp.status})`);
     }
-    const meta = (await metaResp.json()) as { tenant_id?: string; authorization_endpoint?: string; token_endpoint?: string };
+    const meta = (await metaResp.json()) as {
+      tenant_id?: string;
+      token_endpoint?: string;
+      resource_app_id?: string;
+    };
     const tenant = meta.tenant_id;
     if (!tenant) throw new Error("Azure OIDC metadata missing tenant_id");
 
-    // 2. Exchange credentials via Azure AD
-    const scope = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/.default";
-    const tokenUrl = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
+    // 2. Build scope — prefer metadata resource_app_id, fall back to constant
+    const appId = meta.resource_app_id ?? "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
+    const scope = `${appId}/.default`;
+    const tokenUrl = meta.token_endpoint ?? `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
+
     const resp = await fetch(tokenUrl, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
