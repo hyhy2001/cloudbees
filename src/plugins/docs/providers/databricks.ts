@@ -206,18 +206,12 @@ export class DatabricksOAuthProvider {
       }
     } catch { /* fall through */ }
 
-    // Fall back to DATABRICKS_AZURE_TENANT_ID env var
-    const tenant = process.env["DATABRICKS_AZURE_TENANT_ID"] ?? "";
-    if (tenant) {
-      return {
-        authorizationEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`,
-        tokenEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
-      };
-    }
-    throw new Error(
-      "Azure AD endpoint discovery failed. " +
-      "Set DATABRICKS_AZURE_TENANT_ID env var with your Azure tenant ID.",
-    );
+    // Fall back to DATABRICKS_AZURE_TENANT_ID env var, or try 'common'
+    const tenant = process.env["DATABRICKS_AZURE_TENANT_ID"] ?? "common";
+    return {
+      authorizationEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`,
+      tokenEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
+    };
   }
 
   private async parseTokenResponse(resp: Response): Promise<string> {
