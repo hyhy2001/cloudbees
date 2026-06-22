@@ -86,22 +86,51 @@ export class DatabricksOAuthProvider {
   }
 
   /**
-   * Same flow for all clouds (AWS, Azure, GCP):
-   *   1. Discover OIDC endpoints from the workspace
-   *   2. Exchange credentials via Basic Auth (per RFC 6749 §2.3.1)
+   * Discover OIDC endpoint, then exchange credentials.
    *
-   * Per RFC 6749 §2.3.1, client_id and client_secret MUST be URL-encoded
-   * individually before being combined into the Basic Auth value, so that
-   * special characters (:, @, etc.) in the secret don't break parsing.
+   * For Azure workspaces, try two approaches:
+   *   A. Direct token exchange via Basic Auth (RFC 6749 §2.3.1 URL-encoded)
+   *   B. If A fails, follow the authorize redirect to discover the real
+   *      Azure AD token endpoint and send credentials in the body.
    */
   private async fetchToken(): Promise<string> {
-    const endpoint = this.tokenEndpoint || await this.discoverTokenEndpoint();
+    if (!this.tokenEndpoint) await this.discoverTokenEndpoint();
 
+    // Approach A: direct token exchange via Databricks OIDC endpoint
+    try {
+      return await this.exchangeToken(this.tokenEndpoint!);
+    } catch {
+      // Fall through to Azure AD discovery
+    }
+
+    // Approach B: Azure AD — follow /oidc/v1/authorize redirect, then
+    // send credentials in body (Azure AD expects body params, not Basic Auth)
+    const resp = await fetch(`${this.host}/oidc/v1/authorize`, {
+      method: "GET", redirect: "manual", signal: AbortSignal.timeout(10000),
+    });
+    const location = resp.headers.get("location");
+    if (!location) throw new Error("Token exchange failed (401) — check credentials");
+    const adTokenUrl = location.replace("/authorize", "/token").split("?")[0]!;
+    const adResp = await fetch(adTokenUrl, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        scope: "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/.default",
+      }).toString(),
+      signal: AbortSignal.timeout(10000),
+    });
+    return this.parseTokenResponse(adResp);
+  }
+
+  private async exchangeToken(url: string): Promise<string> {
     const encodedId = encodeURIComponent(this.clientId);
     const encodedSecret = encodeURIComponent(this.clientSecret);
     const basic = Buffer.from(`${encodedId}:${encodedSecret}`).toString("base64");
 
-    const resp = await fetch(endpoint, {
+    const resp = await fetch(url, {
       method: "POST",
       headers: {
         "content-type": "application/x-www-form-urlencoded",
