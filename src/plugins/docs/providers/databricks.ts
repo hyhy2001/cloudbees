@@ -36,6 +36,16 @@ export class DatabricksOAuthProvider {
     private readonly model: string,
   ) {}
 
+  /** Attempt a token exchange. Returns true on success, false on failure. */
+  async validate(): Promise<boolean> {
+    try {
+      await this.getToken();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async generate(prompt: string): Promise<string> {
     const token = await this.getToken();
     const base = this.workspaceUrl.replace(/\/$/, "");

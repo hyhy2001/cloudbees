@@ -14,7 +14,7 @@ beforeAll(() => {
       const url = new URL(req.url);
       if (url.pathname === "/v1/models") return new Response(JSON.stringify({ data: [{ id: "mock" }] }));
       if (url.pathname === "/v1/chat/completions") {
-        const body = await req.json() as { messages: Array<{ content: string }>; stream?: boolean };
+        const body = await req.json() as { messages: Array<{ role?: string; content?: string }>; stream?: boolean };
         const queryMsg = body.messages?.find((m) => m.role === "user")?.content ?? "";
         const text = queryMsg.includes("what is a profile")
           ? "A profile is a saved login target for one CloudBees server."
@@ -49,11 +49,16 @@ afterAll(() => { mockServer?.stop(); });
 
 async function runCli(args: string[], extraEnv: Record<string, string> = {}): Promise<{ code: number; out: string }> {
   const lmUrl = extraEnv.CB_DATABRICK_URL ?? mockUrl;
-  const proc = Bun.spawn(["bun", "run", MAIN, ...args], {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, ...extraEnv, CB_DB_PATH: "/tmp/bee-ask-cli-test.db", CB_DATABRICK_URL: lmUrl },
-  });
+  // Ensure no OAuth credentials leak from parent env into subprocess.
+  const env = {
+    ...process.env,
+    ...extraEnv,
+    CB_DB_PATH: "/tmp/bee-ask-cli-test.db",
+    CB_DATABRICK_URL: lmUrl,
+    CB_CLIENT_ID: "",
+    CB_CLIENT_SECRET: "",
+  };
+  const proc = Bun.spawn(["bun", "run", MAIN, ...args], { stdout: "pipe", stderr: "pipe", env });
   const out = await new Response(proc.stdout).text();
   const err = await new Response(proc.stderr).text();
   const code = await proc.exited;
