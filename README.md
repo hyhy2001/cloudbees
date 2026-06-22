@@ -15,7 +15,7 @@
 - Job lifecycle: list / get / create / update / delete / run / stop / log / status / copy / move / track / untrack, plus String build parameters, an email anti-spam content filter, and CloudBees Folders Plus controlled-agent approval (list-agents / approve-agent / remove-agent)
 - Credential lifecycle: list / get / create / update / delete / track / untrack (system & user stores)
 - Node lifecycle: list / get / create / update / delete / offline / online / copy / track / untrack (SSH and JNLP/Inbound launchers, Always/On-demand availability), plus Folders Plus controlled-agent mode toggle
-- **Offline help** (`bee ask`) — BM25 natural-language search over the full command tree and 17 help facts; optional LM answer generation via any OpenAI-compatible endpoint baked at build time
+- **Offline help** (`bee ask`) — BM25 natural-language search over the full command tree and 31 help facts; LM answer generation via any OpenAI-compatible endpoint (disabled until LM endpoint is configured in `bee.lm.json` or env)
 
 ## Requirements
 
@@ -680,15 +680,20 @@ The generated file is committed and baked into the binary.
 - `wrong_refusal` — does the model say "No info available" when the context actually has an answer?
 
 ```bash
-bun run scripts/benchmark.ts               # Phase A + B (requires LM at http://127.0.0.1:11434)
-bun run scripts/benchmark.ts --no-llm      # Phase A only (fast, no LM needed)
+bun run scripts/benchmark.ts                # Phase A + B (requires LM at http://127.0.0.1:11434)
+bun run scripts/benchmark.ts --no-llm       # Phase A only (fast, no LM needed)
 bun run scripts/benchmark.ts --lm-url http://host:port   # custom LM endpoint
+bun run scripts/benchmark.ts --api-key <key>              # API key for authenticated endpoints
+bun run scripts/benchmark.ts --model <name>               # Model name (e.g. oc/deepseek-v4-flash-free)
+bun run scripts/benchmark.ts --llm-limit 73               # Phase B on first N queries (hand-curated only)
 bun run scripts/benchmark.ts --llm-limit 73               # Phase B on hand-curated queries only
+bun run scripts/benchmark.ts --api-key <key>              # API key for authenticated endpoints
+bun run scripts/benchmark.ts --model <name>               # Model name (e.g. oc/deepseek-v4-flash-free)
 ```
 
 Results are printed to the console and written to `benchmark-report.md` (gitignored).
 
-**Latest results** (qwen2.5-coder-3b-q4_k_m, 72 LLM queries judged):
+**Latest results** (qwen2.5-coder-3b-q4_k_m, 73 LLM queries judged):
 
 | Metric | Score |
 |---|---|
@@ -697,10 +702,10 @@ Results are printed to the console and written to `benchmark-report.md` (gitigno
 | BM25 Recall@5 | **99.1%** (911/919) |
 | BM25 MRR | **0.856** |
 | BM25 misses (top-10) | **3** |
-| LLM correct command | **94.4%** (68/72) |
-| LLM hallucination rate | **1.4%** (1/72) |
+| LLM correct command | **94.5%** (69/73) |
+| LLM hallucination rate | **1.4%** (1/73) |
 | LLM has required flag | **84.6%** (11/13) |
-| LLM wrong refusal | **1.4%** (1/72) |
+| LLM wrong refusal | **1.4%** (1/73) |
 
 LLM by query type:
 
@@ -711,13 +716,16 @@ LLM by query type:
 | troubleshoot | 9 | 100.0% | 100.0% | — |
 | flag | 12 | 91.7% | 100.0% | 83.3% |
 
-Halucination fixes applied: scoring bug (multi-dot expectedId), `stripInventedCommands` now strips `bee help <topic>` (allows bare `bee --help`), system prompt strengthened with rank-1 preference, explicit `bee help` ban, and action-verb matching rules. Remaining failures are edge cases: ambiguous "remove an agent" vs `node.delete`/`job.remove-agent`, and scorer limitations (`bee --ui` not matching command pattern, missing `--profile` in correct answer).
+Fixes applied: scoring bug (multi-dot expectedId in `scoreAnswer` → replaced `replace(".", " ")` with `replace(/\./g, " ")`), `stripInventedCommands` now strips `bee help <topic>` (allows bare `bee --help`), system prompt strengthened with rank-1 preference, explicit `bee help` ban, action-verb matching rules (`add`→`update`, `login to profile`→`auth login --profile`), concept.login help fact mentions "bee is a single binary — no installation needed". Remaining failures are edge cases: ambiguous "remove an agent" vs `node.delete`/`job.remove-agent`, and scorer limitations (`bee --ui` not matching command pattern, `--profile` flag not mentioned by name in an otherwise correct answer).
 
 Improvements since initial release:
 - BM25 retrieval: Recall@1 **+7.3%**, MRR **+0.054** (promotion layer for flag/cross-plugin/expert routing, synonym map expansion, corpus caching)
 - LM latency: streaming output via SSE, timeout increased 15s → 60s
 - Output hardening: XML-formatted context, stricter flag anti-hallucination in system prompt, `stripInventedCommands` post-processor (backtick + plain-text), off-domain guard (skip LM if gate rejects query)
 - Benchmark: expanded from **69 → 919 queries** (121 curated + 798 auto-generated), **0 misses** in top-10
+- LLM correct command: improved from 87.5% → **94.5%** (scoring fix, prompt hardening, `bee help <topic>` strip, rank-1 preference, action-verb matching)
+- `bee ask` disabled when no LM provider configured — prints actionable error message pointing to `bee.lm.json` or env vars
+- Benchmark script: API key, model name, and limit flags (`--api-key`, `--model`, `--llm-limit`); `stream: false` support for non-streaming endpoints
 
 BM25 Recall@1 by query type:
 
