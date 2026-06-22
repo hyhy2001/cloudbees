@@ -89,14 +89,13 @@ export class DatabricksOAuthProvider {
       return await this.doBasicAuthExchange(this.tokenEndpoint!);
     } catch { /* try next */ }
 
-    // Strategy 2: Azure AD via redirect discovery
-    const tenant = await this.discoverAzureTenant();
-    if (tenant) {
-      // v1.0 endpoint with resource param (Python SDK's azure_service_principal)
-      const appId = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
-      const v1Url = `https://login.microsoftonline.com/${tenant}/oauth2/token`;
+    // Strategy 2: Azure AD — try v1.0 (resource) then v2.0 (scope)
+    const tenants = [(await this.discoverAzureTenant()), "common"].filter(Boolean);
+    const appId = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
+    for (const tenant of tenants) {
+      // Azure AD v1.0 with resource param
       try {
-        const r = await fetch(v1Url, {
+        const r = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/token`, {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
@@ -107,13 +106,12 @@ export class DatabricksOAuthProvider {
           }).toString(),
           signal: AbortSignal.timeout(10000),
         });
-        return this.parseTokenResponse(r, "resource");
+        return this.parseTokenResponse(r, `resource(${tenant})`);
       } catch { /* try next */ }
 
-      // v2.0 endpoint with scope param
-      const v2Url = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
+      // Azure AD v2.0 with scope param
       try {
-        const r = await fetch(v2Url, {
+        const r = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
@@ -124,7 +122,7 @@ export class DatabricksOAuthProvider {
           }).toString(),
           signal: AbortSignal.timeout(10000),
         });
-        return this.parseTokenResponse(r, "scope");
+        return this.parseTokenResponse(r, `scope(${tenant})`);
       } catch { /* try next */ }
     }
 
