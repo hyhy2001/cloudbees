@@ -733,7 +733,7 @@ export const HELP_FACTS: HelpFact[] = [
   },
   {
     "id": "concept.login",
-    "type": "topic",
+    "kind": "concept",
     "title": "how to log in",
     "terms": [
       "how do i log in",

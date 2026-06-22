@@ -1,13 +1,58 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { join } from "node:path";
 
 const MAIN = join(import.meta.dir, "..", "src", "main.ts");
 
+// ── Mock LM server: responds instantly with a canned answer ─────────────────
+let mockUrl = "";
+let mockServer: ReturnType<typeof Bun.serve> | null = null;
+
+beforeAll(() => {
+  mockServer = Bun.serve({
+    port: 0,
+    async fetch(req) {
+      const url = new URL(req.url);
+      if (url.pathname === "/v1/models") return new Response(JSON.stringify({ data: [{ id: "mock" }] }));
+      if (url.pathname === "/v1/chat/completions") {
+        const body = await req.json() as { messages: Array<{ content: string }>; stream?: boolean };
+        const queryMsg = body.messages?.find((m) => m.role === "user")?.content ?? "";
+        const text = queryMsg.includes("what is a profile")
+          ? "A profile is a saved login target for one CloudBees server."
+          : "Use `bee job stop <name>` to cancel a running build.";
+
+        if (body.stream) {
+          // SSE streaming response
+          const encoder = new TextEncoder();
+          const stream = new ReadableStream({
+            start(controller) {
+              const payload = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+              controller.enqueue(encoder.encode(payload));
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              controller.close();
+            },
+          });
+          return new Response(stream, { headers: { "content-type": "text/event-stream" } });
+        }
+
+        // Non-streaming response
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: text, role: "assistant" } }],
+        }));
+      }
+      return new Response("not found", { status: 404 });
+    },
+  });
+  mockUrl = `http://127.0.0.1:${mockServer.port}`;
+});
+
+afterAll(() => { mockServer?.stop(); });
+
 async function runCli(args: string[], extraEnv: Record<string, string> = {}): Promise<{ code: number; out: string }> {
+  const lmUrl = extraEnv.CB_DATABRICK_URL ?? mockUrl;
   const proc = Bun.spawn(["bun", "run", MAIN, ...args], {
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, ...extraEnv, CB_DB_PATH: "/tmp/bee-ask-cli-test.db" },
+    env: { ...process.env, ...extraEnv, CB_DB_PATH: "/tmp/bee-ask-cli-test.db", CB_DATABRICK_URL: lmUrl },
   });
   const out = await new Response(proc.stdout).text();
   const err = await new Response(proc.stderr).text();
@@ -44,5 +89,17 @@ describe("bee ask CLI", () => {
     const { code, out } = await runCli(["ask", "global", "keys", "tab"], { BEE_ASK_INCLUDE_DOC_CHUNKS: "1" });
     expect(code).toBe(0);
     expect(out.length).toBeGreaterThan(0);
+  });
+
+  test("errors when no LM provider is configured", async () => {
+    const { code, out } = await runCli(["ask", "list", "jobs"], { CB_DATABRICK_URL: "" });
+    expect(code).toBe(1);
+    expect(out.toLowerCase()).toContain("lm provider");
+  });
+
+  test("shows helpful message with no LM and -h/--help", async () => {
+    const { code, out } = await runCli(["ask", "-h"]);
+    expect(code).toBe(0);
+    expect(out).toContain("Ask how to use bee");
   });
 });

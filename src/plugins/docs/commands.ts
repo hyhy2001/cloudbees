@@ -10,13 +10,13 @@
 import type { PluginContext } from "../../registry/types";
 import { printMessage, printInfo, printError } from "../../core/cli/output";
 import { buildCorpus } from "./corpus";
-import { answer } from "./answer";
+import { answer, getProvider } from "./answer";
 import { presentAnswer } from "./presenter";
 
 export function registerDocsCommands(ctx: PluginContext): void {
   ctx.program
     .command("ask")
-    .description("Ask how to use bee — searches commands and docs (LM answer when configured)")
+    .description("Ask how to use bee — requires LM endpoint configured in bee.lm.json or env")
     .argument("<query...>", "What you want to do (e.g. 'create job', 'what is a profile')")
     .option("--limit <n>", "Max context items to retrieve", "5")
     .option("--json", "Output machine-readable JSON", false)
@@ -25,6 +25,11 @@ export function registerDocsCommands(ctx: PluginContext): void {
         const query = queryParts.join(" ").trim();
         if (!query) {
           printError("Empty query. Try: bee ask create job");
+          process.exit(1);
+        }
+
+        if (!getProvider()) {
+          printError("bee ask requires an LM provider to be configured. Set LM_URL (and LM_API_KEY or client credentials) in bee.lm.json or environment variables.");
           process.exit(1);
         }
 

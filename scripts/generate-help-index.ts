@@ -355,7 +355,7 @@ const FACTS: HelpFact[] = [
   },
   {
     id: "concept.login",
-    type: "topic",
+    kind: "concept",
     title: "how to log in",
     terms: [
       "how do i log in", "how do i sign in", "log in", "sign in", "login to server",
