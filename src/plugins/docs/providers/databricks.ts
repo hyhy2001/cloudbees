@@ -109,14 +109,16 @@ export class DatabricksOAuthProvider {
 
   private async fetchToken(): Promise<string> {
     const base = this.workspaceUrl.replace(/\/$/, "");
+    const basicAuth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
 
     const resp = await fetch(`${base}/oidc/v1/token`, {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        authorization: `Basic ${basicAuth}`,
+      },
       body: new URLSearchParams({
         grant_type: "client_credentials",
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
         scope: "all-apis",
       }).toString(),
       signal: AbortSignal.timeout(10000),
