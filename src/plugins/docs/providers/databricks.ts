@@ -179,33 +179,45 @@ export class DatabricksOAuthProvider {
   }
 
   /**
-   * Azure: discover endpoints by requesting the authorize endpoint and
-   * following the 302 redirect to Azure AD (same as Python SDK's
-   * get_azure_entra_id_workspace_endpoints).
+   * Azure: discover AD endpoints by following the OAuth2 redirect to Azure AD,
+   * then check DATABRICKS_AZURE_TENANT_ID if the redirect fails.
+   *
+   * IMPORTANT: do NOT call discoverOidcEndpoints() here — for Azure workspaces
+   * the OIDC endpoint returns a Databricks-hosted OIDC URL that expects
+   * Basic Auth, conflicting with the Azure AD client_credentials flow which
+   * sends credentials in the request body.
    */
   private async discoverAzureEndpoints(): Promise<OidcEndpoints> {
-    // Try standard OIDC discovery first (works on some Azure workspaces)
+    // Try Azure redirect: GET /oidc/oauth2/v2.0/authorize, follow 302
+    // to get the Azure AD endpoint (same as Python SDK's
+    // get_azure_entra_id_workspace_endpoints).
     try {
-      return await this.discoverOidcEndpoints();
-    } catch { /* fall through to Azure-specific discovery */ }
+      const resp = await fetch(`${this.host}/oidc/oauth2/v2.0/authorize`, {
+        method: "GET",
+        redirect: "manual",
+        signal: AbortSignal.timeout(10000),
+      });
+      const location = resp.headers.get("location");
+      if (location) {
+        // Location is an Azure AD URL like:
+        // https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize?...
+        const tokenEndpoint = location.replace("/authorize", "/token").split("?")[0]!;
+        return { authorizationEndpoint: location.split("?")[0]!, tokenEndpoint };
+      }
+    } catch { /* fall through */ }
 
-    // Azure-specific: GET /oidc/oauth2/v2.0/authorize, follow 302 to get Azure AD URL
-    const resp = await fetch(`${this.host}/oidc/oauth2/v2.0/authorize`, {
-      method: "GET",
-      redirect: "manual",
-      signal: AbortSignal.timeout(10000),
-    });
-    const location = resp.headers.get("location");
-    if (!location) {
-      throw new Error(
-        "Azure AD endpoint discovery failed. " +
-        "Set DATABRICKS_AZURE_TENANT_ID env var with your Azure tenant ID.",
-      );
+    // Fall back to DATABRICKS_AZURE_TENANT_ID env var
+    const tenant = process.env["DATABRICKS_AZURE_TENANT_ID"] ?? "";
+    if (tenant) {
+      return {
+        authorizationEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`,
+        tokenEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
+      };
     }
-    // Location is an Azure AD URL like:
-    // https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize?...
-    const tokenEndpoint = location.replace("/authorize", "/token").split("?")[0]!;
-    return { authorizationEndpoint: location.split("?")[0]!, tokenEndpoint };
+    throw new Error(
+      "Azure AD endpoint discovery failed. " +
+      "Set DATABRICKS_AZURE_TENANT_ID env var with your Azure tenant ID.",
+    );
   }
 
   private async parseTokenResponse(resp: Response): Promise<string> {
