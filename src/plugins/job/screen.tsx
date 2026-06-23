@@ -1597,7 +1597,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               {SYM.fail} {errMsg}
             </Text>
           )}
-          <SearchBar state={search} />
+          <SearchBar state={search} onActivate={() => search.openBinding.run()} />
           <DataTable
             tableWidth={termCols}
             columns={[

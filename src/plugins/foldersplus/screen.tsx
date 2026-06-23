@@ -190,7 +190,7 @@ const FoldersPlusScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       ) : (
         <Box flexDirection="column" marginTop={1}>
           {errMsg && <Text color={THEME.error}>{SYM.fail} {errMsg}</Text>}
-          <SearchBar state={search} />
+          <SearchBar state={search} onActivate={() => search.openBinding.run()} />
           <DataTable
             tableWidth={termCols}
             columns={[

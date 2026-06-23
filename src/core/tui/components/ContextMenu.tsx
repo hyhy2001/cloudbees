@@ -8,12 +8,38 @@
  *   Esc      close without action
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { FC } from "react";
 import { Modal } from "./Modal";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
+import { useOnClick, useOnMouseMove, useOnMouseLeave, useBoundingClientRect } from "@ink-tools/ink-mouse";
+import { useDimensions } from "../data/use-dimensions";
+
+// Guard: only rendered inside <MouseProvider> when isTty is true.
+const CtxMenuMouseHandler: FC<{
+  menuRef: React.RefObject<any>;
+  itemCount: number;
+  onPick: (index: number) => void;
+  onHover: (index: number) => void;
+  onLeave: () => void;
+}> = ({ menuRef, itemCount, onPick, onHover, onLeave }) => {
+  const { columns, rows } = useDimensions();
+  const rect = useBoundingClientRect(menuRef as any, [columns, rows]);
+  useOnClick(menuRef as any, (event) => {
+    if (!rect) return;
+    const idx = event.y - rect.top - 1; // -1 for modal title row
+    if (idx >= 0 && idx < itemCount) onPick(idx);
+  });
+  useOnMouseMove(menuRef as any, (event) => {
+    if (!rect) return;
+    const idx = event.y - rect.top - 1;
+    onHover(idx >= 0 && idx < itemCount ? idx : -1);
+  });
+  useOnMouseLeave(menuRef as any, () => onLeave());
+  return null;
+};
 
 export interface ContextMenuAction {
   label: string;
@@ -50,6 +76,9 @@ export interface ContextMenuProps {
 export const ContextMenu: FC<ContextMenuProps> = ({ title, actions, onClose, isActive = true }) => {
   const visible = actions.filter((a) => !a.when || a.when());
   const [cursor, setCursor] = useState(0);
+  const [hovered, setHovered] = useState(-1);
+  const menuRef = useRef<typeof Box>(null);
+  const isTty = Boolean(process.stdout.isTTY);
 
   const run = useCallback(
     (idx: number) => {
@@ -82,15 +111,26 @@ export const ContextMenu: FC<ContextMenuProps> = ({ title, actions, onClose, isA
 
   return (
     <Modal title={displayTitle}>
+      {isTty && (
+        <CtxMenuMouseHandler
+          menuRef={menuRef as any}
+          itemCount={visible.length}
+          onPick={(i) => run(i)}
+          onHover={setHovered}
+          onLeave={() => setHovered(-1)}
+        />
+      )}
       {visible.length === 0 ? (
         <Text color={THEME.dim}>(no actions available)</Text>
       ) : (
-        visible.map((action, i) => {
+        <Box ref={isTty ? menuRef as any : undefined} flexDirection="column">
+        {visible.map((action, i) => {
           const on = i === cursor;
+          const hover = i === hovered && !on;
           const numStr = i < 9 ? String(i + 1) : "0";
           const labelColor = action.danger
             ? (on ? THEME.danger : THEME.error)
-            : (on ? THEME.normal : THEME.dim);
+            : (on ? THEME.normal : hover ? THEME.normal : THEME.dim);
           const icon = action.icon ?? SYM.arrow;
           return (
             <Box key={action.label}>
@@ -99,16 +139,17 @@ export const ContextMenu: FC<ContextMenuProps> = ({ title, actions, onClose, isA
                 {on ? SYM.selected : " "}{" "}
               </Text>
               {/* Number shortcut */}
-              <Text color={on ? THEME.keyhint : THEME.subtle}>{numStr}</Text>
+              <Text color={on ? THEME.keyhint : hover ? THEME.normal : THEME.subtle}>{numStr}</Text>
               {/* Icon */}
               <Text color={labelColor}>{"  "}{icon}{"  "}</Text>
               {/* Label */}
-              <Text color={labelColor} bold={on && !action.danger}>
+              <Text color={labelColor} bold={on || (hover && !action.danger)}>
                 {action.label}
               </Text>
             </Box>
           );
-        })
+        })}
+        </Box>
       )}
       <Box marginTop={1}>
         <Text color={THEME.dim}>↑↓ move  ·  1–9 pick  ·  Enter run  ·  Esc back</Text>

@@ -14,10 +14,12 @@
  * Cells carry their own color/dim so callers (e.g. job status) can colorize.
  */
 
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
+import { useOnClick, useOnMouseMove, useOnMouseLeave, useBoundingClientRect } from "@ink-tools/ink-mouse";
+import { useDimensions } from "../data/use-dimensions";
 
 const PAGE = 10;
 
@@ -136,6 +138,33 @@ export const DataTable: React.FC<DataTableProps> = ({
     [rows.length],
   );
 
+  // Mouse: track hovered row for visual feedback + click to jump.
+  const [hoveredRow, setHoveredRow] = useState(-1);
+  const tableRef = useRef<typeof Box>(null);
+  const isTty = Boolean(process.stdout.isTTY);
+
+  // Guard: only rendered inside <MouseProvider> when isTty.
+  const TableMouseHandler: React.FC<{ start: number; height: number; rowsLen: number }> =
+    ({ start, height: h, rowsLen }) => {
+    const { columns, rows: dimRows } = useDimensions();
+    const rect = useBoundingClientRect(tableRef as any, [columns, dimRows]);
+    // Header (row 0) + separator (row 1) → visible rows start at offset 2.
+    useOnClick(tableRef as any, (event) => {
+      if (!rect || rowsLen === 0) return;
+      const vi = event.y - rect.top - 2;
+      if (vi >= 0 && vi < h) {
+        onCursorChange(clamp(start + vi));
+      }
+    });
+    useOnMouseMove(tableRef as any, (event) => {
+      if (!rect || rowsLen === 0) { setHoveredRow(-1); return; }
+      const vi = event.y - rect.top - 2;
+      setHoveredRow(vi >= 0 && vi < h ? start + vi : -1);
+    });
+    useOnMouseLeave(tableRef as any, () => setHoveredRow(-1));
+    return null;
+  };
+
   // Navigation only. Enter (and every action key) is owned by the screen's
   // keymap — the table never handles selection, so there's no double-fire.
   const handleInput = useCallback(
@@ -174,7 +203,10 @@ export const DataTable: React.FC<DataTableProps> = ({
   const colWidths = useMemo(() => resolveColumnWidths(columns, effectiveTableWidth), [columns, effectiveTableWidth]);
 
   return (
-    <Box flexDirection="column">
+    <Box ref={isTty ? tableRef as any : undefined} flexDirection="column">
+      {isTty && rows.length > 0 && (
+        <TableMouseHandler start={start} height={height} rowsLen={rows.length} />
+      )}
       {/* Header */}
       <Box>
         <Text color={THEME.subtle}>{"  "}</Text>
@@ -203,16 +235,18 @@ export const DataTable: React.FC<DataTableProps> = ({
       {visible.map((row, vi) => {
         const rowIndex = start + vi;
         const isCursor = rowIndex === cursor;
+        const isHover = rowIndex === hoveredRow && !isCursor;
         const rowKey = rowKeys?.[rowIndex] ?? rowIndex;
         const isSelected = typeof rowKey === "string" && (selected?.has(rowKey) ?? false);
         // Cursor indicator (leftmost): ▶ on the cursor row, space elsewhere.
-        const indicator = isCursor ? SYM.selected : " ";
+        const indicator = isCursor ? SYM.selected : isHover ? SYM.arrow : " ";
         // Sel column: ☑ when selected, ☐ when selectable-but-not.
         const selMark = isSelected ? SYM.iconCheck : SYM.iconUncheck;
         const rowBg = isCursor ? THEME.selectedBg : undefined;
+        const indicatorColor = isCursor ? THEME.active : isHover ? THEME.normal : THEME.subtle;
         return (
           <Box key={rowKey}>
-            <Text color={isCursor ? THEME.active : THEME.subtle} backgroundColor={rowBg}>
+            <Text color={indicatorColor} backgroundColor={rowBg}>
               {indicator}
             </Text>
             <Text color={THEME.subtle} backgroundColor={rowBg}> </Text>
