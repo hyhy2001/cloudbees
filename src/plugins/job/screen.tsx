@@ -894,10 +894,10 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             { name: "name", label: "Job Name", required: true, hint: "unique id" },
             { name: "job_type", label: "Type", options: ["freestyle", "folder", "pipeline"], initial: "freestyle", hint: "freestyle/folder/pipeline" },
             { name: "desc", label: "Description" },
-            { name: "shell_cmd", label: "Shell Command", placeholder: "freestyle only", hint: "shell to run" },
-            { name: "chdir", label: "Working Dir", placeholder: "cd <dir> && before command", path: true, hint: "Tab completes local FS" },
-            { name: "node", label: "Node/Label", options: nodeOptions, searchable: true, initial: NONE_OPTION, hint: "where it runs" },
-            { name: "script_file", label: "Pipeline Script", placeholder: "path to .groovy file", path: true, hint: "Tab completes local FS" },
+            { name: "shell_cmd", label: "Shell Command", placeholder: "freestyle only", hint: "shell to run", visible: (v) => v.job_type === "freestyle" },
+            { name: "chdir", label: "Working Dir", placeholder: "cd <dir> && before command", path: true, hint: "Tab completes local FS", visible: (v) => v.job_type === "freestyle" },
+            { name: "node", label: "Node/Label", options: nodeOptions, searchable: true, initial: NONE_OPTION, hint: "where it runs", visible: (v) => v.job_type !== "folder" },
+            { name: "script_file", label: "Pipeline Script", placeholder: "path to .groovy file", path: true, hint: "Tab completes local FS", visible: (v) => v.job_type === "pipeline" },
           ]}
           onResult={resolve}
         />
