@@ -21,6 +21,7 @@ import { Modal } from "./Modal";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
 import { completePath } from "../data/path-complete";
+import { resolve } from "node:path";
 
 export interface FormField {
   name: string;
@@ -197,7 +198,7 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
         const val = values[field.name] ?? "";
         const sep = val.includes("/") ? val.slice(0, val.lastIndexOf("/") + 1) : "";
         const cand = candidates[next] ?? "";
-        setFieldValue(field.name, sep + cand, (sep + cand).length);
+        setFieldValue(field.name, resolve(sep + cand), (sep + cand).length);
         return;
       }
       if (key.downArrow) {
@@ -206,7 +207,7 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
         const val = values[field.name] ?? "";
         const sep = val.includes("/") ? val.slice(0, val.lastIndexOf("/") + 1) : "";
         const cand = candidates[next] ?? "";
-        setFieldValue(field.name, sep + cand, (sep + cand).length);
+        setFieldValue(field.name, resolve(sep + cand), (sep + cand).length);
         return;
       }
     }

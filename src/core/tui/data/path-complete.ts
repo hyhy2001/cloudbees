@@ -12,7 +12,7 @@
  */
 
 import { readdirSync, statSync } from "node:fs";
-import { dirname, basename, join, sep } from "node:path";
+import { dirname, basename, join, resolve, sep } from "node:path";
 
 export interface PathCompletion {
   /** The value to put in the field (longest unambiguous prefix, or the value unchanged). */
@@ -78,10 +78,12 @@ export function completePath(input: string): PathCompletion {
 
   if (matches.length === 1) {
     const only = matches[0]!;
-    const slash = withDirSlash(dir, only).endsWith(sep) ? sep : "";
-    return { completed: dirPrefix + only + slash, candidates };
+    const trailingSlash = withDirSlash(dir, only).endsWith(sep) ? sep : "";
+    const rel = dirPrefix + only + trailingSlash;
+    const abs = resolve(rel);
+    return { completed: trailingSlash ? abs + sep : abs, candidates };
   }
 
   const lcp = commonPrefix(matches);
-  return { completed: dirPrefix + lcp, candidates };
+  return { completed: resolve(dirPrefix + lcp), candidates };
 }
