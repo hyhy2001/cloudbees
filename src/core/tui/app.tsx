@@ -179,12 +179,12 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   // Build the separator line that spans the full terminal width.
   const sepLine = SYM.sep.repeat(Math.max(0, termCols - 2));
 
-  return (
-    <MouseProvider autoEnable>
+  const isTty = Boolean(process.stdout.isTTY);
+  const inner = (
     <Box flexDirection="column" paddingX={1} width="100%">
       {/* ── Tab bar ── */}
       <Box justifyContent="space-between">
-        <Box ref={tabBarRef as any}>
+        <Box ref={isTty ? tabBarRef as any : undefined}>
           <Text color={THEME.active} bold>{SYM.bee}  </Text>
           {screens.map((s, i) => {
             const on = i === tabIndex;
@@ -251,8 +251,8 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
         />
       </Box>
     </Box>
-    </MouseProvider>
   );
+  return isTty ? <MouseProvider autoEnable>{inner}</MouseProvider> : inner;
 };
 
 const HelpScreen: React.FC<{ screens: TuiScreen[] }> = ({ screens }) => (
