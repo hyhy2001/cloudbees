@@ -24,7 +24,7 @@ import { TextBox } from "./TextBox";
 import { completePath } from "../data/path-complete";
 import { resolve } from "node:path";
 import { useDimensions } from "../data/use-dimensions";
-import { useOnClick, useBoundingClientRect } from "@ink-tools/ink-mouse";
+import { useOnClick, useOnMouseMove, useOnMouseLeave, useBoundingClientRect } from "@ink-tools/ink-mouse";
 
 // Only rendered inside <MouseProvider> (when process.stdout.isTTY is true), so
 // the mouse hooks always have a provider context and never throw.
@@ -32,7 +32,9 @@ const FormFieldClickHandler: React.FC<{
   formRef: React.RefObject<any>;
   visibleFieldsLength: number;
   onFieldClick: (index: number) => void;
-}> = ({ formRef, visibleFieldsLength, onFieldClick }) => {
+  onHoverField: (index: number) => void;
+  onLeaveForm: () => void;
+}> = ({ formRef, visibleFieldsLength, onFieldClick, onHoverField, onLeaveForm }) => {
   // Re-measure on terminal resize so field click targeting stays accurate.
   const { columns, rows } = useDimensions();
   const rect = useBoundingClientRect(formRef as any, [columns, rows]);
@@ -43,6 +45,12 @@ const FormFieldClickHandler: React.FC<{
       onFieldClick(rowOffset);
     }
   });
+  useOnMouseMove(formRef as any, (event: { x: number; y: number }) => {
+    if (!rect) return;
+    const rowOffset = event.y - rect.top - 1;
+    onHoverField(rowOffset >= 0 && rowOffset < visibleFieldsLength ? rowOffset : -1);
+  });
+  useOnMouseLeave(formRef as any, () => onLeaveForm());
   return null;
 };
 
@@ -77,6 +85,7 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
     return init;
   });
   const [cursor, setCursor] = useState(0);
+  const [hoveredField, setHoveredField] = useState(-1);
   const [error, setError] = useState("");
   const [candidates, setCandidates] = useState<string[]>([]);
   // Cursor position within the current text field (in characters from start).
@@ -306,6 +315,8 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
           formRef={formRef as any}
           visibleFieldsLength={visibleFields.length}
           onFieldClick={(idx) => setCursor(idx)}
+          onHoverField={setHoveredField}
+          onLeaveForm={() => setHoveredField(-1)}
         />
       )}
       <Box ref={formRef as any} flexDirection="column">
@@ -314,6 +325,7 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
         if (!isVisible) return null;
         const visIdx = visibleFields.indexOf(f);
         const isActive = visIdx === cursor;
+        const isHover = visIdx === hoveredField && !isActive;
         const raw = values[f.name] ?? "";
         const maskedRaw = f.password ? "*".repeat(raw.length) : raw;
         const display = maskedRaw || (f.placeholder ? f.placeholder : "");
@@ -335,7 +347,7 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
 
         return (
           <Box key={f.name}>
-            <Text color={isActive ? THEME.active : THEME.dim}>
+            <Text color={isActive ? THEME.active : isHover ? THEME.normal : THEME.dim}>
               {isActive ? SYM.arrow : " "} {f.label.padEnd(LABEL_W)}
             </Text>
             {f.options && !f.searchable ? (

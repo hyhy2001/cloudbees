@@ -12,7 +12,28 @@ import { ConfirmModal } from "./components/ConfirmModal";
 import { useKeymap, type KeyBinding } from "./keymap";
 import { useDimensions } from "./data/use-dimensions";
 import { listProfiles } from "../db/repositories/profile-repo";
-import { MouseProvider, useOnClick, useBoundingClientRect } from "@ink-tools/ink-mouse";
+import { MouseProvider, useOnClick, useOnMouseMove, useOnMouseLeave, useBoundingClientRect } from "@ink-tools/ink-mouse";
+
+// Shared helper: walk tab list to find which index a relative X hits.
+function tabAtX(relX: number, screens: TuiScreen[], tabIndex: number): number {
+  let x = 0;
+  for (let i = 0; i < screens.length; i++) {
+    const s = screens[i]!;
+    const num = i < 9 ? String(i + 1) : "0";
+    const tabWidth = 1 + num.length + (s.icon ? s.icon.length + 1 : 0) + s.title.length + (i === tabIndex ? 2 : 0);
+    if (relX >= x && relX < x + tabWidth) return i;
+    x += tabWidth + 2; // +2 for "  " separator between tabs
+  }
+  return -1;
+}
+
+// Compute relative X within the tab-bar content (0 = first char of prefix).
+function tabRelX(event: { x: number; y: number }, rect: { left: number }): number {
+  const relX = event.x - rect.left;
+  if (relX < 0) return -1;
+  const prefix = (SYM.bee === "🐝" ? 2 : 3) + 2;
+  return relX - prefix;
+}
 
 // Guard: mouse hooks must be inside <MouseProvider>. This sub-component is only
 // rendered when isTty is true, so the hooks never fire without the provider.
@@ -21,32 +42,26 @@ const TabClickHandler: React.FC<{
   screens: TuiScreen[];
   tabIndex: number;
   onSwitchTab: (i: number) => void;
-}> = ({ tabBarRef, screens, tabIndex, onSwitchTab }) => {
-  // Re-measure bounding rect on every terminal resize so clicks stay accurate
-  // after the user changes the terminal window size.
+  onHoverTab: (i: number) => void;
+  onLeaveBar: () => void;
+}> = ({ tabBarRef, screens, tabIndex, onSwitchTab, onHoverTab, onLeaveBar }) => {
   const { columns, rows } = useDimensions();
   const rect = useBoundingClientRect(tabBarRef as any, [columns, rows]);
   useOnClick(tabBarRef as any, (event) => {
     if (!rect) return;
-    // xterm-mouse coordinates are 1-indexed; rect.left is also 1-indexed.
-    const relX = event.x - rect.left;
-    if (relX < 0) return;
-    // Skip the "🐝  " prefix (SYM.bee = 2 cols in Unicode, 3 in ASCII) + 2 spaces.
-    const prefix = (SYM.bee === "🐝" ? 2 : 3) + 2;
-    const tabRelX = relX - prefix;
-    if (tabRelX < 0) return;
-    let x = 0;
-    for (let i = 0; i < screens.length; i++) {
-      const s = screens[i]!;
-      const num = i < 9 ? String(i + 1) : "0";
-      const tabWidth = 1 + num.length + (s.icon ? s.icon.length + 1 : 0) + s.title.length + (i === tabIndex ? 2 : 0);
-      if (tabRelX >= x && tabRelX < x + tabWidth) {
-        onSwitchTab(i);
-        return;
-      }
-      x += tabWidth + 2; // +2 for "  " separator between tabs
-    }
+    const rx = tabRelX(event, rect);
+    if (rx < 0) return;
+    const idx = tabAtX(rx, screens, tabIndex);
+    if (idx >= 0) onSwitchTab(idx);
   });
+  useOnMouseMove(tabBarRef as any, (event) => {
+    if (!rect) return;
+    const rx = tabRelX(event, rect);
+    if (rx < 0) { onHoverTab(-1); return; }
+    const idx = tabAtX(rx, screens, tabIndex);
+    onHoverTab(idx >= 0 ? idx : -1);
+  });
+  useOnMouseLeave(tabBarRef as any, () => onLeaveBar());
   return null;
 };
 
@@ -66,6 +81,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   const { exit } = useApp();
   const tui = useTui();
   const [tabIndex, setTabIndex] = useState(0);
+  const [hoveredTab, setHoveredTab] = useState(-1);
   const [showHelp, setShowHelp] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const { columns: termCols } = useDimensions();
@@ -197,19 +213,29 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
 
   const inner = (
     <Box flexDirection="column" paddingX={1} width="100%">
-      {isTty && <TabClickHandler tabBarRef={tabBarRef} screens={screens} tabIndex={tabIndex} onSwitchTab={setTabIndex} />}
+      {isTty && (
+        <TabClickHandler
+          tabBarRef={tabBarRef}
+          screens={screens}
+          tabIndex={tabIndex}
+          onSwitchTab={setTabIndex}
+          onHoverTab={setHoveredTab}
+          onLeaveBar={() => setHoveredTab(-1)}
+        />
+      )}
       {/* ── Tab bar ── */}
       <Box justifyContent="space-between">
         <Box ref={isTty ? tabBarRef as any : undefined}>
           <Text color={THEME.active} bold>{SYM.bee}  </Text>
           {screens.map((s, i) => {
             const on = i === tabIndex;
+            const hover = i === hoveredTab && !on;
             const num = i < 9 ? String(i + 1) : "0";
             return (
               <React.Fragment key={s.id}>
                 {i > 0 && <Text color={THEME.subtle}>  </Text>}
-                <Text color={on ? THEME.active : THEME.dim} bold={on}>
-                  <Text color={on ? THEME.keyhint : THEME.dim}>{num}:</Text>
+                <Text color={on ? THEME.active : hover ? THEME.normal : THEME.dim} bold={on || hover}>
+                  <Text color={on ? THEME.keyhint : hover ? THEME.normal : THEME.dim}>{num}:</Text>
                   {s.icon ? `${s.icon} ` : ""}{s.title}
                   {on ? <Text color={THEME.active}> ▾</Text> : ""}
                 </Text>
