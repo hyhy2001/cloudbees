@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef } from "react";
 import { Box, Text, useApp } from "ink";
 import type { TuiScreen } from "../../registry/types";
 import { useTui } from "./context";
@@ -12,15 +12,38 @@ import { ConfirmModal } from "./components/ConfirmModal";
 import { useKeymap, type KeyBinding } from "./keymap";
 import { useDimensions } from "./data/use-dimensions";
 import { listProfiles } from "../db/repositories/profile-repo";
-import { MouseProvider, useOnClick } from "@ink-tools/ink-mouse";
+import { MouseProvider, useOnClick, useBoundingClientRect } from "@ink-tools/ink-mouse";
 
 // Guard: mouse hooks must be inside <MouseProvider>. This sub-component is only
 // rendered when isTty is true, so the hooks never fire without the provider.
 const TabClickHandler: React.FC<{
   tabBarRef: React.RefObject<any>;
-  onTabClick: (event: { x: number; y: number }) => void;
-}> = ({ tabBarRef, onTabClick }) => {
-  useOnClick(tabBarRef as any, onTabClick);
+  screens: TuiScreen[];
+  tabIndex: number;
+  onSwitchTab: (i: number) => void;
+}> = ({ tabBarRef, screens, tabIndex, onSwitchTab }) => {
+  const rect = useBoundingClientRect(tabBarRef as any);
+  useOnClick(tabBarRef as any, (event) => {
+    if (!rect) return;
+    // xterm-mouse coordinates are 1-indexed; rect.left is also 1-indexed.
+    const relX = event.x - rect.left;
+    if (relX < 0) return;
+    // Skip the "🐝  " prefix (SYM.bee = 2 cols in Unicode, 3 in ASCII) + 2 spaces.
+    const prefix = (SYM.bee === "🐝" ? 2 : 3) + 2;
+    const tabRelX = relX - prefix;
+    if (tabRelX < 0) return;
+    let x = 0;
+    for (let i = 0; i < screens.length; i++) {
+      const s = screens[i]!;
+      const num = i < 9 ? String(i + 1) : "0";
+      const tabWidth = 1 + num.length + (s.icon ? s.icon.length + 1 : 0) + s.title.length + (i === tabIndex ? 2 : 0);
+      if (tabRelX >= x && tabRelX < x + tabWidth) {
+        onSwitchTab(i);
+        return;
+      }
+      x += tabWidth + 2; // +2 for "  " separator between tabs
+    }
+  });
   return null;
 };
 
@@ -48,26 +71,6 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   const modalOpen = tui.activeModal !== null;
   const count = screens.length;
 
-  // Mouse click → switch tab
-  const handleTabClick = useCallback((event: { x: number; y: number }) => {
-    // Tab bar is at row 1 (0-indexed) — "▸ bee  " prefix + tabs
-    if (event.y !== 0) return;
-    // Calculate click X relative to tab bar start (after "▸ bee  " = 7 chars)
-    const relX = event.x - 7;
-    if (relX < 0) return;
-    // Walk through tabs and find which one was clicked
-    let x = 0;
-    for (let i = 0; i < screens.length; i++) {
-      const s = screens[i]!;
-      const num = i < 9 ? String(i + 1) : "0";
-      const tabWidth = 2 + num.length + (s.icon ? s.icon.length + 1 : 0) + s.title.length + (i === tabIndex ? 2 : 0);
-      if (relX >= x && relX < x + tabWidth) {
-        setTabIndex(i);
-        return;
-      }
-      x += tabWidth + 2; // +2 for separator
-    }
-  }, [screens, tabIndex]);
   const isTty = Boolean(process.stdout.isTTY);
 
   const globalActive = !modalOpen && !showHelp && !tui.inputCaptured;
@@ -191,7 +194,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
 
   const inner = (
     <Box flexDirection="column" paddingX={1} width="100%">
-      {isTty && <TabClickHandler tabBarRef={tabBarRef} onTabClick={handleTabClick} />}
+      {isTty && <TabClickHandler tabBarRef={tabBarRef} screens={screens} tabIndex={tabIndex} onSwitchTab={setTabIndex} />}
       {/* ── Tab bar ── */}
       <Box justifyContent="space-between">
         <Box ref={isTty ? tabBarRef as any : undefined}>
