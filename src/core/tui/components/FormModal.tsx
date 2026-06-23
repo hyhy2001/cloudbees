@@ -15,13 +15,15 @@
  * margin regardless of value length.
  */
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 import { Modal } from "./Modal";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
+import { TextBox } from "./TextBox";
 import { completePath } from "../data/path-complete";
 import { resolve } from "node:path";
+import { useOnClick, useBoundingClientRect } from "@ink-tools/ink-mouse";
 
 export interface FormField {
   name: string;
@@ -68,6 +70,18 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
   // Only fields currently visible participate in navigation.
   const visibleFields = fields.filter((f) => !f.visible || f.visible(values));
   const field = visibleFields[cursor] ?? visibleFields[0];
+
+  // Mouse: click on a field → focus it
+  const formRef = useRef<typeof Box>(null);
+  const rect = useBoundingClientRect(formRef as any);
+  useOnClick(formRef as any, (event) => {
+    if (!rect) return;
+    // First field row = rect.top + 1 (title). Each field = 1 row.
+    const rowOffset = event.y - rect.top - 1;
+    if (rowOffset >= 0 && rowOffset < visibleFields.length) {
+      setCursor(rowOffset);
+    }
+  });
 
   function setFieldValue(name: string, value: string, pos?: number): void {
     setValues((prev) => ({ ...prev, [name]: value }));
@@ -275,6 +289,7 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
 
   return (
     <Modal title={title}>
+      <Box ref={formRef as any} flexDirection="column">
       {fields.map((f) => {
         const isVisible = !f.visible || f.visible(values);
         if (!isVisible) return null;
@@ -328,6 +343,7 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
           </Box>
         );
       })}
+      </Box>
       {candidates.length > 0 && field?.path ? (
         <Box flexDirection="column" marginTop={1}>
           {candidates.slice(0, 8).map((c, i) => {
