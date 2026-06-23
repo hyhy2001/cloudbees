@@ -22,7 +22,10 @@ const TabClickHandler: React.FC<{
   tabIndex: number;
   onSwitchTab: (i: number) => void;
 }> = ({ tabBarRef, screens, tabIndex, onSwitchTab }) => {
-  const rect = useBoundingClientRect(tabBarRef as any);
+  // Re-measure bounding rect on every terminal resize so clicks stay accurate
+  // after the user changes the terminal window size.
+  const { columns, rows } = useDimensions();
+  const rect = useBoundingClientRect(tabBarRef as any, [columns, rows]);
   useOnClick(tabBarRef as any, (event) => {
     if (!rect) return;
     // xterm-mouse coordinates are 1-indexed; rect.left is also 1-indexed.

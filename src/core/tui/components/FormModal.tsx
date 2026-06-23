@@ -23,6 +23,7 @@ import { SYM } from "../symbols";
 import { TextBox } from "./TextBox";
 import { completePath } from "../data/path-complete";
 import { resolve } from "node:path";
+import { useDimensions } from "../data/use-dimensions";
 import { useOnClick, useBoundingClientRect } from "@ink-tools/ink-mouse";
 
 // Only rendered inside <MouseProvider> (when process.stdout.isTTY is true), so
@@ -32,7 +33,9 @@ const FormFieldClickHandler: React.FC<{
   visibleFieldsLength: number;
   onFieldClick: (index: number) => void;
 }> = ({ formRef, visibleFieldsLength, onFieldClick }) => {
-  const rect = useBoundingClientRect(formRef as any);
+  // Re-measure on terminal resize so field click targeting stays accurate.
+  const { columns, rows } = useDimensions();
+  const rect = useBoundingClientRect(formRef as any, [columns, rows]);
   useOnClick(formRef as any, (event) => {
     if (!rect) return;
     const rowOffset = event.y - rect.top - 1;
