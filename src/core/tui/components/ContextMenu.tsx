@@ -14,8 +14,7 @@ import type { FC } from "react";
 import { Modal } from "./Modal";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
-import { useOnClick, useBoundingClientRect } from "@ink-tools/ink-mouse";
-import { useDimensions } from "../data/use-dimensions";
+import { useOnClick, getBoundingClientRect } from "@ink-tools/ink-mouse";
 
 // Guard: only rendered inside <MouseProvider> when isTty is true.
 const CtxMenuMouseHandler: FC<{
@@ -23,9 +22,8 @@ const CtxMenuMouseHandler: FC<{
   itemCount: number;
   onPick: (index: number) => void;
 }> = ({ menuRef, itemCount, onPick }) => {
-  const { columns, rows } = useDimensions();
-  const rect = useBoundingClientRect(menuRef as any, [columns, rows]);
   useOnClick(menuRef as any, (event) => {
+    const rect = getBoundingClientRect(menuRef.current);
     if (!rect) return;
     const idx = event.y - rect.top - 1; // -1 for modal title row
     if (idx >= 0 && idx < itemCount) onPick(idx);

@@ -18,8 +18,7 @@ import React, { useCallback, useMemo, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
-import { useOnClick, useBoundingClientRect } from "@ink-tools/ink-mouse";
-import { useDimensions } from "../data/use-dimensions";
+import { useOnClick, getBoundingClientRect } from "@ink-tools/ink-mouse";
 
 const PAGE = 10;
 
@@ -145,10 +144,9 @@ export const DataTable: React.FC<DataTableProps> = ({
   // Guard: only rendered inside <MouseProvider> when isTty.
   const TableMouseHandler: React.FC<{ start: number; height: number; rowsLen: number }> =
     ({ start, height: h, rowsLen }) => {
-    const { columns, rows: dimRows } = useDimensions();
-    const rect = useBoundingClientRect(tableRef as any, [columns, dimRows]);
     // Header (row 0) + separator (row 1) → visible rows start at offset 2.
     useOnClick(tableRef as any, (event) => {
+      const rect = getBoundingClientRect(tableRef.current as any);
       if (!rect || rowsLen === 0) return;
       const vi = event.y - rect.top - 2;
       if (vi >= 0 && vi < h) {

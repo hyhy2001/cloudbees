@@ -12,7 +12,7 @@ import { ConfirmModal } from "./components/ConfirmModal";
 import { useKeymap, type KeyBinding } from "./keymap";
 import { useDimensions } from "./data/use-dimensions";
 import { listProfiles } from "../db/repositories/profile-repo";
-import { MouseProvider, useOnClick, useBoundingClientRect } from "@ink-tools/ink-mouse";
+import { MouseProvider, useOnClick, getBoundingClientRect } from "@ink-tools/ink-mouse";
 
 // Shared helper: walk tab list to find which index a relative X hits.
 function tabAtX(relX: number, screens: TuiScreen[], tabIndex: number): number {
@@ -46,9 +46,8 @@ const TabClickHandler: React.FC<{
   tabIndex: number;
   onSwitchTab: (i: number) => void;
 }> = ({ tabBarRef, screens, tabIndex, onSwitchTab }) => {
-  const { columns, rows } = useDimensions();
-  const rect = useBoundingClientRect(tabBarRef as any, [columns, rows]);
   useOnClick(tabBarRef as any, (event) => {
+    const rect = getBoundingClientRect(tabBarRef.current);
     if (!rect) return;
     const rx = tabRelX(event, rect);
     if (rx < 0) return;
