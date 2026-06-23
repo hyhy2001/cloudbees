@@ -16,6 +16,11 @@ import { getActiveController } from "../client-factory";
 const ENTER_ALT_SCREEN = "\x1b[?1049h";
 const LEAVE_ALT_SCREEN = "\x1b[?1049l";
 
+// SGR mouse tracking disable sequences — sent on exit so the terminal doesn't
+// stay in mouse-reporting mode after the TUI exits (otherwise every click after
+// quitting would leak \x1b[<... escape sequences as visible characters).
+const DISABLE_MOUSE = "\x1B[?1000l\x1B[?1002l\x1B[?1003l\x1B[?1006l";
+
 export async function launchTui(dbPath?: string): Promise<void> {
   // Ink + React must run in production mode (the compiled binary has no JSX dev runtime).
   process.env.NODE_ENV ??= "production";
@@ -32,7 +37,10 @@ export async function launchTui(dbPath?: string): Promise<void> {
   process.stdout.write(ENTER_ALT_SCREEN);
   altScreenActive = true;
 
-  const onExit = (): void => leaveAltScreen();
+  const onExit = (): void => {
+    process.stdout.write(DISABLE_MOUSE);
+    leaveAltScreen();
+  };
   process.once("exit", onExit);
 
   const session = loadSession(dbPath);
@@ -61,5 +69,8 @@ export async function launchTui(dbPath?: string): Promise<void> {
 
   // Leave the alternate screen → the user's pre-launch scrollback reappears intact.
   process.removeListener("exit", onExit);
+
+  // Disable mouse tracking and leave alt-screen while stdout is still healthy.
+  process.stdout.write(DISABLE_MOUSE);
   leaveAltScreen();
 }
