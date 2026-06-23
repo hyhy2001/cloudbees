@@ -25,6 +25,24 @@ import { completePath } from "../data/path-complete";
 import { resolve } from "node:path";
 import { useOnClick, useBoundingClientRect } from "@ink-tools/ink-mouse";
 
+// Only rendered inside <MouseProvider> (when process.stdout.isTTY is true), so
+// the mouse hooks always have a provider context and never throw.
+const FormFieldClickHandler: React.FC<{
+  formRef: React.RefObject<any>;
+  visibleFieldsLength: number;
+  onFieldClick: (index: number) => void;
+}> = ({ formRef, visibleFieldsLength, onFieldClick }) => {
+  const rect = useBoundingClientRect(formRef as any);
+  useOnClick(formRef as any, (event) => {
+    if (!rect) return;
+    const rowOffset = event.y - rect.top - 1;
+    if (rowOffset >= 0 && rowOffset < visibleFieldsLength) {
+      onFieldClick(rowOffset);
+    }
+  });
+  return null;
+};
+
 export interface FormField {
   name: string;
   label: string;
@@ -71,17 +89,8 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
   const visibleFields = fields.filter((f) => !f.visible || f.visible(values));
   const field = visibleFields[cursor] ?? visibleFields[0];
 
-  // Mouse: click on a field → focus it
   const formRef = useRef<typeof Box>(null);
-  const rect = useBoundingClientRect(formRef as any);
-  useOnClick(formRef as any, (event) => {
-    if (!rect) return;
-    // First field row = rect.top + 1 (title). Each field = 1 row.
-    const rowOffset = event.y - rect.top - 1;
-    if (rowOffset >= 0 && rowOffset < visibleFields.length) {
-      setCursor(rowOffset);
-    }
-  });
+  const isTty = Boolean(process.stdout.isTTY);
 
   function setFieldValue(name: string, value: string, pos?: number): void {
     setValues((prev) => ({ ...prev, [name]: value }));
@@ -289,6 +298,13 @@ export const FormModal: React.FC<FormModalProps> = ({ title, fields, onResult })
 
   return (
     <Modal title={title}>
+      {isTty && (
+        <FormFieldClickHandler
+          formRef={formRef as any}
+          visibleFieldsLength={visibleFields.length}
+          onFieldClick={(idx) => setCursor(idx)}
+        />
+      )}
       <Box ref={formRef as any} flexDirection="column">
       {fields.map((f) => {
         const isVisible = !f.visible || f.visible(values);

@@ -14,6 +14,16 @@ import { useDimensions } from "./data/use-dimensions";
 import { listProfiles } from "../db/repositories/profile-repo";
 import { MouseProvider, useOnClick } from "@ink-tools/ink-mouse";
 
+// Guard: mouse hooks must be inside <MouseProvider>. This sub-component is only
+// rendered when isTty is true, so the hooks never fire without the provider.
+const TabClickHandler: React.FC<{
+  tabBarRef: React.RefObject<any>;
+  onTabClick: (event: { x: number; y: number }) => void;
+}> = ({ tabBarRef, onTabClick }) => {
+  useOnClick(tabBarRef as any, onTabClick);
+  return null;
+};
+
 export interface BeeAppProps {
   screens: TuiScreen[];
 }
@@ -58,7 +68,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
       x += tabWidth + 2; // +2 for separator
     }
   }, [screens, tabIndex]);
-  useOnClick(tabBarRef as any, handleTabClick);
+  const isTty = Boolean(process.stdout.isTTY);
 
   const globalActive = !modalOpen && !showHelp && !tui.inputCaptured;
 
@@ -179,9 +189,9 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   // Build the separator line that spans the full terminal width.
   const sepLine = SYM.sep.repeat(Math.max(0, termCols - 2));
 
-  const isTty = Boolean(process.stdout.isTTY);
   const inner = (
     <Box flexDirection="column" paddingX={1} width="100%">
+      {isTty && <TabClickHandler tabBarRef={tabBarRef} onTabClick={handleTabClick} />}
       {/* ── Tab bar ── */}
       <Box justifyContent="space-between">
         <Box ref={isTty ? tabBarRef as any : undefined}>
