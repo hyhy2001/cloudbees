@@ -290,7 +290,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
       </Box>
     </Box>
   );
-  return isTty ? <MouseProvider autoEnable>{inner}</MouseProvider> : inner;
+  return isTty ? <MouseProvider autoEnable cacheInvalidationMs={0}>{inner}</MouseProvider> : inner;
 };
 
 const HelpScreen: React.FC<{ screens: TuiScreen[] }> = ({ screens }) => (
