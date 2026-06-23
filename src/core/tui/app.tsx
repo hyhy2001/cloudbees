@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { Box, Text, useApp } from "ink";
 import type { TuiScreen } from "../../registry/types";
 import { useTui } from "./context";
@@ -12,6 +12,7 @@ import { ConfirmModal } from "./components/ConfirmModal";
 import { useKeymap, type KeyBinding } from "./keymap";
 import { useDimensions } from "./data/use-dimensions";
 import { listProfiles } from "../db/repositories/profile-repo";
+import { MouseProvider, useOnClick } from "@ink-tools/ink-mouse";
 
 export interface BeeAppProps {
   screens: TuiScreen[];
@@ -32,9 +33,32 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   const [showHelp, setShowHelp] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const { columns: termCols } = useDimensions();
+  const tabBarRef = useRef<typeof Box>(null);
 
   const modalOpen = tui.activeModal !== null;
   const count = screens.length;
+
+  // Mouse click → switch tab
+  const handleTabClick = useCallback((event: { x: number; y: number }) => {
+    // Tab bar is at row 1 (0-indexed) — "▸ bee  " prefix + tabs
+    if (event.y !== 0) return;
+    // Calculate click X relative to tab bar start (after "▸ bee  " = 7 chars)
+    const relX = event.x - 7;
+    if (relX < 0) return;
+    // Walk through tabs and find which one was clicked
+    let x = 0;
+    for (let i = 0; i < screens.length; i++) {
+      const s = screens[i]!;
+      const num = i < 9 ? String(i + 1) : "0";
+      const tabWidth = 2 + num.length + (s.icon ? s.icon.length + 1 : 0) + s.title.length + (i === tabIndex ? 2 : 0);
+      if (relX >= x && relX < x + tabWidth) {
+        setTabIndex(i);
+        return;
+      }
+      x += tabWidth + 2; // +2 for separator
+    }
+  }, [screens, tabIndex]);
+  useOnClick(tabBarRef as any, handleTabClick);
 
   const globalActive = !modalOpen && !showHelp && !tui.inputCaptured;
 
@@ -156,10 +180,11 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   const sepLine = SYM.sep.repeat(Math.max(0, termCols - 2));
 
   return (
+    <MouseProvider autoEnable>
     <Box flexDirection="column" paddingX={1} width="100%">
       {/* ── Tab bar ── */}
       <Box justifyContent="space-between">
-        <Box>
+        <Box ref={tabBarRef as any}>
           <Text color={THEME.active} bold>{SYM.bee}  </Text>
           {screens.map((s, i) => {
             const on = i === tabIndex;
@@ -226,6 +251,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
         />
       </Box>
     </Box>
+    </MouseProvider>
   );
 };
 
