@@ -14,11 +14,11 @@
  * Cells carry their own color/dim so callers (e.g. job status) can colorize.
  */
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
-import { useOnClick, useOnMouseMove, useOnMouseLeave, useBoundingClientRect } from "@ink-tools/ink-mouse";
+import { useOnClick, useBoundingClientRect } from "@ink-tools/ink-mouse";
 import { useDimensions } from "../data/use-dimensions";
 
 const PAGE = 10;
@@ -138,8 +138,7 @@ export const DataTable: React.FC<DataTableProps> = ({
     [rows.length],
   );
 
-  // Mouse: track hovered row for visual feedback + click to jump.
-  const [hoveredRow, setHoveredRow] = useState(-1);
+  // Mouse: click a visible row to jump cursor there.
   const tableRef = useRef<typeof Box>(null);
   const isTty = Boolean(process.stdout.isTTY);
 
@@ -156,12 +155,6 @@ export const DataTable: React.FC<DataTableProps> = ({
         onCursorChange(clamp(start + vi));
       }
     });
-    useOnMouseMove(tableRef as any, (event) => {
-      if (!rect || rowsLen === 0) { setHoveredRow(-1); return; }
-      const vi = event.y - rect.top - 2;
-      setHoveredRow(vi >= 0 && vi < h ? start + vi : -1);
-    });
-    useOnMouseLeave(tableRef as any, () => setHoveredRow(-1));
     return null;
   };
 
@@ -235,18 +228,16 @@ export const DataTable: React.FC<DataTableProps> = ({
       {visible.map((row, vi) => {
         const rowIndex = start + vi;
         const isCursor = rowIndex === cursor;
-        const isHover = rowIndex === hoveredRow && !isCursor;
         const rowKey = rowKeys?.[rowIndex] ?? rowIndex;
         const isSelected = typeof rowKey === "string" && (selected?.has(rowKey) ?? false);
         // Cursor indicator (leftmost): ▶ on the cursor row, space elsewhere.
-        const indicator = isCursor ? SYM.selected : isHover ? SYM.arrow : " ";
+        const indicator = isCursor ? SYM.selected : " ";
         // Sel column: ☑ when selected, ☐ when selectable-but-not.
         const selMark = isSelected ? SYM.iconCheck : SYM.iconUncheck;
         const rowBg = isCursor ? THEME.selectedBg : undefined;
-        const indicatorColor = isCursor ? THEME.active : isHover ? THEME.normal : THEME.subtle;
         return (
           <Box key={rowKey}>
-            <Text color={indicatorColor} backgroundColor={rowBg}>
+            <Text color={isCursor ? THEME.active : THEME.subtle} backgroundColor={rowBg}>
               {indicator}
             </Text>
             <Text color={THEME.subtle} backgroundColor={rowBg}> </Text>

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Box, Text, useApp } from "ink";
 import type { TuiScreen } from "../../registry/types";
 import { useTui } from "./context";
@@ -12,7 +12,7 @@ import { ConfirmModal } from "./components/ConfirmModal";
 import { useKeymap, type KeyBinding } from "./keymap";
 import { useDimensions } from "./data/use-dimensions";
 import { listProfiles } from "../db/repositories/profile-repo";
-import { MouseProvider, useOnClick, useOnMouseMove, useOnMouseLeave, useBoundingClientRect } from "@ink-tools/ink-mouse";
+import { MouseProvider, useOnClick, useBoundingClientRect } from "@ink-tools/ink-mouse";
 
 // Shared helper: walk tab list to find which index a relative X hits.
 function tabAtX(relX: number, screens: TuiScreen[], tabIndex: number): number {
@@ -37,14 +37,15 @@ function tabRelX(event: { x: number; y: number }, rect: { left: number }): numbe
 
 // Guard: mouse hooks must be inside <MouseProvider>. This sub-component is only
 // rendered when isTty is true, so the hooks never fire without the provider.
+// Also disables terminal motion tracking (?1003l) after the MouseProvider enables
+// it — motion floods stdin with SGR sequences that leak through Ink's input
+// handler as spurious keystrokes into text fields.
 const TabClickHandler: React.FC<{
   tabBarRef: React.RefObject<any>;
   screens: TuiScreen[];
   tabIndex: number;
   onSwitchTab: (i: number) => void;
-  onHoverTab: (i: number) => void;
-  onLeaveBar: () => void;
-}> = ({ tabBarRef, screens, tabIndex, onSwitchTab, onHoverTab, onLeaveBar }) => {
+}> = ({ tabBarRef, screens, tabIndex, onSwitchTab }) => {
   const { columns, rows } = useDimensions();
   const rect = useBoundingClientRect(tabBarRef as any, [columns, rows]);
   useOnClick(tabBarRef as any, (event) => {
@@ -54,14 +55,14 @@ const TabClickHandler: React.FC<{
     const idx = tabAtX(rx, screens, tabIndex);
     if (idx >= 0) onSwitchTab(idx);
   });
-  useOnMouseMove(tabBarRef as any, (event) => {
-    if (!rect) return;
-    const rx = tabRelX(event, rect);
-    if (rx < 0) { onHoverTab(-1); return; }
-    const idx = tabAtX(rx, screens, tabIndex);
-    onHoverTab(idx >= 0 ? idx : -1);
-  });
-  useOnMouseLeave(tabBarRef as any, () => onLeaveBar());
+  // Disable motion tracking — the MouseProvider's autoEnable writes
+  // \x1B[?1003h which makes the terminal report every cursor movement.
+  // Without it only button press/release events arrive, so mouse movement
+  // no longer injects SGR bytes into Ink's keypress pipeline.
+  useEffect(() => {
+    process.stdout.write("\x1B[?1003l");
+    return () => { process.stdout.write("\x1B[?1003h"); };
+  }, []);
   return null;
 };
 
@@ -81,7 +82,6 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   const { exit } = useApp();
   const tui = useTui();
   const [tabIndex, setTabIndex] = useState(0);
-  const [hoveredTab, setHoveredTab] = useState(-1);
   const [showHelp, setShowHelp] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const { columns: termCols } = useDimensions();
@@ -219,8 +219,6 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
           screens={screens}
           tabIndex={tabIndex}
           onSwitchTab={setTabIndex}
-          onHoverTab={setHoveredTab}
-          onLeaveBar={() => setHoveredTab(-1)}
         />
       )}
       {/* ── Tab bar ── */}
@@ -229,13 +227,12 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
           <Text color={THEME.active} bold>{SYM.bee}  </Text>
           {screens.map((s, i) => {
             const on = i === tabIndex;
-            const hover = i === hoveredTab && !on;
             const num = i < 9 ? String(i + 1) : "0";
             return (
               <React.Fragment key={s.id}>
                 {i > 0 && <Text color={THEME.subtle}>  </Text>}
-                <Text color={on ? THEME.active : hover ? THEME.normal : THEME.dim} bold={on || hover}>
-                  <Text color={on ? THEME.keyhint : hover ? THEME.normal : THEME.dim}>{num}:</Text>
+                <Text color={on ? THEME.active : THEME.dim} bold={on}>
+                  <Text color={on ? THEME.keyhint : THEME.dim}>{num}:</Text>
                   {s.icon ? `${s.icon} ` : ""}{s.title}
                   {on ? <Text color={THEME.active}> ▾</Text> : ""}
                 </Text>
