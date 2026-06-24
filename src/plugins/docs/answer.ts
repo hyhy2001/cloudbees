@@ -224,7 +224,7 @@ export async function answer(
   fused = [...fused, ...graphExtra];
 
   // LM reranker: score top candidates, keep top-K.
-  const reRanked = await rerank(query, fused.slice(0, 15), (p) => provider.generate(p));
+  const reRanked = await rerank(query, fused.slice(0, 15));
   const contextHits = reRanked.slice(0, limit);
 
   const prompt = buildUserPrompt(query, contextHits);
