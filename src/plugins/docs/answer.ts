@@ -178,7 +178,7 @@ export async function answer(
   // WRONG on the LM path: there an empty gate is the desired refusal signal —
   // feeding coincidental hits to the model produces confident hallucinations on
   // off-domain queries. So: soft gate only when there is no provider.
-  const hits = searchDocs(query, corpus, limit, { gate: true, softGate: !provider });
+  const hits = searchDocs(query, corpus, limit, { gate: true, softGate: true });
 
   if (!provider || hits.length === 0) {
     return { source: "raw", text: "", hits };
