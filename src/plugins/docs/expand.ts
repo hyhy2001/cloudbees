@@ -33,7 +33,7 @@ const LABELS: { label: string; terms: string[] }[] = [
 
 let _labelEmbeds: { label: string; terms: string[]; vec: number[] }[] | null = null;
 
-async function getLabelEmbeds(): Promise<typeof _labelEmbeds> {
+async function getLabelEmbeds(): Promise<{ label: string; terms: string[]; vec: number[] }[]> {
   if (_labelEmbeds) return _labelEmbeds;
   const embs = await Promise.all(LABELS.map(async (l) => ({
     label: l.label,
@@ -52,6 +52,7 @@ export async function expandQuery(query: string): Promise<string> {
 
   try {
     const labels = await getLabelEmbeds();
+  if (!labels) return query;
     const tokens = query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 
     // Score each label by cosine similarity with query.

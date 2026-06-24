@@ -20,7 +20,6 @@ import { Box, Text, useInput } from "ink";
 import { Modal } from "./Modal";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
-import { TextBox } from "./TextBox";
 import { completePath } from "../data/path-complete";
 import { resolve } from "node:path";
 import { useOnClick, getBoundingClientRect } from "@ink-tools/ink-mouse";
