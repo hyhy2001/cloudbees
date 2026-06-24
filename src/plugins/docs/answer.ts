@@ -205,13 +205,15 @@ export async function answer(
   // Fetch extra candidates (3× limit each) so fusion has material to work with.
   const bm25Candidates = searchDocs(expandedQuery, corpus, limit * 3, { gate: true, softGate: false });
 
-  // Vector search — hash-based bag-of-words, loaded from pre-built file.
+  // Vector search — neural embeddings via @xenova/transformers (optional).
   let fused = bm25Candidates;
   try {
     const vdb = getVectorDb();
     const queryEmb = await embed(expandedQuery);
-    const vectorCandidates = searchVector(queryEmb, vdb, corpus, limit * 3);
-    fused = rrfFusion(bm25Candidates, vectorCandidates);
+    if (queryEmb) {
+      const vectorCandidates = searchVector(queryEmb, vdb, corpus, limit * 3);
+      fused = rrfFusion(bm25Candidates, vectorCandidates);
+    }
   } catch {
     // Vector search unavailable — fall back to BM25-only.
   }

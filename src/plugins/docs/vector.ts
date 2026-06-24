@@ -1,7 +1,10 @@
 /**
- * Pre-built vector embeddings — loaded from src/generated/embeddings.ts.
- * At query time, embedding tries @xenova/transformers (if installed) and
- * falls back to hash-based bag-of-words (zero deps).
+ * Pre-built neural embeddings — loaded from src/generated/embeddings.ts.
+ *
+ * At query time, embed() lazily loads @xenova/transformers + MiniLM model
+ * for neural query embedding. If @xenova is not available (compiled binary
+ * without dev deps, air-gapped enterprise), getEmbedFn() returns null and
+ * vector search is skipped — BM25 handles retrieval alone (96.8% Recall@3).
  *
  * The corpus vectors are quantized Int16 × SCALE for compact storage.
  * Cosine similarity uses dequantized floats.
@@ -17,7 +20,7 @@ export interface VectorDb {
 }
 
 let _db: VectorDb | null = null;
-let _embedFn: ((text: string) => Promise<number[]>) | null = null;
+let _embedFn: ((text: string) => Promise<number[]>) | null | false = null;
 
 export function getVectorDb(): VectorDb {
   if (_db) return _db;
@@ -39,33 +42,18 @@ export function getVectorDb(): VectorDb {
 export function clearVectorDb(): void { _db = null; _embedFn = null; }
 
 /**
- * Embed a query string into the same vector space as the corpus.
- * Uses @xenova/transformers neural model if available, falls back to
- * hash-based bag-of-words (zero runtime deps).
+ * Embed a query string in the same neural space as the corpus.
+ * Returns null when @xenova/transformers is unavailable (caller should
+ * skip vector search and fall back to BM25-only).
  */
-let xenovaWarned = false;
-export async function embed(text: string): Promise<number[]> {
-  // Try neural embedder first (loaded lazily)
+export async function embed(text: string): Promise<number[] | null> {
   const fn = await getEmbedFn();
-  if (fn) return fn(text);
-
-  // Fallback: hash-based bag-of-words (matches generate-embeddings.ts hash path)
-  const tokens = text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
-  const vec = new Array(DIM).fill(0);
-  for (const t of tokens) {
-    let h = 0;
-    for (let i = 0; i < t.length; i++) {
-      h = ((h << 5) - h) + t.charCodeAt(i);
-      h |= 0;
-    }
-    vec[((h % DIM) + DIM) % DIM]! += 1;
-  }
-  const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0));
-  if (norm > 0) for (let i = 0; i < DIM; i++) vec[i]! /= norm;
-  return vec;
+  if (!fn) return null;
+  return fn(text);
 }
 
 async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | null> {
+  if (_embedFn === false) return null;
   if (_embedFn) return _embedFn;
   try {
     const { pipeline } = await import("@xenova/transformers");
@@ -79,6 +67,7 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
     };
     return _embedFn;
   } catch {
+    _embedFn = false; // permanent fail — don't retry
     return null;
   }
 }
