@@ -209,7 +209,7 @@ export async function answer(
   let fused = bm25Candidates;
   try {
     const vdb = getVectorDb();
-    const queryEmb = embed(expandedQuery);
+    const queryEmb = await embed(expandedQuery);
     const vectorCandidates = searchVector(queryEmb, vdb, corpus, limit * 3);
     fused = rrfFusion(bm25Candidates, vectorCandidates);
   } catch {

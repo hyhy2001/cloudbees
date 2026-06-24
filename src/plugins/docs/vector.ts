@@ -1,7 +1,7 @@
 /**
- * Pure-local vector embeddings — pre-built at generation time, loaded from
- * src/generated/embeddings.ts. At query time only the query needs embedding
- * (hash-based bag-of-words, ~1ms, zero deps).
+ * Pre-built vector embeddings — loaded from src/generated/embeddings.ts.
+ * At query time, embedding tries @xenova/transformers (if installed) and
+ * falls back to hash-based bag-of-words (zero deps).
  *
  * The corpus vectors are quantized Int16 × SCALE for compact storage.
  * Cosine similarity uses dequantized floats.
@@ -17,6 +17,7 @@ export interface VectorDb {
 }
 
 let _db: VectorDb | null = null;
+let _embedFn: ((text: string) => Promise<number[]>) | null = null;
 
 export function getVectorDb(): VectorDb {
   if (_db) return _db;
@@ -35,13 +36,20 @@ export function getVectorDb(): VectorDb {
   return _db;
 }
 
-export function clearVectorDb(): void { _db = null; }
+export function clearVectorDb(): void { _db = null; _embedFn = null; }
 
 /**
- * Local bag-of-words embedder — hash-based, no model needed.
- * Same algorithm as scripts/generate-embeddings.ts.
+ * Embed a query string into the same vector space as the corpus.
+ * Uses @xenova/transformers neural model if available, falls back to
+ * hash-based bag-of-words (zero runtime deps).
  */
-export function embed(text: string): number[] {
+let xenovaWarned = false;
+export async function embed(text: string): Promise<number[]> {
+  // Try neural embedder first (loaded lazily)
+  const fn = await getEmbedFn();
+  if (fn) return fn(text);
+
+  // Fallback: hash-based bag-of-words (matches generate-embeddings.ts hash path)
   const tokens = text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
   const vec = new Array(DIM).fill(0);
   for (const t of tokens) {
@@ -55,6 +63,24 @@ export function embed(text: string): number[] {
   const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0));
   if (norm > 0) for (let i = 0; i < DIM; i++) vec[i]! /= norm;
   return vec;
+}
+
+async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | null> {
+  if (_embedFn) return _embedFn;
+  try {
+    const { pipeline } = await import("@xenova/transformers");
+    const extract = await Promise.race([
+      pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", { quantized: true }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 30000)),
+    ]);
+    _embedFn = async (t: string) => {
+      const result = await extract(t.slice(0, 512), { pooling: "mean", normalize: true });
+      return Array.from(result.data) as number[];
+    };
+    return _embedFn;
+  } catch {
+    return null;
+  }
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
