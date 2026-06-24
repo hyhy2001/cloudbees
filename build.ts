@@ -11,7 +11,15 @@ const VERSION =
 console.log(`Building bee v${VERSION} → ./dist/bee`);
 
 await Bun.$`bun run scripts/generate-help-index.ts`;
-await Bun.$`bun run scripts/generate-embeddings.ts`;
+
+// Generate pre-built embeddings if @xenova/transformers is available.
+// Skipped in air-gapped builds without the optional dependency.
+try {
+  await Bun.$`bun run scripts/generate-embeddings.ts`;
+} catch {
+  console.log("  Vector embeddings: skipped (@xenova/transformers not available)");
+  console.log("  → Will use BM25-only search at runtime.");
+}
 
 // ─── LM endpoint config (baked into the binary) ──────────────────────────────
 // Source priority: bee.lm.json (gitignored) → CB_* env → empty (offline binary).
