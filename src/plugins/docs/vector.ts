@@ -15,8 +15,16 @@
  */
 
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Directory of the running binary/script — model files go right next to it.
+function beeDir(): string {
+  // Compiled binary: process.execPath → /path/to/bee
+  // Dev mode: import.meta.url → /path/to/src/plugins/docs/vector.ts
+  const p = "execPath" in process ? process.execPath : fileURLToPath(import.meta.url);
+  return dirname(p);
+}
 import type { DocItem } from "./corpus";
 import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
 import { MODEL_FILES } from "../../generated/embedding-model";
@@ -66,10 +74,11 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
   if (_embedFn === false) return null;
   if (_embedFn) return _embedFn;
   try {
-    // Extract bundled model files to ~/.bee/models/ (persistent, extracted once).
+    // Extract bundled model files next to the bee binary (persistent, once).
     if (!_modelDir) {
-      _modelDir = join(homedir(), ".bee", "models");
-      if (!existsSync(join(_modelDir, "Xenova", "all-MiniLM-L6-v2", "onnx", "model_quantized.onnx"))) {
+      _modelDir = join(beeDir(), ".bee-models");
+      const marker = join(_modelDir, "Xenova", "all-MiniLM-L6-v2", "onnx", "model_quantized.onnx");
+      if (!existsSync(marker)) {
         for (const [relPath, b64] of Object.entries(MODEL_FILES)) {
           const full = join(_modelDir, relPath);
           mkdirSync(full.slice(0, full.lastIndexOf("/")), { recursive: true });
