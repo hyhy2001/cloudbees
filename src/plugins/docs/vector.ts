@@ -2,23 +2,24 @@
  * Pre-built neural embeddings — loaded from src/generated/embeddings.ts.
  *
  * At query time, embed() lazily loads @xenova/transformers + MiniLM model
- * for neural query embedding. The model is downloaded from HuggingFace
- * on first use and cached in {binaryDir}/.bee/models/ so the compiled
- * binary works offline after the initial download.
+ * for neural query embedding. The model files are bundled in the binary
+ * via src/generated/embedding-model.ts and extracted to a temp directory
+ * at startup — no download needed, works fully offline in a single binary.
  *
- * If @xenova/transformers is not available (dev who didn't install deps,
- * air-gapped without pre-cached model), getEmbedFn() returns null and
- * vector search is skipped — BM25 handles retrieval alone (96.8% Recall@3).
+ * If @xenova/transformers is not available (dev who didn't bun install),
+ * getEmbedFn() returns null and vector search is skipped — BM25 handles
+ * retrieval alone (96.8% Recall@3).
  *
  * The corpus vectors are quantized Int16 × SCALE for compact storage.
  * Cosine similarity uses dequantized floats.
  */
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { tmpdir } from "node:os";
 import type { DocItem } from "./corpus";
 import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
+import { MODEL_FILES } from "../../generated/embedding-model";
 
 export interface VectorDb {
   ids: string[];
@@ -59,27 +60,35 @@ export async function embed(text: string): Promise<number[] | null> {
   return fn(text);
 }
 
+let _tmpDir: string | null = null;
+
 async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | null> {
   if (_embedFn === false) return null;
   if (_embedFn) return _embedFn;
   try {
-    // Point HF cache to a persistent location alongside the binary data.
-    const cacheDir = join(homedir(), ".bee", "models");
-    mkdirSync(cacheDir, { recursive: true });
+    // Extract bundled model files to a temp dir for @xenova to load.
+    if (!_tmpDir) {
+      _tmpDir = mkdtempSync(join(tmpdir(), "bee-model-"));
+      for (const [relPath, b64] of Object.entries(MODEL_FILES)) {
+        const full = join(_tmpDir, relPath);
+        mkdirSync(full.slice(0, full.lastIndexOf("/")), { recursive: true });
+        writeFileSync(full, Buffer.from(b64, "base64"));
+      }
+    }
 
     const { pipeline, env } = await import("@xenova/transformers");
-    env.cacheDir = cacheDir;
+    env.cacheDir = _tmpDir;
+    env.localModelPath = _tmpDir;
 
-    const extract = await Promise.race([
-      pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", { quantized: true }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 60000)),
-    ]);
+    const extract = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", {
+      quantized: true,
+    });
     _embedFn = async (t: string) => {
       const result = await extract(t.slice(0, 512), { pooling: "mean", normalize: true });
       return Array.from(result.data) as number[];
     };
     return _embedFn;
-  } catch {
+} catch (e) {
     _embedFn = false; // permanent fail — don't retry
     return null;
   }
