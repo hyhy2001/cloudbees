@@ -55,6 +55,7 @@ async function runCli(args: string[], extraEnv: Record<string, string> = {}): Pr
     ...extraEnv,
     CB_DB_PATH: "/tmp/bee-ask-cli-test.db",
     CB_DATABRICK_URL: lmUrl,
+    CB_LM_URL: "",
     CB_CLIENT_ID: "",
     CB_CLIENT_SECRET: "",
   };

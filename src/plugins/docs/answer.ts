@@ -12,6 +12,7 @@ import { buildUserPrompt } from "./context";
 import { searchDocs, type DocItem } from "./corpus";
 import { rerank } from "./rerank";
 import { buildGraphFromCorpus, expandGraph, type CommandGraph } from "./graph";
+import { buildVectorDb, searchVector, rrfFusion, embed, type VectorDb } from "./vector";
 
 // --- Output hardening --------------------------------------------------------
 
@@ -149,10 +150,16 @@ export interface AnswerResult {
 // --- Orchestration -----------------------------------------------------------
 
 let _graph: CommandGraph | null = null;
+let _vectorPromise: Promise<VectorDb> | null = null;
 
 function getGraph(corpus: DocItem[]): CommandGraph {
   if (!_graph) _graph = buildGraphFromCorpus(corpus);
   return _graph;
+}
+
+function getVectorDb(corpus: DocItem[]): Promise<VectorDb> {
+  if (!_vectorPromise) _vectorPromise = buildVectorDb(corpus);
+  return _vectorPromise;
 }
 
 /**
@@ -193,19 +200,30 @@ export async function answer(
     return { source: "raw", text: "", hits };
   }
 
-  // ── LM-path re-ranking ───────────────────────────────────────────────────
-  // Fetch extra candidates (3× limit) for the reranker to score, then discard
-  // the extras after re-ranking so the generator still gets `limit` items.
-  const candidates = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
-  const reRanked = await rerank(query, candidates, (p) => provider.generate(p));
-  let contextHits = reRanked.slice(0, limit);
+  // ── Multi-stage retrieval pipeline ──────────────────────────────────────
+  // BM25 (sparse) + Vector (dense) → RRF fusion → Graph expansion → Reranker
+  // Fetch extra candidates (3× limit each) so fusion has material to work with.
+  const bm25Candidates = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
 
-  // ── Graph expansion ──────────────────────────────────────────────────────
-  // Append related commands (same group / same CRUD resource) so the LM sees
-  // the full family even when BM25 ranked them lower.
+  // Vector search — build DB lazily (embeds all corpus items once).
+  let fused = bm25Candidates;
+  try {
+    const vdb = await getVectorDb(corpus);
+    const queryEmb = await embed(query);
+    const vectorCandidates = searchVector(queryEmb, vdb, corpus, limit * 3);
+    fused = rrfFusion(bm25Candidates, vectorCandidates);
+  } catch {
+    // Vector search unavailable — fall back to BM25-only.
+  }
+
+  // Graph expansion: append related commands from the same group/CRUD family.
   const graph = getGraph(corpus);
-  const related = expandGraph(contextHits, corpus, graph, 3);
-  contextHits = [...contextHits, ...related];
+  const graphExtra = expandGraph(fused, corpus, graph, 3);
+  fused = [...fused, ...graphExtra];
+
+  // LM reranker: score top candidates, keep top-K.
+  const reRanked = await rerank(query, fused.slice(0, 15), (p) => provider.generate(p));
+  const contextHits = reRanked.slice(0, limit);
 
   const prompt = buildUserPrompt(query, contextHits);
 
