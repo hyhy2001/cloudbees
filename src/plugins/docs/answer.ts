@@ -10,6 +10,7 @@
 
 import { buildUserPrompt } from "./context";
 import { searchDocs, type DocItem } from "./corpus";
+import { rerank } from "./rerank";
 
 // --- Output hardening --------------------------------------------------------
 
@@ -184,21 +185,13 @@ export async function answer(
     return { source: "raw", text: "", hits };
   }
 
-  // Estimate token count (conservative: ~3 chars/token for mixed text).
-  // If context exceeds ~80% of a conservative 2048-token window, truncate
-  // from the bottom (furthest from query).
-  const MAX_INPUT_CHARS = 2048 * 3 * 0.8; // ~4915 chars
-  let contextHits = hits;
-  let prompt = buildUserPrompt(query, contextHits);
-  if (prompt.length > MAX_INPUT_CHARS && hits.length > 1) {
-    // Drop hits from the end until we fit, but keep at least 1.
-    let trimIdx = hits.length - 1;
-    while (trimIdx > 0 && prompt.length > MAX_INPUT_CHARS) {
-      contextHits = hits.slice(0, trimIdx);
-      prompt = buildUserPrompt(query, contextHits);
-      trimIdx--;
-    }
-  }
+  // ── LM-path re-ranking ───────────────────────────────────────────────────
+  // Fetch extra candidates (3× limit) for the reranker to score, then discard
+  // the extras after re-ranking so the generator still gets `limit` items.
+  const candidates = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
+  const reRanked = await rerank(query, candidates, (p) => provider.generate(p));
+  const contextHits = reRanked.slice(0, limit);
+  const prompt = buildUserPrompt(query, contextHits);
 
   // Streaming path — caller (CLI) writes chunks as they arrive.
   const streamFn = provider.stream;
