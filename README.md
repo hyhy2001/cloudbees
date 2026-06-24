@@ -566,7 +566,21 @@ User query
 
 ### Retrieval components
 
-**MiniLM Query Expansion** (`expand.ts`) — classifies the query into 18 canonical command labels via cosine similarity between MiniLM query embedding and pre-computed label embeddings. Top-1/2 labels contribute expansion terms. Example: "nuke the pipeline" → label "delete job" → adds "delete remove erase nuke" → BM25 matches `job.delete`. No API call, free, local.
+**MiniLM Query Expansion** (`expand.ts`) — classifies the query into 18 canonical command labels via cosine similarity between MiniLM query embedding and pre-computed label embeddings. Expands the BM25 query with related terms so diverse phrasings still match the right command.
+
+How it works:
+
+1. Query embedded via MiniLM (same model as vector search, already in memory)
+2. Cosine similarity with 18 pre-computed label embeddings (computed lazily on first call)
+3. If top-1 score > 0.15: its expansion terms are appended to the BM25 query
+4. If top-2 score is within 85% of top-1: its terms are also appended (for ambiguous queries)
+5. Terms already present in the original query are skipped (avoid redundancy)
+
+Example: "nuke the pipeline" → cosine similarity peaks at label "delete job" (score ~0.2) → appends "delete remove erase nuke" → BM25 now matches `job.delete` precisely.
+
+**18 canonical labels**: create job, run job, stop job, delete job, list jobs, update job, job log, create node, delete node, node online, node offline, create cred, delete cred, auth login, auth use, controller select, track resource.
+
+No API call, no extra model, zero cost per query. Falls back gracefully (returns original query unchanged) on any error or when MiniLM is unavailable.
 
 
 ### Adding help facts
