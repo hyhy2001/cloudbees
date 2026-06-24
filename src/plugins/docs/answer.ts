@@ -13,6 +13,7 @@ import { searchDocs, type DocItem } from "./corpus";
 import { rerank } from "./rerank";
 import { buildGraphFromCorpus, expandGraph, type CommandGraph } from "./graph";
 import { getVectorDb, searchVector, rrfFusion, embed } from "./vector";
+import { expandQuery } from "./expand";
 
 // --- Output hardening --------------------------------------------------------
 
@@ -194,16 +195,21 @@ export async function answer(
     return { source: "raw", text: "", hits };
   }
 
+  // ── LM query expansion ──────────────────────────────────────────────────
+  // Translate diverse user phrasing into canonical bee command terms so BM25
+  // matches precisely even for unusual query vocabulary.
+  const expandedQuery = await expandQuery(query, (p) => provider.generate(p));
+
   // ── Multi-stage retrieval pipeline ──────────────────────────────────────
   // BM25 (sparse) + Vector (dense) → RRF fusion → Graph expansion → Reranker
   // Fetch extra candidates (3× limit each) so fusion has material to work with.
-  const bm25Candidates = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
+  const bm25Candidates = searchDocs(expandedQuery, corpus, limit * 3, { gate: true, softGate: false });
 
   // Vector search — hash-based bag-of-words, loaded from pre-built file.
   let fused = bm25Candidates;
   try {
     const vdb = getVectorDb();
-    const queryEmb = embed(query);
+    const queryEmb = embed(expandedQuery);
     const vectorCandidates = searchVector(queryEmb, vdb, corpus, limit * 3);
     fused = rrfFusion(bm25Candidates, vectorCandidates);
   } catch {
