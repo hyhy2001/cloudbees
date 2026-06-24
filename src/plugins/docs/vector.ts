@@ -1,65 +1,60 @@
 /**
- * Pure-local vector embeddings — no model server, no HTTP calls, no deps.
+ * Pure-local vector embeddings — pre-built at generation time, loaded from
+ * src/generated/embeddings.ts. At query time only the query needs embedding
+ * (hash-based bag-of-words, ~1ms, zero deps).
  *
- * Uses a hash-based bag-of-words embedding where each word maps to a
- * random dimension via a hash function. The same algorithm is used for
- * both corpus items (pre-computed at startup) and the query (on every ask).
- *
- * This is NOT a neural embedding — it trades accuracy for zero dependencies.
- * With a 2048-dim space and ~200 unique words per item, it's good enough
- * to distinguish CLI commands from each other (which is all we need for
- * RRF fusion with BM25).
+ * The corpus vectors are quantized Int16 × SCALE for compact storage.
+ * Cosine similarity uses dequantized floats.
  */
 
 import type { DocItem } from "./corpus";
-
-const DIM = 2048;
+import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
 
 export interface VectorDb {
   ids: string[];
+  /** Dequantized float64 matrix [n_items][DIM] */
   matrix: number[][];
 }
 
 let _db: VectorDb | null = null;
 
-/** Build the vector DB from the corpus at startup. */
-export function buildVectorDb(corpus: DocItem[]): VectorDb {
+export function getVectorDb(): VectorDb {
   if (_db) return _db;
-  const ids: string[] = [];
+
+  const raw = new Int16Array(Buffer.from(VEC_B64, "base64").buffer);
+  const n = raw.length / DIM;
   const matrix: number[][] = [];
-  for (const item of corpus) {
-    const text = [item.title, item.description, item.body].filter(Boolean).join(" ");
-    ids.push(item.id);
-    matrix.push(embed(text));
+  for (let i = 0; i < n; i++) {
+    const row = new Array(DIM);
+    for (let j = 0; j < DIM; j++) {
+      row[j] = raw[i * DIM + j]! / SCALE;
+    }
+    matrix.push(row);
   }
-  _db = { ids, matrix };
+  _db = { ids: [...VEC_IDS], matrix };
   return _db;
 }
 
-/** Clear cached DB (for testing). */
 export function clearVectorDb(): void { _db = null; }
 
-/** Local bag-of-words embedder — hash-based, no model needed. */
+/**
+ * Local bag-of-words embedder — hash-based, no model needed.
+ * Same algorithm as scripts/generate-embeddings.ts.
+ */
 export function embed(text: string): number[] {
-  const tokens = tokenize(text);
+  const tokens = text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
   const vec = new Array(DIM).fill(0);
-  if (tokens.length === 0) return vec;
   for (const t of tokens) {
     let h = 0;
     for (let i = 0; i < t.length; i++) {
       h = ((h << 5) - h) + t.charCodeAt(i);
       h |= 0;
     }
-    const idx = ((h % DIM) + DIM) % DIM;
-    vec[idx]! += 1;
+    vec[((h % DIM) + DIM) % DIM]! += 1;
   }
   const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0));
   if (norm > 0) for (let i = 0; i < DIM; i++) vec[i]! /= norm;
   return vec;
-}
-
-function tokenize(text: string): string[] {
-  return text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -85,7 +80,6 @@ export function searchVector(queryEmb: number[], db: VectorDb, corpus: DocItem[]
 
 /**
  * Reciprocal Rank Fusion: merge BM25 and vector results.
- * k = 60 (standard RRF constant).
  */
 export function rrfFusion(bm25: DocItem[], vector: DocItem[], k = 60): DocItem[] {
   const scores = new Map<string, number>();

@@ -12,7 +12,7 @@ import { buildUserPrompt } from "./context";
 import { searchDocs, type DocItem } from "./corpus";
 import { rerank } from "./rerank";
 import { buildGraphFromCorpus, expandGraph, type CommandGraph } from "./graph";
-import { buildVectorDb, searchVector, rrfFusion, embed, type VectorDb } from "./vector";
+import { getVectorDb, searchVector, rrfFusion, embed } from "./vector";
 
 // --- Output hardening --------------------------------------------------------
 
@@ -199,10 +199,10 @@ export async function answer(
   // Fetch extra candidates (3× limit each) so fusion has material to work with.
   const bm25Candidates = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
 
-  // Vector search — bag-of-words hash embeddings, built once at startup.
+  // Vector search — hash-based bag-of-words, loaded from pre-built file.
   let fused = bm25Candidates;
   try {
-    const vdb = buildVectorDb(corpus);
+    const vdb = getVectorDb();
     const queryEmb = embed(query);
     const vectorCandidates = searchVector(queryEmb, vdb, corpus, limit * 3);
     fused = rrfFusion(bm25Candidates, vectorCandidates);
