@@ -5,7 +5,7 @@
 - CLI for scripting and automation
 - Interactive TUI (`bee --ui`) for day-to-day operation
 - Local SQLite for session, cache, and tracked-resource state
-- Single self-contained binary (~92 MB) — no runtime required on the target host
+- Single self-contained binary (~131 MB) — no runtime required on the target host
 - Targets RHEL 8 / glibc ≥ 2.17 (built with `bun-linux-x64-baseline`)
 
 ## What It Can Do
@@ -15,7 +15,7 @@
 - Job lifecycle: list / get / create / update / delete / run / stop / log / status / copy / move / track / untrack, plus String build parameters, an email anti-spam content filter, and CloudBees Folders Plus controlled-agent approval (list-agents / approve-agent / remove-agent)
 - Credential lifecycle: list / get / create / update / delete / track / untrack (system & user stores)
 - Node lifecycle: list / get / create / update / delete / offline / online / copy / track / untrack (SSH and JNLP/Inbound launchers, Always/On-demand availability), plus Folders Plus controlled-agent mode toggle
-- **Offline help** (`bee ask`) — BM25 natural-language search over the full command tree and 31 help facts; LM answer generation via any OpenAI-compatible endpoint (disabled until LM endpoint is configured in `bee.lm.json` or env)
+- **Offline help** (`bee ask`) — multi-stage RAG pipeline: BM25 + neural vector search + graph expansion + MiniLM reranker → LM answer generation via any OpenAI-compatible endpoint (disabled until LM endpoint configured)
 
 ## Requirements
 
@@ -454,6 +454,8 @@ Tabs (one per plugin, contributed via the plugin's optional `screen()`), in orde
 
 `Enter` on a row opens a numbered **action menu**; the menu is where Run/Edit/Delete/etc. live, so the table itself only needs cursor + Enter:
 
+**Mouse support**: click on tab headings to switch tabs, click on form fields to focus, click on table rows to move cursor, click on context menu items to run actions, click on search bar to start filtering, click on `[MINE]/[ALL]` to toggle scope, click on confirm/cancel buttons in confirmation dialogs. All mouse interactions are disabled when stdout is not a TTY.
+
 ```
   list ──Enter──▶ ContextMenu ──pick──▶ action
                        │                   ├─▶ ConfirmModal   (Delete, Stop, Logout)
@@ -540,108 +542,24 @@ Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful 
 
 ## `bee ask` — Offline Help & Natural-Language Search
 
-`bee ask` answers questions about how to use `bee` without requiring network access or an LLM. It is backed by a **BM25/FTS5 retrieval engine** (SQLite) that searches across two sources simultaneously:
+`bee ask` answers questions about how to use `bee` with a multi-stage RAG pipeline. Only the answer generator needs an external LM — everything else runs locally.
+
+```
+User query
+  → LM Query Expansion (API, ~50 tok)
+  → BM25 (FTS5, 84 items, top-15)
+  → Neural Vector Search (MiniLM, 384-dim, top-15)
+  → RRF Fusion (k=60)
+  → Graph Expansion (+3 CRUD neighbors)
+  → MiniLM Reranker (local, free)
+  → Top-5 → Prompt → LM Generator (API)
+```
+
+**2 API calls per query**: expansion + generation. The 4 inner stages (BM25, vector, graph, reranker) are fully local and free.
 
 1. **Live command tree** — every `bee <plugin> <subcommand>` entry with its flags, auto-derived from the same commander tree that powers the CLI. Currently **53 commands** across 8 plugins.
 2. **Help facts** — 31 hand-authored entries covering concepts, troubleshooting steps, and cross-cutting topics (profiles, credential types, Mine vs All, build parameters, node labels, controlled agents, pipeline, etc.).
 
-```bash
-bee ask "how do I log in"
-bee ask "create a freestyle job with email notification"
-bee ask "rotate an api key"
-bee ask "take a node offline for maintenance"
-bee ask "what is a credential store"
-bee ask "403 forbidden error"
-bee ask "agent keeps disconnecting"
-```
-
-### How retrieval works
-
-```
-query
-  ↓  tokenise + drop stopwords
-  ↓  synonym expansion (100+ domain synonyms: "kick"→run, "retire"→delete, "maintenance"→offline …)
-  ↓  FTS5 MATCH with column weights  title×10  description×5  body×1
-  ↓  exact command-path promotion (a query equal to a command path → that command ranks #1)
-  ↓  relevance gate (word-start coverage ≥ 60 % — drops off-domain coincidental hits)
-  ↓  soft gate (falls back to raw hits if gate empties everything)
-  ↓  top-K results → presenter
-```
-
-Two correctness details in the ranking layer:
-
-- **Exact command-path promotion** — BM25 length-normalization penalizes a documented command for having a long flag body, so a bare sibling (e.g. `node track`, empty body) could outrank the canonical `node create`. When the query text exactly equals a command's path, that command is promoted to rank 1. Fires only on exact equality, so concept/natural queries are untouched.
-- **Word-start gate matching** — the relevance gate counts a token as present only when it starts a word in the item's text (mirroring FTS5 prefix semantics). A raw substring test would let "node" match "anode" or "log" match "login", letting coincidental fragments clear the gate the gate exists to block.
-
-
-The **synonym map** (`corpus.ts`) normalises user vocabulary to the canonical terms used in command descriptions and help facts. Examples:
-
-| User types | Expands to |
-|---|---|
-| kick, launch, execute, start | run |
-| retire, decommission, erase | delete |
-| rotate, configure, edit | update |
-| maintenance, suspend, pause, disable | offline |
-| notification, notify | email |
-| existing | update |
-| denied, forbidden | 403 |
-| disconnecting, unreachable | connect |
-| whoami | profiles |
-| what | concept |
-
-### LLM path (optional)
-
-When an LM endpoint is configured, `bee ask` generates a natural-language answer from the retrieved hits. Two auth methods are supported.
-
-#### Option A — Static Bearer token (PAT or local server)
-
-Works with Databricks personal access tokens, any OpenAI-compatible endpoint, or a local `llama-server`.
-
-Create `bee.lm.json` in the project root (gitignored):
-
-```json
-{
-  "CB_DATABRICK_URL": "https://your-workspace.azuredatabricks.net",
-  "CB_API_KEY": "your-personal-access-token",
-  "CB_LM_MODEL": "your-model-id"
-}
-```
-
-#### Option B — Databricks OAuth M2M (client\_id + client\_secret)
-
-For Databricks workspaces that require OAuth machine-to-machine authentication instead of a PAT. `bee ask` automatically exchanges the client credentials for a short-lived access token at runtime (cached for the token's lifetime, typically 1 hour).
-
-```json
-{
-  "CB_DATABRICK_URL": "https://your-workspace.azuredatabricks.net",
-  "CB_CLIENT_ID": "your-oauth-client-id",
-  "CB_CLIENT_SECRET": "your-oauth-client-secret",
-  "CB_LM_MODEL": "your-model-id"
-}
-```
-
-The token exchange calls `POST /oidc/v1/token` with `grant_type=client_credentials` scoped to `all-apis`. The chat request goes to `/serving-endpoints/<model>/invocations` (Databricks native), falling back to `/v1/chat/completions` if needed.
-
-> **Auth priority**: if both `CB_CLIENT_ID`/`CB_CLIENT_SECRET` and `CB_API_KEY` are set, OAuth M2M takes precedence.
-
----
-
-Then build as usual (`make build`). The credentials are compiled into the binary via `--define`; end users never see them. When the LM is unavailable or returns an error, `bee ask` degrades gracefully to raw BM25 hits. The LM output is streamed via SSE tokens as they arrive, with a 30-second timeout (increased from 15 s for local models).
-
-**Hallucination defence (3 layers):**
-1. **Off-domain guard** — before calling the LM, a strict relevance gate (no soft fallback) checks the query. If the gate rejects it, the LM is skipped entirely; raw BM25 hits are returned instead.
-2. **Stripped invented commands** — every `bee <group> <sub>` span in the LM response (both backtick-wrapped and plain-text) is validated against the real command tree. Fake commands are removed, real ones (like `bee job run`) are kept.
-3. **System prompt hardening** — negative examples in the system instruction teach the model to refuse off-domain questions and never invent commands or flags.
-
-**Runtime env vars (override or set without rebuilding):**
-
-| Variable | Description |
-|---|---|
-| `CB_DATABRICK_URL` | LM endpoint base URL |
-| `CB_API_KEY` | Static Bearer token / PAT (Option A) |
-| `CB_CLIENT_ID` | OAuth client ID (Option B) |
-| `CB_CLIENT_SECRET` | OAuth client secret (Option B) |
-| `CB_LM_MODEL` | Model identifier |
 
 ### Adding help facts
 
@@ -693,17 +611,22 @@ bun run scripts/benchmark.ts --model <name>               # Model name (e.g. oc/
 
 Results are printed to the console and written to `benchmark-report.md` (gitignored).
 
-**Latest results** (qwen2.5-coder-3b-q4_k_m, 73 LLM queries judged):
+**Latest results** (qwen2.5-coder-3b-q4_k_m, 73 LLM queries judged, full pipeline: expansion + BM25 + vector + graph + reranker):
 
 | Metric | Score |
-|---|---|
+|---|---|---|
 | BM25 Recall@1 | **75.0%** (689/919) |
-| BM25 Recall@3 | **96.7%** (889/919) |
-| BM25 Recall@5 | **99.1%** (911/919) |
-| BM25 MRR | **0.856** |
+| BM25 Recall@3 | **96.8%** (890/919) |
+| BM25 Recall@5 | **99.2%** (912/919) |
+| BM25 MRR | **0.857** |
 | BM25 misses (top-10) | **3** |
+| Reranker | MiniLM bi-encoder (local, free, bundled) |
+| Vector search | all-MiniLM-L6-v2 384-dim (local, bundled) |
+| Graph expansion | CRUD neighbors auto-derived from command tree |
+| LM expansion API call | 1 (Databricks, ~50 tokens) |
+| LM generation API call | 1 (Databricks, ~256 tokens) |
 | LLM correct command | **94.5%** (69/73) |
-| LLM hallucination rate | **1.4%** (1/73) |
+| LLM hallucination rate | **2.7%** (2/73) |
 | LLM has required flag | **84.6%** (11/13) |
 | LLM wrong refusal | **1.4%** (1/73) |
 
@@ -718,7 +641,11 @@ LLM by query type:
 
 Fixes applied: scoring bug (multi-dot expectedId in `scoreAnswer` → replaced `replace(".", " ")` with `replace(/\./g, " ")`), `stripInventedCommands` now strips `bee help <topic>` (allows bare `bee --help`), system prompt strengthened with rank-1 preference, explicit `bee help` ban, action-verb matching rules (`add`→`update`, `login to profile`→`auth login --profile`), concept.login help fact mentions "bee is a single binary — no installation needed". Remaining failures are edge cases: ambiguous "remove an agent" vs `node.delete`/`job.remove-agent`, and scorer limitations (`bee --ui` not matching command pattern, `--profile` flag not mentioned by name in an otherwise correct answer).
 
-Improvements since initial release:
+Pipeline additions:
+- **LM Query Expansion**: translates diverse user phrasing to canonical command terms before BM25 (1 API call, ~50 tokens)
+- **Neural Vector Search**: all-MiniLM-L6-v2 384-dim, model bundled in binary, zero disk
+- **MiniLM Reranker**: uses same model as vector search — free, local, no API call
+- **Graph Expansion**: CRUD neighbors (e.g. "remove agent" now also sees `node.delete`)
 - BM25 retrieval: Recall@1 **+7.3%**, MRR **+0.054** (promotion layer for flag/cross-plugin/expert routing, synonym map expansion, corpus caching)
 - LM latency: streaming output via SSE, timeout increased 15s → 60s
 - Output hardening: XML-formatted context, stricter flag anti-hallucination in system prompt, `stripInventedCommands` post-processor (backtick + plain-text), off-domain guard (skip LM if gate rejects query)
@@ -875,7 +802,13 @@ Encrypted session tokens live in `settings`, not in a column of their own — th
 
 `bun build --compile` targets `bun-linux-x64-baseline` (no AVX2 requirement → runs on older CPUs / RHEL 8). The version string is injected via `--define BEE_VERSION`. Two non-obvious constraints: bytecode is **off** (Ink's yoga-layout flexbox engine won't compile with it), and the JSX runtime is pinned to production (`jsx`/`jsxs`, not `jsxDEV`) — a dev-runtime build crashes at first render in the compiled binary.
 
-Before compiling, `build.ts` runs `scripts/generate-help-index.ts` to regenerate `src/generated/help-index.ts` (the `bee ask` help facts). If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. Supported auth: static Bearer token (`CB_API_KEY`) or Databricks OAuth M2M (`CB_CLIENT_ID` + `CB_CLIENT_SECRET`). The build logs which auth method was detected; it never logs the secret itself.
+Before compiling, `build.ts` runs code-generation scripts:
+
+1. `scripts/generate-help-index.ts` → `src/generated/help-index.ts` (help facts for `bee ask`)
+2. `scripts/generate-embeddings.ts` → `src/generated/embeddings.ts` (neural corpus vectors, 86 KB)
+3. `scripts/generate-embedding-model.ts` → `src/generated/embedding-model.ts` (MiniLM model files, 31 MB, gitignored — regenerated per build)
+
+If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. Supported auth: static Bearer token (`CB_API_KEY`) or Databricks OAuth M2M (`CB_CLIENT_ID` + `CB_CLIENT_SECRET`). The build logs which auth method was detected; it never logs the secret itself.
 
 ## Security
 
@@ -911,13 +844,18 @@ cloudbees/
 ├── bee.lm.json           # (gitignored) LM endpoint config baked at build time
 ├── scripts/
 │   ├── generate-help-index.ts  # regenerates src/generated/help-index.ts
+│   ├── generate-embeddings.ts  # pre-computes neural corpus vectors (MiniLM, 384-dim)
+│   ├── generate-embedding-model.ts # bundles MiniLM model files as base64 constants
+│   ├── run-benchmark.sh        # non-blocking benchmark runner (progress monitor)
 │   ├── benchmark.ts            # comprehensive BM25 + LLM quality benchmark
 │   ├── ablation.ts             # RAG-vs-LLM ablation (nDCG, bootstrap CI, net decision acc)
 │   └── rag-eval.ts             # BM25 retrieval quality eval (legacy)
 ├── src/
 │   ├── main.ts           # Entry: initDb → initPlugins → parse; --ui → launchTui()
 │   ├── generated/
-│   │   └── help-index.ts # auto-generated help facts (committed, baked into binary)
+│   │   ├── help-index.ts   # auto-generated help facts (committed)
+│   │   ├── embeddings.ts   # pre-computed neural corpus vectors (86 KB, committed)
+│   │   └── embedding-model.ts # MiniLM model files (31 MB base64, gitignored, per-build)
 │   ├── core/             # Stable engine (never imports plugins/)
 │   │   ├── api/          # HTTP client, CSRF crumb, retry, typed errors
 │   │   ├── db/           # SQLite connection, schema, repositories/
