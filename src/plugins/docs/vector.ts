@@ -2,14 +2,21 @@
  * Pre-built neural embeddings — loaded from src/generated/embeddings.ts.
  *
  * At query time, embed() lazily loads @xenova/transformers + MiniLM model
- * for neural query embedding. If @xenova is not available (compiled binary
- * without dev deps, air-gapped enterprise), getEmbedFn() returns null and
+ * for neural query embedding. The model is downloaded from HuggingFace
+ * on first use and cached in {binaryDir}/.bee/models/ so the compiled
+ * binary works offline after the initial download.
+ *
+ * If @xenova/transformers is not available (dev who didn't install deps,
+ * air-gapped without pre-cached model), getEmbedFn() returns null and
  * vector search is skipped — BM25 handles retrieval alone (96.8% Recall@3).
  *
  * The corpus vectors are quantized Int16 × SCALE for compact storage.
  * Cosine similarity uses dequantized floats.
  */
 
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { DocItem } from "./corpus";
 import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
 
@@ -56,10 +63,16 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
   if (_embedFn === false) return null;
   if (_embedFn) return _embedFn;
   try {
-    const { pipeline } = await import("@xenova/transformers");
+    // Point HF cache to a persistent location alongside the binary data.
+    const cacheDir = join(homedir(), ".bee", "models");
+    mkdirSync(cacheDir, { recursive: true });
+
+    const { pipeline, env } = await import("@xenova/transformers");
+    env.cacheDir = cacheDir;
+
     const extract = await Promise.race([
       pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", { quantized: true }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 30000)),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 60000)),
     ]);
     _embedFn = async (t: string) => {
       const result = await extract(t.slice(0, 512), { pooling: "mean", normalize: true });
