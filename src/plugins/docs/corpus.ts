@@ -555,7 +555,8 @@ function getCorpusDb(corpus: DocItem[]): Database {
     title,
     description,
     body,
-    source      UNINDEXED
+    source      UNINDEXED,
+    tokenize = 'porter unicode61'
   )`);
   const insert = db.prepare(
     "INSERT INTO docs (id, type, title, description, body, source) VALUES (?, ?, ?, ?, ?, ?)",

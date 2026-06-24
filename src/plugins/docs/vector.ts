@@ -63,9 +63,14 @@ export function clearVectorDb(): void { _db = null; _embedFn = null; }
  */
 export async function embed(text: string): Promise<number[] | null> {
   const fn = await getEmbedFn();
-  if (!fn) return null;
+  if (!fn) {
+    if (!_statusLogged) { _statusLogged = true; process.stderr.write("[vector] MiniLM unavailable — BM25-only\n"); }
+    return null;
+  }
   return fn(text);
 }
+
+let _statusLogged = false;
 
 async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | null> {
   if (_embedFn === false) return null;
@@ -102,6 +107,7 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
       const result = await extract(t.slice(0, 512), { pooling: "mean", normalize: true });
       return Array.from(result.data) as number[];
     };
+    if (!_statusLogged) { _statusLogged = true; process.stderr.write("[vector] MiniLM OK\n"); }
     return _embedFn;
 } catch (e) {
     _embedFn = false; // permanent fail — don't retry
