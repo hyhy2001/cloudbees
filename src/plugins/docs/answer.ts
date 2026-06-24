@@ -198,7 +198,7 @@ export async function answer(
   // ── LM query expansion ──────────────────────────────────────────────────
   // Translate diverse user phrasing into canonical bee command terms so BM25
   // matches precisely even for unusual query vocabulary.
-  const expandedQuery = await expandQuery(query, (p) => provider.generate(p));
+  const expandedQuery = await expandQuery(query);
 
   // ── Multi-stage retrieval pipeline ──────────────────────────────────────
   // BM25 (sparse) + Vector (dense) → RRF fusion → Graph expansion → Reranker
