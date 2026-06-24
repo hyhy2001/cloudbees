@@ -21,6 +21,7 @@ import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
 import { ContextMenu } from "../../core/tui/components/ContextMenu";
 import { GrantListOverlay, type GrantItem } from "../../core/tui/components/GrantListOverlay";
+import { ClickableToggle } from "../../core/tui/components/ClickableToggle";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
 import { useSearch } from "../../core/tui/data/use-search";
@@ -694,11 +695,21 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {/* ── Compact header ── */}
       <Box>
         <Text color={THEME.dim}>{SYM.online} Nodes  </Text>
+        <ClickableToggle onClick={() => setShowAll((v) => { const nv = !v; setScopeShowAll("node", nv, ctx.dbPath); return nv; })}>
         {showAll
           ? <Text color={THEME.yellow} bold>[ALL]</Text>
           : <Text color={THEME.success} bold>[MINE]</Text>}
-        {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
-        {multi ? <Text color={THEME.active}>  [{selected.size} selected]</Text> : null}
+        </ClickableToggle>
+        {autoRefresh ? (
+          <ClickableToggle onClick={() => setAutoRefresh((v) => !v)}>
+            <Text color={THEME.success}>  [auto]</Text>
+          </ClickableToggle>
+        ) : null}
+        {multi ? (
+          <ClickableToggle onClick={() => setSelected(new Set())}>
+            <Text color={THEME.active}>  [{selected.size} selected]</Text>
+          </ClickableToggle>
+        ) : null}
         {status === "loading" || status === "stale" ? (
           <Text color={THEME.active}>  ⟳ refreshing…</Text>
         ) : null}

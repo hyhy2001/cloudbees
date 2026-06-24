@@ -21,6 +21,7 @@ import { SearchBar } from "../../core/tui/components/SearchBar";
 import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
 import { ParamListEditor } from "../../core/tui/components/ParamListEditor";
+import { ClickableToggle } from "../../core/tui/components/ClickableToggle";
 import { useKeymap, bindingsToHints, type KeyBinding } from "../../core/tui/keymap";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
@@ -1578,8 +1579,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         {folderStack.length > 0 ? (
           <Text color={THEME.yellow}>  {SYM.arrow} /{folderStack.join("/")}</Text>
         ) : null}
-        {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
-        {multi ? <Text color={THEME.active}>  [{selected.size} selected]</Text> : null}
+        {autoRefresh ? (
+          <ClickableToggle onClick={() => setAutoRefresh((v) => !v)}>
+            <Text color={THEME.success}>  [auto]</Text>
+          </ClickableToggle>
+        ) : null}
+        {multi ? (
+          <ClickableToggle onClick={() => setSelected(new Set())}>
+            <Text color={THEME.active}>  [{selected.size} selected]</Text>
+          </ClickableToggle>
+        ) : null}
         {status === "loading" || status === "stale" ? (
           <Text color={THEME.active}>  ⟳ refreshing…</Text>
         ) : null}

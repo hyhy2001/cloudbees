@@ -23,6 +23,7 @@ import { SearchBar } from "../../core/tui/components/SearchBar";
 import { ConfirmModal } from "../../core/tui/components/ConfirmModal";
 import { FormModal } from "../../core/tui/components/FormModal";
 import { ContextMenu } from "../../core/tui/components/ContextMenu";
+import { ClickableToggle } from "../../core/tui/components/ClickableToggle";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
 import { useSearch } from "../../core/tui/data/use-search";
@@ -502,13 +503,25 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {/* ── Compact header ── */}
       <Box>
         <Text color={THEME.dim}>{SYM.gear} Credentials  </Text>
+        <ClickableToggle onClick={() => setShowAll((v) => { const nv = !v; setScopeShowAll("credential", nv, ctx.dbPath); return nv; })}>
         {showAll
           ? <Text color={THEME.yellow} bold>[ALL]</Text>
           : <Text color={THEME.success} bold>[MINE]</Text>}
+        </ClickableToggle>
         <Text color={THEME.dim}>{"  "}</Text>
-        <Text color={store === "system" ? THEME.blue : THEME.yellow}>[{store}]</Text>
-        {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
-        {multi ? <Text color={THEME.active}>  [{selected.size} selected]</Text> : null}
+        <ClickableToggle onClick={() => setStore((s) => (s === "system" ? "user" : "system"))}>
+          <Text color={store === "system" ? THEME.blue : THEME.yellow}>[{store}]</Text>
+        </ClickableToggle>
+        {autoRefresh ? (
+          <ClickableToggle onClick={() => setAutoRefresh((v) => !v)}>
+            <Text color={THEME.success}>  [auto]</Text>
+          </ClickableToggle>
+        ) : null}
+        {multi ? (
+          <ClickableToggle onClick={() => setSelected(new Set())}>
+            <Text color={THEME.active}>  [{selected.size} selected]</Text>
+          </ClickableToggle>
+        ) : null}
         {status === "loading" || status === "stale" ? (
           <Text color={THEME.active}>  ⟳ refreshing…</Text>
         ) : null}
