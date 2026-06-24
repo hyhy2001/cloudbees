@@ -546,19 +546,27 @@ Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful 
 
 ```
 User query
-  → LM Query Expansion (API, ~50 tok)
+  → MiniLM Query Expansion (local, free)
+     Cosine similarity with 18 canonical command labels.
+     No API call — uses same bundled MiniLM model.
   → BM25 (FTS5, 84 items, top-15)
+     Synonym expansion (100+ domain synonyms), relevance gate.
   → Neural Vector Search (MiniLM, 384-dim, top-15)
+     Pre-computed corpus embeddings bundled in binary.
   → RRF Fusion (k=60)
+     Reciprocal Rank Fusion: BM25 + Vector results merged.
   → Graph Expansion (+3 CRUD neighbors)
+     Same-group and same-resource commands.
   → MiniLM Reranker (local, free)
+     Cosine similarity between query and each hit's corpus vector.
   → Top-5 → Prompt → LM Generator (API)
 ```
 
-**2 API calls per query**: expansion + generation. The 4 inner stages (BM25, vector, graph, reranker) are fully local and free.
+**1 API call per query** (generator only). Everything else — expansion, BM25, vector, graph, reranker — runs locally with the bundled MiniLM model.
 
-1. **Live command tree** — every `bee <plugin> <subcommand>` entry with its flags, auto-derived from the same commander tree that powers the CLI. Currently **53 commands** across 8 plugins.
-2. **Help facts** — 31 hand-authored entries covering concepts, troubleshooting steps, and cross-cutting topics (profiles, credential types, Mine vs All, build parameters, node labels, controlled agents, pipeline, etc.).
+### Retrieval components
+
+**MiniLM Query Expansion** (`expand.ts`) — classifies the query into 18 canonical command labels via cosine similarity between MiniLM query embedding and pre-computed label embeddings. Top-1/2 labels contribute expansion terms. Example: "nuke the pipeline" → label "delete job" → adds "delete remove erase nuke" → BM25 matches `job.delete`. No API call, free, local.
 
 
 ### Adding help facts
@@ -623,7 +631,7 @@ Results are printed to the console and written to `benchmark-report.md` (gitigno
 | Reranker | MiniLM bi-encoder (local, free, bundled) |
 | Vector search | all-MiniLM-L6-v2 384-dim (local, bundled) |
 | Graph expansion | CRUD neighbors auto-derived from command tree |
-| LM expansion API call | 1 (Databricks, ~50 tokens) |
+| Query expansion | MiniLM zero-shot (local, free, bundled) |
 | LM generation API call | 1 (Databricks, ~256 tokens) |
 | LLM correct command | **94.5%** (69/73) |
 | LLM hallucination rate | **2.7%** (2/73) |
@@ -642,7 +650,7 @@ LLM by query type:
 Fixes applied: scoring bug (multi-dot expectedId in `scoreAnswer` → replaced `replace(".", " ")` with `replace(/\./g, " ")`), `stripInventedCommands` now strips `bee help <topic>` (allows bare `bee --help`), system prompt strengthened with rank-1 preference, explicit `bee help` ban, action-verb matching rules (`add`→`update`, `login to profile`→`auth login --profile`), concept.login help fact mentions "bee is a single binary — no installation needed". Remaining failures are edge cases: ambiguous "remove an agent" vs `node.delete`/`job.remove-agent`, and scorer limitations (`bee --ui` not matching command pattern, `--profile` flag not mentioned by name in an otherwise correct answer).
 
 Pipeline additions:
-- **LM Query Expansion**: translates diverse user phrasing to canonical command terms before BM25 (1 API call, ~50 tokens)
+- **MiniLM Query Expansion**: zero-shot label classification via cosine similarity — no API call, free
 - **Neural Vector Search**: all-MiniLM-L6-v2 384-dim, model bundled in binary, zero disk
 - **MiniLM Reranker**: uses same model as vector search — free, local, no API call
 - **Graph Expansion**: CRUD neighbors (e.g. "remove agent" now also sees `node.delete`)
