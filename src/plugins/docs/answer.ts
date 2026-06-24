@@ -148,6 +148,63 @@ export interface AnswerResult {
   streamOutput?: (write: (chunk: string) => void) => Promise<string>;
 }
 
+// --- Self-reflection (Self-RAG) -----------------------------------------------
+
+/**
+ * Self-reflection: ask the LM to verify its own answer against the context.
+ * If it detects a mistake, it outputs a corrected answer.
+ * This catches the common failure mode where the model picks the wrong command
+ * despite the correct one being in the context.
+ */
+const REFLECT_PROMPT = [
+  "You are a validator for the bee CLI assistant.",
+  "Check if the assistant's answer is correct given the context.",
+  "",
+  "Context commands available:",
+  "${CONTEXT}",
+  "",
+  "Assistant's answer: \"${ANSWER}\"",
+  "",
+  "Rules:",
+  "  - VALID: answer uses a real bee command from the context with correct name.",
+  "  - INVALID: answer uses a command NOT in the context, or the wrong command name.",
+  "  - INVALID: answer says 'No info available' but context has a relevant command.",
+  "",
+  "If VALID, output: VALID",
+  "If INVALID, output: FIXED: <corrected answer>",
+  "",
+  "Check:",
+].join("\n");
+
+async function selfReflect(
+  answer: string,
+  contextHits: DocItem[],
+  generate: (p: string) => Promise<string>,
+): Promise<string> {
+  // Build a compact list of available command names from context.
+  const ctxLines = contextHits
+    .map((h) => h.title || h.id)
+    .filter(Boolean)
+    .join("\n");
+
+  const prompt = REFLECT_PROMPT.replace("${CONTEXT}", ctxLines).replace("${ANSWER}", answer);
+
+  let result: string;
+  try {
+    result = await generate(prompt);
+  } catch {
+    return answer; // reflection failed — use original
+  }
+
+  const fixed = result.match(/^FIXED:\s*(.*)/is)?.[1]?.trim();
+  if (fixed && fixed.length > 0 && fixed.length < answer.length * 2) {
+    return fixed;
+  }
+
+  // If LM says VALID or result is ambiguous, keep original.
+  return answer;
+}
+
 // --- Orchestration -----------------------------------------------------------
 
 let _graph: CommandGraph | null = null;
@@ -257,7 +314,10 @@ export async function answer(
   try {
     const raw = await provider.generate(prompt);
     const text = stripInventedCommands(raw, corpus);
-    return { source: "lm", text, hits, provider: provider.name };
+    // Self-reflection: if the model picked a wrong command, give it a chance
+    // to correct itself. Only on non-streaming path (streaming is interactive).
+    const verified = await selfReflect(text, contextHits, (p) => provider.generate(p));
+    return { source: "lm", text: verified, hits, provider: provider.name };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[bee ask] LM error (${provider.name}): ${msg}\n`);
