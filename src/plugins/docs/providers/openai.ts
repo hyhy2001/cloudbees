@@ -44,7 +44,7 @@ export class OpenAICompatProvider {
           { role: "user", content: prompt },
         ],
         temperature: 0,
-        max_tokens: 256,
+        max_tokens: 1024,
       }),
       signal: AbortSignal.timeout(60000),
     });
@@ -54,9 +54,12 @@ export class OpenAICompatProvider {
     }
 
     const json = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
+      choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
     };
-    return json.choices?.[0]?.message?.content?.trim() ?? "";
+    const msg = json.choices?.[0]?.message;
+    // Reasoning models (DeepSeek, QwQ, etc.) put the answer in
+    // reasoning_content and leave content empty. Fall back gracefully.
+    return (msg?.content ?? msg?.reasoning_content ?? "").trim();
   }
 
   /**
@@ -107,9 +110,10 @@ export class OpenAICompatProvider {
 
         try {
           const json = JSON.parse(trimmed.slice(6)) as {
-            choices?: Array<{ delta?: { content?: string } }>;
+            choices?: Array<{ delta?: { content?: string; reasoning_content?: string } }>;
           };
-          const content = json.choices?.[0]?.delta?.content;
+          const delta = json.choices?.[0]?.delta;
+          const content = delta?.content ?? delta?.reasoning_content;
           if (content) yield content;
         } catch {
           // skip malformed SSE line

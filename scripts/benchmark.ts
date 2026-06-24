@@ -319,7 +319,7 @@ async function lmChat(
       { role: "user",   content: user },
     ],
     temperature: 0,
-    max_tokens: 512,
+    max_tokens: 2048,
     stream: false,
   };
   if (LM_MODEL) body.model = LM_MODEL;
@@ -333,8 +333,9 @@ async function lmChat(
   const raw = await r.text();
   // Some endpoints append SSE trailers (e.g. "\ndata: [DONE]") after JSON
   const jsonPart = raw.split("\ndata: ")[0]!;
-  const j = JSON.parse(jsonPart) as { choices: { message: { content: string } }[] };
-  return j.choices[0]?.message?.content?.trim() ?? "";
+  const j = JSON.parse(jsonPart) as { choices: { message: { content?: string; reasoning_content?: string } }[] };
+  const msg = j.choices[0]?.message;
+  return (msg?.content ?? msg?.reasoning_content ?? "").trim();
 }
 
 /**
