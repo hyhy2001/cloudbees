@@ -16,6 +16,7 @@ import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
 import { DataTable } from "../../core/tui/components/DataTable";
 import { SearchBar } from "../../core/tui/components/SearchBar";
+import { ClickableToggle } from "../../core/tui/components/ClickableToggle";
 import { useResource } from "../../core/tui/data/use-resource";
 import { computeView } from "../../core/tui/data/use-view";
 import { useSearch } from "../../core/tui/data/use-search";
@@ -246,7 +247,11 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         {ctx.activeController
           ? <Text color={THEME.success} bold>[{ctx.activeController}]</Text>
           : <Text color={THEME.dim}>[none]</Text>}
-        {autoRefresh ? <Text color={THEME.success}>  [auto]</Text> : null}
+        {autoRefresh ? (
+          <ClickableToggle onClick={() => setAutoRefresh((v) => !v)}>
+            <Text color={THEME.success}>  [auto]</Text>
+          </ClickableToggle>
+        ) : null}
         {status === "loading" || status === "stale" ? (
           <Text color={THEME.active}>  ⟳ refreshing…</Text>
         ) : null}

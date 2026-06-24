@@ -799,9 +799,11 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               <Box>
                 <Text bold color={THEME.normal}>{current.displayName || current.name}</Text>
                 <Text color={THEME.dim}>{"  "}</Text>
+                <ClickableToggle onClick={() => doToggleOffline(current)}>
                 {current.offline
                   ? <Text color={THEME.warning}>{SYM.offline} offline</Text>
                   : <Text color={THEME.success}>{SYM.online} online</Text>}
+                </ClickableToggle>
                 <Text color={THEME.dim}>{"  "}exec {current.numExecutors}</Text>
               </Box>
               {/* Config fields */}
