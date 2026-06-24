@@ -11,6 +11,7 @@
 import { buildUserPrompt } from "./context";
 import { searchDocs, type DocItem } from "./corpus";
 import { rerank } from "./rerank";
+import { buildGraphFromCorpus, expandGraph, type CommandGraph } from "./graph";
 
 // --- Output hardening --------------------------------------------------------
 
@@ -147,6 +148,13 @@ export interface AnswerResult {
 
 // --- Orchestration -----------------------------------------------------------
 
+let _graph: CommandGraph | null = null;
+
+function getGraph(corpus: DocItem[]): CommandGraph {
+  if (!_graph) _graph = buildGraphFromCorpus(corpus);
+  return _graph;
+}
+
 /**
  * Main entry point for `bee ask`.
  *
@@ -190,7 +198,15 @@ export async function answer(
   // the extras after re-ranking so the generator still gets `limit` items.
   const candidates = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
   const reRanked = await rerank(query, candidates, (p) => provider.generate(p));
-  const contextHits = reRanked.slice(0, limit);
+  let contextHits = reRanked.slice(0, limit);
+
+  // ── Graph expansion ──────────────────────────────────────────────────────
+  // Append related commands (same group / same CRUD resource) so the LM sees
+  // the full family even when BM25 ranked them lower.
+  const graph = getGraph(corpus);
+  const related = expandGraph(contextHits, corpus, graph, 3);
+  contextHits = [...contextHits, ...related];
+
   const prompt = buildUserPrompt(query, contextHits);
 
   // Streaming path — caller (CLI) writes chunks as they arrive.

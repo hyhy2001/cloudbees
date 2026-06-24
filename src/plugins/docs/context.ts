@@ -56,23 +56,25 @@ function stripTermsFromBody(body: string): string {
 /**
  * Render one DocItem as an XML-like structured block for the LM.
  *
- * XML tags give the LM clear boundaries between items, making it harder to
- * confuse or merge context from different entries. The model sees:
- *   <command id="bee job run">
- *     <usage>bee job run <name></usage>
- *     <desc>...</desc>
- *     <flag>--param</flag>
- *   </command>
- *   <info id="concept.profile">...</info>
+ * When `related` is true, the block is wrapped in <related>…</related> so the
+ * LM sees it as a secondary suggestion, not a primary match.
  */
-export function formatDocItem(item: DocItem): string {
-  if (item.type === "doc") {
-    const id = item.id ?? (item.source.startsWith("help:") ? item.title ?? item.source : item.source);
-    const head = `<info id="${escapeXmlAttr(id)}">`;
-    const body = stripTermsFromBody(item.body);
-    return body ? `${head}\n${body}\n</info>` : `${head}\n</info>`;
-  }
+export function formatDocItem(item: DocItem, related = false): string {
+  const inner = item.type === "doc" ? renderInfo(item) : renderCommand(item);
+  if (!inner) return "";
+  return related
+    ? `<related>\n${inner}\n</related>`
+    : inner;
+}
 
+function renderInfo(item: DocItem): string {
+  const id = item.id ?? (item.source.startsWith("help:") ? item.title ?? item.source : item.source);
+  const head = `<info id="${escapeXmlAttr(id)}">`;
+  const body = stripTermsFromBody(item.body);
+  return body ? `${head}\n${body}\n</info>` : `${head}\n</info>`;
+}
+
+function renderCommand(item: DocItem): string {
   const lines: string[] = [];
   lines.push(`<command id="${escapeXmlAttr(item.title)}">`);
   if (item.description) lines.push(`  <desc>${escapeXmlAttr(item.description)}</desc>`);
@@ -97,7 +99,7 @@ function escapeXmlAttr(s: string): string {
 
 /** Join the rendered items into a single context section. */
 export function formatContext(items: DocItem[]): string {
-  return items.map(formatDocItem).join("\n\n");
+  return items.map((item) => formatDocItem(item)).join("\n\n");
 }
 
 /**
@@ -124,6 +126,7 @@ export const SYSTEM_PROMPT = [
   "- To pick between similar commands (e.g. create vs update, login vs use), match the action verb from the question:",
   "  \"add a build parameter\" → `bee job update` (adding to existing), not `bee job create`.",
   "  \"login to a specific profile\" → `bee auth login --profile`, not `bee auth use`.",
+  "  \"remove an agent\" → `bee node delete`, not `bee node update`. \"remove\" = delete, not update.",
   "- If the <context> section contains relevant <info> or <command> blocks, you MUST use them. Do NOT say \"No info available\" when the context has an answer.",
   "- If no <command> or <info> block is relevant, say: \"No info available — try `bee --help`\"",
   "- Do not answer questions unrelated to bee. Say: \"I only help with bee usage.\"",
