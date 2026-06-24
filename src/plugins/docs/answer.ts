@@ -180,36 +180,19 @@ export async function answer(
   // off-domain queries. So: soft gate only when there is no provider.
   const hits = searchDocs(query, corpus, limit, { gate: true, softGate: !provider });
 
-  // Off-domain guard: if the strict gate (no soft rescue) would return empty,
-  // the query is likely off-domain. Skip the LM call even when a provider is
-  // configured — feeding rescues to a small model produces hallucination.
-  if (provider) {
-    const strictHits = searchDocs(query, corpus, limit, { gate: true, softGate: false });
-    if (strictHits.length === 0 && hits.length > 0) {
-      // Gate blocked everything; soft gate rescued it — off-domain query.
-      return { source: "raw", text: "", hits };
-    }
-  }
-
   if (!provider || hits.length === 0) {
     return { source: "raw", text: "", hits };
   }
 
-  // ── LM query expansion ──────────────────────────────────────────────────
-  // Translate diverse user phrasing into canonical bee command terms so BM25
-  // matches precisely even for unusual query vocabulary.
-  const expandedQuery = await expandQuery(query);
-
   // ── Multi-stage retrieval pipeline ──────────────────────────────────────
   // BM25 (sparse) + Vector (dense) → RRF fusion → Graph expansion → Reranker
-  // Fetch extra candidates (3× limit each) so fusion has material to work with.
-  const bm25Candidates = searchDocs(expandedQuery, corpus, limit * 3, { gate: true, softGate: false });
+  const bm25Candidates = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
 
   // Vector search — neural embeddings via @xenova/transformers (optional).
   let fused = bm25Candidates;
   try {
     const vdb = getVectorDb();
-    const queryEmb = await embed(expandedQuery);
+    const queryEmb = await embed(query);
     if (queryEmb) {
       const vectorCandidates = searchVector(queryEmb, vdb, corpus, limit * 3);
       fused = rrfFusion(bm25Candidates, vectorCandidates);
