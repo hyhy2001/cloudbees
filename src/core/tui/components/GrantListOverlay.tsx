@@ -10,11 +10,26 @@
  * Esc close).
  */
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 import type { FC } from "react";
 import { THEME } from "../theme";
 import { SYM, borderStyle } from "../symbols";
+import { useOnClick, getBoundingClientRect } from "@ink-tools/ink-mouse";
+
+const GrantListClickHandler: FC<{
+  listRef: React.RefObject<any>;
+  count: number;
+  onSelect: (i: number) => void;
+}> = ({ listRef, count, onSelect }) => {
+  useOnClick(listRef as any, (event) => {
+    const rect = getBoundingClientRect(listRef.current);
+    if (!rect) return;
+    const idx = event.y - rect.top - 1; // -1 for header row
+    if (idx >= 0 && idx < count) onSelect(idx);
+  });
+  return null;
+};
 
 export interface GrantItem {
   /** Display label — folder name (node side) or agent name (folder side). */
@@ -88,6 +103,8 @@ export const GrantListOverlay: FC<GrantListOverlayProps> = ({
   isActive = true,
 }) => {
   const [cursor, setCursor] = useState(0);
+  const listRef = useRef<typeof Box>(null);
+  const isTty = Boolean(process.stdout.isTTY);
   const count = items?.length ?? 0;
 
   return (
@@ -108,6 +125,13 @@ export const GrantListOverlay: FC<GrantListOverlayProps> = ({
       {subtitle ? <Text color={THEME.dim}>{subtitle}</Text> : null}
 
       <Box flexDirection="column" marginTop={1}>
+        {isTty && (
+          <GrantListClickHandler
+            listRef={listRef as any}
+            count={count}
+            onSelect={(i) => setCursor(i)}
+          />
+        )}
         {items === null ? (
           <Text color={THEME.dim}>Loading…</Text>
         ) : count === 0 ? (
@@ -115,6 +139,7 @@ export const GrantListOverlay: FC<GrantListOverlayProps> = ({
         ) : (
           <>
             <Text color={THEME.subtle}>{"   "}{itemHeader}</Text>
+            <Box ref={isTty ? listRef as any : undefined} flexDirection="column">
             {items.map((item, i) => {
               const on = i === cursor;
               const label = item.pending ? "(unassigned — pending)" : item.label;
@@ -126,6 +151,7 @@ export const GrantListOverlay: FC<GrantListOverlayProps> = ({
                 </Box>
               );
             })}
+            </Box>
           </>
         )}
       </Box>
