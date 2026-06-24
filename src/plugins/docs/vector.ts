@@ -14,7 +14,6 @@
  * Cosine similarity uses dequantized floats.
  */
 
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -68,30 +67,35 @@ export async function embed(text: string): Promise<number[] | null> {
   return fn(text);
 }
 
-let _modelDir: string | null = null;
-
 async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | null> {
   if (_embedFn === false) return null;
   if (_embedFn) return _embedFn;
   try {
-    // Extract bundled model files next to the bee binary (persistent, once).
-    if (!_modelDir) {
-      _modelDir = join(beeDir(), ".bee-models");
-      const marker = join(_modelDir, "Xenova", "all-MiniLM-L6-v2", "onnx", "model_quantized.onnx");
-      if (!existsSync(marker)) {
-        for (const [relPath, b64] of Object.entries(MODEL_FILES)) {
-          const full = join(_modelDir, relPath);
-          mkdirSync(full.slice(0, full.lastIndexOf("/")), { recursive: true });
-          writeFileSync(full, Buffer.from(b64, "base64"));
-        }
-      }
-    }
-
+    // Serve bundled model files from memory via env.fs override —
+    // zero disk writes, zero temp files, completely sealed in the binary.
     const { pipeline, env } = await import("@xenova/transformers");
-    env.cacheDir = _modelDir;
-    env.localModelPath = _modelDir;
+    env.cacheDir = join(beeDir(), ".bee-models");
+    env.localModelPath = env.cacheDir;
 
-    const extract = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", {
+    // Override file reads: intercept model files and serve from the
+    // base64 constants embedded in the binary — no disk access needed.
+    const modelRoot = "Xenova/all-MiniLM-L6-v2";
+    const origFs = (env as any).fs;
+    (env as any).fs = {
+      ...origFs,
+      readFile(path: string, encoding?: string) {
+        const idx = path.indexOf(modelRoot);
+        const rel = idx >= 0 ? path.slice(idx) : null;
+        const b64 = rel ? MODEL_FILES[rel] : null;
+        if (b64) {
+          const buf = Buffer.from(b64, "base64");
+          return encoding === "utf8" ? buf.toString() : buf;
+        }
+        return origFs?.readFile?.(path, encoding);
+      },
+    } as any;
+
+    const extract = await pipeline("feature-extraction", `Xenova/${modelRoot.split("/").pop()}`, {
       quantized: true,
     });
     _embedFn = async (t: string) => {
