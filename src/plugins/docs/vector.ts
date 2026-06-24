@@ -14,9 +14,9 @@
  * Cosine similarity uses dequantized floats.
  */
 
-import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import type { DocItem } from "./corpus";
 import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
 import { MODEL_FILES } from "../../generated/embedding-model";
@@ -60,25 +60,27 @@ export async function embed(text: string): Promise<number[] | null> {
   return fn(text);
 }
 
-let _tmpDir: string | null = null;
+let _modelDir: string | null = null;
 
 async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | null> {
   if (_embedFn === false) return null;
   if (_embedFn) return _embedFn;
   try {
-    // Extract bundled model files to a temp dir for @xenova to load.
-    if (!_tmpDir) {
-      _tmpDir = mkdtempSync(join(tmpdir(), "bee-model-"));
-      for (const [relPath, b64] of Object.entries(MODEL_FILES)) {
-        const full = join(_tmpDir, relPath);
-        mkdirSync(full.slice(0, full.lastIndexOf("/")), { recursive: true });
-        writeFileSync(full, Buffer.from(b64, "base64"));
+    // Extract bundled model files to ~/.bee/models/ (persistent, extracted once).
+    if (!_modelDir) {
+      _modelDir = join(homedir(), ".bee", "models");
+      if (!existsSync(join(_modelDir, "Xenova", "all-MiniLM-L6-v2", "onnx", "model_quantized.onnx"))) {
+        for (const [relPath, b64] of Object.entries(MODEL_FILES)) {
+          const full = join(_modelDir, relPath);
+          mkdirSync(full.slice(0, full.lastIndexOf("/")), { recursive: true });
+          writeFileSync(full, Buffer.from(b64, "base64"));
+        }
       }
     }
 
     const { pipeline, env } = await import("@xenova/transformers");
-    env.cacheDir = _tmpDir;
-    env.localModelPath = _tmpDir;
+    env.cacheDir = _modelDir;
+    env.localModelPath = _modelDir;
 
     const extract = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", {
       quantized: true,
