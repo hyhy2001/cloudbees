@@ -546,9 +546,6 @@ Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful 
 
 ```
 User query
-  → MiniLM Query Expansion (local, free)
-     Cosine similarity with 18 canonical command labels.
-     No API call — uses same bundled MiniLM model.
   → BM25 (FTS5, 84 items, top-15)
      Synonym expansion (100+ domain synonyms), relevance gate.
   → Neural Vector Search (MiniLM, 384-dim, top-15)
@@ -559,28 +556,14 @@ User query
      Same-group and same-resource commands.
   → MiniLM Reranker (local, free)
      Cosine similarity between query and each hit's corpus vector.
-  → Top-5 → Prompt → LM Generator (API)
+  → Top-5 → Prompt → LM Generator (API, 1 call)
 ```
 
-**1 API call per query** (generator only). Everything else — expansion, BM25, vector, graph, reranker — runs locally with the bundled MiniLM model.
+**1 API call per query** (generator only). Retrieval, vector search, graph, and reranker are all local via the bundled MiniLM model.
 
 ### Retrieval components
 
-**MiniLM Query Expansion** (`expand.ts`) — classifies the query into 18 canonical command labels via cosine similarity between MiniLM query embedding and pre-computed label embeddings. Expands the BM25 query with related terms so diverse phrasings still match the right command.
-
-How it works:
-
-1. Query embedded via MiniLM (same model as vector search, already in memory)
-2. Cosine similarity with 18 pre-computed label embeddings (computed lazily on first call)
-3. If top-1 score > 0.15: its expansion terms are appended to the BM25 query
-4. If top-2 score is within 85% of top-1: its terms are also appended (for ambiguous queries)
-5. Terms already present in the original query are skipped (avoid redundancy)
-
-Example: "nuke the pipeline" → cosine similarity peaks at label "delete job" (score ~0.2) → appends "delete remove erase nuke" → BM25 now matches `job.delete` precisely.
-
-**18 canonical labels**: create job, run job, stop job, delete job, list jobs, update job, job log, create node, delete node, node online, node offline, create cred, delete cred, auth login, auth use, controller select, track resource.
-
-No API call, no extra model, zero cost per query. Falls back gracefully (returns original query unchanged) on any error or when MiniLM is unavailable.
+**BM25 / FTS5** (`corpus.ts`) — SQLite FTS5 search with synonym expansion (100+ domain synonyms: "kick"→run, "retire"→delete, etc.), column weights (title×10, description×5, body×1), exact command-path promotion, and a word-start relevance gate (≥60% coverage). The synonym map handles diverse user vocabulary without needing an external expansion model.
 
 
 ### Adding help facts
@@ -633,7 +616,7 @@ bun run scripts/benchmark.ts --model <name>               # Model name (e.g. oc/
 
 Results are printed to the console and written to `benchmark-report.md` (gitignored).
 
-**Latest results** (qwen2.5-coder-3b-q4_k_m, 73 LLM queries judged, full pipeline: expansion + BM25 + vector + graph + reranker):
+**Latest results** (oc/deepseek-v4-flash-free, 73 LLM queries judged, 1 API call, everything else local):
 
 | Metric | Score |
 |---|---|---|
@@ -645,29 +628,28 @@ Results are printed to the console and written to `benchmark-report.md` (gitigno
 | Reranker | MiniLM bi-encoder (local, free, bundled) |
 | Vector search | all-MiniLM-L6-v2 384-dim (local, bundled) |
 | Graph expansion | CRUD neighbors auto-derived from command tree |
-| Query expansion | MiniLM zero-shot (local, free, bundled) |
-| LM generation API call | 1 (Databricks, ~256 tokens) |
+| Query expansion | Synonym map only (corpus.ts) — no external expansion |
+| API calls | **1** (generator only) |
 | LLM correct command | **94.5%** (69/73) |
-| LLM hallucination rate | **2.7%** (2/73) |
-| LLM has required flag | **84.6%** (11/13) |
-| LLM wrong refusal | **1.4%** (1/73) |
+| LLM hallucination rate | **1.4%** (1/73) |
+| LLM has required flag | **92.3%** (12/13) |
+| LLM wrong refusal | **0.0%** (0/73) |
 
 LLM by query type:
 
 | Type | N | Correct | No-Hall. | Flag OK |
 |------|---|---|---|--------|
-| natural | 28 | 92.9% | 100.0% | 100.0% |
+| natural | 28 | 96.4% | 100.0% | 100.0% |
 | concept | 23 | 91.3% | 95.7% | — |
 | troubleshoot | 9 | 100.0% | 100.0% | — |
-| flag | 12 | 91.7% | 100.0% | 83.3% |
+| flag | 12 | 91.7% | 100.0% | 91.7% |
 
 Fixes applied: scoring bug (multi-dot expectedId in `scoreAnswer` → replaced `replace(".", " ")` with `replace(/\./g, " ")`), `stripInventedCommands` now strips `bee help <topic>` (allows bare `bee --help`), system prompt strengthened with rank-1 preference, explicit `bee help` ban, action-verb matching rules (`add`→`update`, `login to profile`→`auth login --profile`), concept.login help fact mentions "bee is a single binary — no installation needed". Remaining failures are edge cases: ambiguous "remove an agent" vs `node.delete`/`job.remove-agent`, and scorer limitations (`bee --ui` not matching command pattern, `--profile` flag not mentioned by name in an otherwise correct answer).
 
-Pipeline additions:
-- **MiniLM Query Expansion**: zero-shot label classification via cosine similarity — no API call, free
-- **Neural Vector Search**: all-MiniLM-L6-v2 384-dim, model bundled in binary, zero disk
-- **MiniLM Reranker**: uses same model as vector search — free, local, no API call
-- **Graph Expansion**: CRUD neighbors (e.g. "remove agent" now also sees `node.delete`)
+Pipeline refinements:
+- **API calls reduced**: 3 → **1** (expansion and reranker now local via MiniLM)
+- **Reasoning model support**: `content` + `reasoning_content` field parsing for DeepSeek/QwQ
+- **Graph Expansion**: CRUD neighbors auto-derived from command tree
 - BM25 retrieval: Recall@1 **+7.3%**, MRR **+0.054** (promotion layer for flag/cross-plugin/expert routing, synonym map expansion, corpus caching)
 - LM latency: streaming output via SSE, timeout increased 15s → 60s
 - Output hardening: XML-formatted context, stricter flag anti-hallucination in system prompt, `stripInventedCommands` post-processor (backtick + plain-text), off-domain guard (skip LM if gate rejects query)
@@ -850,11 +832,11 @@ This is a developer-tool threat model: the OS file permission on `.bee_secret` i
 | `BEE_DIR` | Override the root directory used to locate the DB |
 | `BEE_DEBUG_TRACEBACK` | Set to `1` to enable debug logging and full stack traces (same as `--debug`) |
 | `BEE_ASCII` | Set to `1` to force ASCII symbols/borders in the TUI instead of Unicode |
-| `CB_DATABRICK_URL` | LM endpoint base URL for `bee ask` |
-| `CB_API_KEY` | Static Bearer token / PAT for the LM endpoint (Option A auth) |
-| `CB_CLIENT_ID` | OAuth client ID for Databricks M2M auth (Option B auth) |
-| `CB_CLIENT_SECRET` | OAuth client secret for Databricks M2M auth (Option B auth) |
-| `CB_LM_MODEL` | Model identifier passed to the LM endpoint |
+| `CB_DATABRICK_URL` | LM endpoint base URL (e.g. `http://127.0.0.1:20128/v1`) |
+| `CB_API_KEY` | Static Bearer token / PAT |
+| `CB_CLIENT_ID` | OAuth client ID for Databricks M2M |
+| `CB_CLIENT_SECRET` | OAuth client secret for Databricks M2M |
+| `CB_LM_MODEL` | Model identifier (e.g. `oc/deepseek-v4-flash-free`) |
 
 ## Project Structure
 
