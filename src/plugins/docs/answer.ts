@@ -150,16 +150,10 @@ export interface AnswerResult {
 // --- Orchestration -----------------------------------------------------------
 
 let _graph: CommandGraph | null = null;
-let _vectorPromise: Promise<VectorDb> | null = null;
 
 function getGraph(corpus: DocItem[]): CommandGraph {
   if (!_graph) _graph = buildGraphFromCorpus(corpus);
   return _graph;
-}
-
-function getVectorDb(corpus: DocItem[]): Promise<VectorDb> {
-  if (!_vectorPromise) _vectorPromise = buildVectorDb(corpus);
-  return _vectorPromise;
 }
 
 /**
@@ -205,11 +199,11 @@ export async function answer(
   // Fetch extra candidates (3× limit each) so fusion has material to work with.
   const bm25Candidates = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
 
-  // Vector search — build DB lazily (embeds all corpus items once).
+  // Vector search — bag-of-words hash embeddings, built once at startup.
   let fused = bm25Candidates;
   try {
-    const vdb = await getVectorDb(corpus);
-    const queryEmb = await embed(query);
+    const vdb = buildVectorDb(corpus);
+    const queryEmb = embed(query);
     const vectorCandidates = searchVector(queryEmb, vdb, corpus, limit * 3);
     fused = rrfFusion(bm25Candidates, vectorCandidates);
   } catch {
