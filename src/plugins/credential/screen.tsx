@@ -616,7 +616,9 @@ const CredentialsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
                 <Text color={THEME.normal}>{current.scope || "—"}</Text>
                 <Text color={THEME.subtle}>{"   "}</Text>
                 <Text color={THEME.dim}>store </Text>
-                <Text color={store === "system" ? THEME.blue : THEME.yellow}>{store}</Text>
+                <ClickableToggle onClick={() => setStore((s) => (s === "system" ? "user" : "system"))}>
+                  <Text color={store === "system" ? THEME.blue : THEME.yellow}>{store}</Text>
+                </ClickableToggle>
               </Box>
               {current.displayName && current.displayName !== current.id && (
                 <Text color={THEME.dim} wrap="truncate-end">{current.displayName}</Text>

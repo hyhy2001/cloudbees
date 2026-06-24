@@ -323,7 +323,9 @@ const ControllersScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           {current && (
             <Box flexDirection="column" borderStyle={borderStyle()} paddingX={1} marginTop={1}>
               <Box>
-                <Text bold color={THEME.normal}>{current.name}</Text>
+                <ClickableToggle onClick={() => doSelectController(current)}>
+                  <Text bold color={THEME.normal}>{current.name}</Text>
+                </ClickableToggle>
                 <Text color={THEME.dim}>{"  "}</Text>
                 {current.online
                   ? <Text color={THEME.success}>{SYM.online} online</Text>
