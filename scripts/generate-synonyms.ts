@@ -75,7 +75,9 @@ if (CLI_ID && CLI_SEC && !BEARER) {
 const headers: Record<string, string> = { "content-type": "application/json" };
 if (BEARER) headers["authorization"] = `Bearer ${BEARER}`;
 
-// Quick connectivity: POST tiny chat (max_tokens=1) — /v1/models may not exist on AI Gateways.
+// Quick connectivity: check endpoint is reachable.
+// We don't exit on HTTP errors (400/401/404) — the per-command loop handles them.
+// Only hard network failures (unreachable host, timeout) cause a skip.
 try {
   const health = await fetch(`${API_BASE}/v1/chat/completions`, {
     method: "POST",
@@ -83,9 +85,8 @@ try {
     body: JSON.stringify({ model: LM_MODEL, messages: [{ role: "user", content: "hi" }], max_tokens: 1, temperature: 0 }),
     signal: AbortSignal.timeout(10000),
   });
-  if (health.status === 404) {
-    console.error(`LM endpoint at ${API_BASE} returned 404 — endpoint may not support chat (synonym generation skipped).`);
-    process.exit(1);
+  if (!health.ok && health.status !== 404) {
+    process.stderr.write(`  LM endpoint responded ${health.status} — continuing (per-command errors handled individually)\n`);
   }
 } catch {
   console.error(`LM endpoint at ${API_BASE} is unreachable — skipping synonym generation.`);
