@@ -76,8 +76,11 @@ export function registerDocsCommands(ctx: PluginContext): void {
         if (result.source === "lm") {
           if (result.stream && result.streamOutput) {
             // Stream output char by char to stdout.
-            const fullText = await result.streamOutput((chunk) => process.stdout.write(chunk));
+            const fullText = await result.streamOutput((chunk) => {
+              process.stdout.write(chunk);
+            });
             process.stdout.write("\n");
+            process.stdout.write("");
             return;
           }
           printMessage(result.text);

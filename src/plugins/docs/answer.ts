@@ -235,7 +235,9 @@ export async function answer(
           process.stderr.write(`[bee ask] LM stream error (${provider.name}): ${msg}\n`);
           write("\n");
         }
-        const full = chunks.join("");
+        // When streaming yielded nothing, fall back to non-streaming
+        // (e.g., endpoint returned plain JSON instead of SSE).
+        const full = chunks.length > 0 ? chunks.join("") : await provider.generate(prompt);
         return stripInventedCommands(full, corpus);
       },
     };
