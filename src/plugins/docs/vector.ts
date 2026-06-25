@@ -27,7 +27,7 @@ function beeDir(): string {
 }
 import type { DocItem } from "./corpus";
 import { EMBEDDING_MODEL, EMBEDDING_URL, LM_API_KEY, LM_URL, EMBEDDING_PATH, LM_CLIENT_ID, LM_CLIENT_SECRET } from "./config";
-import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
+import { DIM, SCALE, VEC_IDS, VEC_B64, EMB_MODEL } from "../../generated/embeddings";
 import { MODEL_FILES } from "../../generated/embedding-model";
 
 export interface VectorDb {
@@ -62,14 +62,44 @@ export function clearVectorDb(): void { _db = null; _embedFn = null; }
  * Embed a query string in the same neural space as the corpus.
  * Returns null when @xenova/transformers is unavailable (caller should
  * skip vector search and fall back to BM25-only).
+ *
+ * Metadata guard: the corpus vectors were generated with EMB_MODEL at DIM
+ * dimensions. If the configured embedding model differs, or the model returns
+ * a vector of a different dimension, the query and corpus vectors live in
+ * incompatible spaces — cosine similarity would be meaningless (and a dim
+ * mismatch makes it silently wrong). In either case, skip vector search and
+ * fall back to BM25 instead of poisoning the ranking. Re-run
+ * generate-embeddings.ts to rebuild the corpus for a new model.
  */
 export async function embed(text: string): Promise<number[] | null> {
+  if (EMBEDDING_MODEL !== EMB_MODEL) {
+    if (!_warnedModel) {
+      process.stderr.write(
+        `[bee ask] embedding model "${EMBEDDING_MODEL}" != baked "${EMB_MODEL}" — vector search disabled (BM25 only). Re-run generate-embeddings.ts.\n`,
+      );
+      _warnedModel = true;
+    }
+    return null;
+  }
   const fn = await getEmbedFn();
   if (!fn) {
     return null;
   }
-  return fn(text);
+  const vec = await fn(text);
+  if (vec.length !== DIM) {
+    if (!_warnedDim) {
+      process.stderr.write(
+        `[bee ask] embedding dim ${vec.length} != baked ${DIM} — vector search disabled (BM25 only).\n`,
+      );
+      _warnedDim = true;
+    }
+    return null;
+  }
+  return vec;
 }
+
+let _warnedModel = false;
+let _warnedDim = false;
 
 async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | null> {
   if (_embedFn === false) return null;
