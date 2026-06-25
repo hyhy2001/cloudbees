@@ -11,7 +11,7 @@
  * Subsequent runs use the cached model.
  */
 
-import { writeFileSync } from "node:fs";
+import { writeFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Command } from "commander";
 
@@ -74,7 +74,12 @@ if (API_URL) {
   const first = await embed(corpus[0]!.title);
   DIM = first.length;
 } else {
-  const { pipeline } = await import("@xenova/transformers");
+  const { pipeline, env } = await import("@xenova/transformers");
+  const repoModels = join(import.meta.dir, "..", "models");
+  if (statSync(repoModels, { throwIfNoEntry: false })) {
+    env.cacheDir = repoModels;
+    env.localModelPath = repoModels;
+  }
   console.log("Loading embedding model (first run downloads ~80 MB)…");
   const extract = await pipeline("feature-extraction", MODEL_NAME);
   embed = async (t: string) => {

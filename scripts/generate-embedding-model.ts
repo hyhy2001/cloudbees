@@ -16,7 +16,10 @@ const MODEL_NAME = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process
 const parts = MODEL_NAME.split("/");
 const MODEL_DIR = join(...parts);
 
-const CACHE = join(import.meta.dir, "..", "node_modules", "@xenova", "transformers", ".cache", ...parts);
+// Check repo models/ first, then fall back to @xenova/transformers cache
+const REPO_CACHE = join(import.meta.dir, "..", "models", ...parts);
+const NPM_CACHE = join(import.meta.dir, "..", "node_modules", "@xenova", "transformers", ".cache", ...parts);
+const CACHE = statSync(REPO_CACHE, { throwIfNoEntry: false }) ? REPO_CACHE : NPM_CACHE;
 const MODELS = join(import.meta.dir, "..", "node_modules", "@xenova", "transformers", "models");
 
 const files: { path: string; data: string }[] = [];

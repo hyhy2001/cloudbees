@@ -15,6 +15,7 @@
  */
 
 import { join, dirname } from "node:path";
+import { statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // Directory of the running binary/script — model files go right next to it.
@@ -98,7 +99,10 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
 
     // Local model (@xenova/transformers, bundled in binary)
     const { pipeline, env } = await import("@xenova/transformers");
-    env.cacheDir = join(beeDir(), ".bee-models");
+    const beeRoot = beeDir();
+    // Check repo models/ first (dev mode), fall back to .bee-models
+    const repoModels = join(beeRoot, "models", EMBEDDING_MODEL);
+    env.cacheDir = statSync(repoModels, { throwIfNoEntry: false }) ? beeRoot : join(beeRoot, ".bee-models");
     env.localModelPath = env.cacheDir;
 
     // Override file reads: intercept model files and serve from the
