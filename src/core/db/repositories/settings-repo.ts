@@ -3,7 +3,7 @@
  * Behavioural 1:1 port of legacy/cb/db/repositories/settings_repo.py
  */
 
-import { getConnection } from "../connection";
+import { getConnection, initDb } from "../connection";
 
 interface SettingsRow {
   value: string;
@@ -11,6 +11,7 @@ interface SettingsRow {
 
 /**
  * Return the value for a settings key, or null if not found.
+ * Auto-initialises the DB if the settings table is missing.
  * Mirrors Python get_setting().
  */
 export function getSetting(key: string, dbPath?: string): string | null {
@@ -20,6 +21,12 @@ export function getSetting(key: string, dbPath?: string): string | null {
       "SELECT value FROM settings WHERE key = ?"
     ).get(key);
     return row !== null ? row.value : null;
+  } catch (e) {
+    if (String(e).includes("no such table")) {
+      initDb(dbPath);
+      return getSetting(key, dbPath);
+    }
+    throw e;
   } finally {
     db.close();
   }
