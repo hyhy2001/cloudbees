@@ -142,6 +142,17 @@ for (const item of corpus) {
 
     try {
       const r = await fetch(CHAT_ENDPOINT, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: LM_MODEL,
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0,
+          max_tokens: 200,
+          reasoning_effort: "none",
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
       if (!r.ok) { apiErrors++; continue; }
       const j = (await r.json()) as {
         choices: Array<{
