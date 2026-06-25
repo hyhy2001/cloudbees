@@ -44,8 +44,8 @@ describe("formatDocItem — command type", () => {
 
   it("includes flags as <flag> elements", () => {
     const out = formatDocItem(JOB_RUN);
-    expect(out).toContain("<flag>--wait</flag>");
-    expect(out).toContain("<flag>--timeout</flag>");
+    expect(out).toContain('<flag name="--wait">');
+    expect(out).toContain('<flag name="--timeout">');
   });
 
   it("handles item with empty body", () => {
@@ -58,7 +58,7 @@ describe("formatDocItem — command type", () => {
     const noDesc: DocItem = { ...JOB_RUN, description: "" };
     const out = formatDocItem(noDesc);
     expect(out).toContain('<command id="bee job run &lt;name&gt;">');
-    expect(out).toContain("<flag>--wait</flag>");
+    expect(out).toContain('<flag name="--wait">');
   });
 });
 
@@ -102,7 +102,7 @@ describe("buildPrompt", () => {
   it("contains formatted context", () => {
     const p = buildPrompt("how to run a job", [JOB_RUN]);
     expect(p).toContain("<command id=\"bee job run &lt;name&gt;\">");
-    expect(p).toContain("<flag>--wait</flag>");
+    expect(p).toContain('<flag name="--wait">');
   });
 
   it("ends with Answer:", () => {
@@ -234,6 +234,12 @@ describe("stripInventedCommands", () => {
   it("leaves bee ask / bare bee help alone (not real corpus commands but valid)", () => {
     const t = "See `bee --help` or `bee ask`.";
     expect(stripInventedCommands(t, corpus)).toBe(t);
+  });
+
+  it("keeps commander built-in flags --help / --version", () => {
+    const t = "Run `bee job run --help` or check `bee --version`.";
+    expect(stripInventedCommands(t, corpus)).toContain("--help");
+    expect(stripInventedCommands(t, corpus)).toContain("--version");
   });
 
   it("strips bee help <topic> (not a real command)", () => {
