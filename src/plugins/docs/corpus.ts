@@ -23,6 +23,7 @@ import type { Command } from "commander";
 import { buildDocChunks } from "./docs-index";
 import { HELP_FACTS } from "../../generated/help-index";
 import { GENERATED_SYNONYMS } from "../../generated/synonyms";
+import { GENERATED_FLAG_SYNONYMS } from "../../generated/synonyms";
 
 // ─── DocItem ─────────────────────────────────────────────────────────────────
 
@@ -701,6 +702,13 @@ export function searchDocs(
       label: { flags: ["--labels"] },
       "remote dir": { flags: ["--remote-dir"] },
     };
+    // Merge in LLM-generated flag synonyms (build-time). Hand-maintained wins.
+    for (const [phrase, spec] of Object.entries(GENERATED_FLAG_SYNONYMS)) {
+      const s = spec as { flags: string[]; example: string };
+      if (!(phrase in flagPhrases)) {
+        flagPhrases[phrase] = { flags: s.flags };
+      }
+    }
 
     // Generic "X option" and "X option Y" patterns: find the flag word.
     // Group-aware: prefer a command whose id's group matches the query context.
