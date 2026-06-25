@@ -21,8 +21,10 @@ interface LmConfig {
   model?: string;
   clientId?: string;
   clientSecret?: string;
+  chatPath?: string;
   embeddingModel?: string;
   embeddingUrl?: string;
+  embeddingPath?: string;
   // Legacy keys from bee.lm.json (env-var-named)
   CB_DATABRICK_URL?: string;
   CB_API_KEY?: string;
@@ -31,6 +33,8 @@ interface LmConfig {
   CB_CLIENT_SECRET?: string;
   CB_EMBEDDING_MODEL?: string;
   CB_EMBEDDING_URL?: string;
+  CB_EMBEDDING_PATH?: string;
+  CB_CHAT_PATH?: string;
 }
 const lmFile = (await Bun.file("bee.lm.json")
   .json()
@@ -42,7 +46,9 @@ const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env.CB_LM_MODEL ?
 const LM_CLIENT_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
 const LM_CLIENT_SECRET = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";
 const EMBEDDING_MODEL = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2";
-const EMBEDDING_URL = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ?? "";
+const EMBEDDING_PATH = lmFile.embeddingPath ?? lmFile.CB_EMBEDDING_PATH ?? process.env.CB_EMBEDDING_PATH ?? "/v1/embeddings";
+const EMBEDDING_URL = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ??
+  (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && LM_URL ? `${LM_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}` : "");
 if (EMBEDDING_URL) process.stderr.write(`  Embedding: ${EMBEDDING_MODEL} @ ${EMBEDDING_URL}\n`);
 
 await Bun.$`bun run scripts/generate-help-index.ts`;
@@ -110,6 +116,8 @@ const result = await Bun.build({
     BEE_LM_CLIENT_SECRET: JSON.stringify(LM_CLIENT_SECRET),
     BEE_EMBEDDING_MODEL: JSON.stringify(EMBEDDING_MODEL),
     BEE_EMBEDDING_URL: JSON.stringify(EMBEDDING_URL),
+    BEE_EMBEDDING_PATH: JSON.stringify(EMBEDDING_PATH),
+    BEE_CHAT_PATH: JSON.stringify(lmFile.chatPath ?? lmFile.CB_CHAT_PATH ?? process.env.CB_CHAT_PATH ?? "/v1/chat/completions"),
   },
   jsx: {
     runtime: "automatic",
