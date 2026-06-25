@@ -92,15 +92,7 @@ function detectBeeRoot(): string | null {
 
   // 2) Standalone binary → directory containing the binary
   if (isCompiledBinary()) {
-    const binDir = dirname(process.execPath);
-    // If the binary lives under a "dist/" dir and the parent has package.json,
-    // we're in the project build tree — use the project root so the DB survives
-    // `make clean` (which wipes dist/).
-    if (binDir.endsWith("/dist") || binDir.endsWith("\\dist")) {
-      const parent = dirname(binDir);
-      if (existsSync(join(parent, "package.json"))) return parent;
-    }
-    return binDir;
+    return dirname(process.execPath);
   }
 
   // 3) Running from source: walk up for package.json + src/
