@@ -28,3 +28,4 @@ rag-eval-report.md
 # session secret (never commit)
 src/generated/embedding-model.ts
 *.tsbuildinfo
+bee.csh
