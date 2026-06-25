@@ -102,16 +102,23 @@ const corpus = buildCorpus(program);
 
 // ---- Generate synonyms for each command -------------------------------------
 
-const promptTemplate = [
-  "You are a CLI synonym generator.",
-  "For the command below, list 8-15 alternative single words (verbs or short nouns) a user might use instead.",
-  "Command action: ${action}",
-  "Command description: ${desc}",
-  "",
-  "Return ONLY comma-separated lowercase words, no punctuation or explanation:",
-].join("\n");
-
-const synonyms: Record<string, string> = {};
+const prompts = [
+  [
+    "You are a CLI synonym generator.",
+    "For the command below, list 10-15 alternative single words (verbs or short nouns) a user might use instead.",
+    "Command action: ${action}",
+    "Command description: ${desc}",
+    "",
+    "Return ONLY comma-separated lowercase words, no punctuation or explanation:",
+  ].join("\n"),
+  [
+    "List 10-15 MORE single-word alternatives for this CLI command — abbreviations, informal terms, or synonyms NOT in your previous answer.",
+    "Command action: ${action}",
+    "Command description: ${desc}",
+    "",
+    "Return ONLY comma-separated lowercase words:",
+  ].join("\n"),
+];
 
 const synonyms: Record<string, string> = {};
 
@@ -126,53 +133,55 @@ for (const item of corpus) {
   const action = item.id.split(".")[1];
   if (!action) { skipped++; continue; }
 
-  const prompt = promptTemplate
-    .replace("${action}", action)
-    .replace("${desc}", desc || "(no description)");
+  for (const template of prompts) {
+    const prompt = template
+      .replace("${action}", action)
+      .replace("${desc}", desc || "(no description)");
 
-  try {
-    const r = await fetch(`${API_BASE}/v1/chat/completions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: LM_MODEL,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0,
-        max_tokens: 200,
-        reasoning_effort: "none",
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!r.ok) { apiErrors++; continue; }
-    const j = (await r.json()) as {
-      choices: Array<{
-        message: { content?: string; reasoning_content?: string };
-      }>;
-    };
-    const msg = j.choices?.[0]?.message;
-    const text = (msg?.content ?? msg?.reasoning_content ?? "").trim();
+    try {
+      const r = await fetch(`${API_BASE}/v1/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: LM_MODEL,
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0,
+          max_tokens: 200,
+          reasoning_effort: "none",
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!r.ok) { apiErrors++; continue; }
+      const j = (await r.json()) as {
+        choices: Array<{
+          message: { content?: string; reasoning_content?: string };
+        }>;
+      };
+      const msg = j.choices?.[0]?.message;
+      const text = (msg?.content ?? msg?.reasoning_content ?? "").trim();
 
-    const words = text
-      .split(/[,|\n]+/)
-      .map((w) =>
-        w
-          .replace(/^[-*]\s*/, "")
-          .trim()
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, " ")
-          .trim(),
-      )
-      .filter((w) => w.length > 1 && !/^(the|and|or|for|to|in|of|by)$/.test(w));
+      const words = text
+        .split(/[,|\n]+/)
+        .map((w) =>
+          w
+            .replace(/^[-*]\s*/, "")
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .trim(),
+        )
+        .filter((w) => w.length > 1 && !/^(the|and|or|for|to|in|of|by)$/.test(w));
 
-    for (const w of words) {
-      const cleaned = w.replace(/\s+/g, " ").trim();
-      if (cleaned.length > 1 && !synonyms[cleaned]) synonyms[cleaned] = action;
+      for (const w of words) {
+        const cleaned = w.replace(/\s+/g, " ").trim();
+        if (cleaned.length > 1 && !synonyms[cleaned]) synonyms[cleaned] = action;
+      }
+    } catch {
+      apiErrors++;
     }
-    processed++;
-    if (processed % 10 === 0) process.stderr.write(`  ${processed}/${corpus.filter((c) => c.type === "command").length} commands\n`);
-  } catch {
-    apiErrors++;
   }
+  processed++;
+  if (processed % 10 === 0) process.stderr.write(`  ${processed}/${corpus.filter((c) => c.type === "command").length} commands\n`);
 }
 
 // ---- Filter generated synonyms ----------------------------------------------
