@@ -34,39 +34,37 @@ import { getVectorDb, searchVector, rrfFusion, embed } from "./vector";
  */
 export function stripInventedCommands(text: string, corpus: DocItem[]): string {
   const valid = new Set<string>();
+  const validFlags = new Set<string>();
   for (const item of corpus) {
     if (item.type !== "command") continue;
     valid.add(item.id);
     const dot = item.id.indexOf(".");
     if (dot > 0) valid.add(item.id.slice(0, dot));
+    const body = item.body || "";
+    const flagMatch = body.matchAll(/--[\w-]+/g);
+    for (const m of flagMatch) validFlags.add(m[0]);
   }
-  // Always allow ask/help even without commands in corpus.
   valid.add("ask");
   valid.add("help");
   if (valid.size === 0) return text;
 
   const SENT = "";
 
-  /** Check if `group` (and optional `sub`) is a valid command path. */
   function isValidBeeCmd(group: string, sub?: string): boolean {
     const g = group.toLowerCase();
     const s = sub?.toLowerCase();
     if (g === "ask") return true;
-    if (g === "help") return !s; // allow bare "bee help", strip "bee help <topic>"
+    if (g === "help") return !s;
     const id = s ? `${g}.${s}` : g;
     return valid.has(id);
   }
 
-  // Pass 1: backtick-wrapped commands
   let result = text.replace(/`([^`]*)`/g, (_full, inner: string) => {
     const m = inner.match(/^\s*bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?/i);
     if (!m) return _full;
     return isValidBeeCmd(m[1]!, m[2]) ? _full : SENT;
   });
 
-  // Pass 2: non-backtick commands. Match `bee <group> <sub?>` that appear
-  // after a sentence boundary (":", ".", newline, or at string start) and are
-  // followed by optional args. This catches "Use bee job list" patterns.
   result = result.replace(
     /(^|[.:;\n])\s*(bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?)/gi,
     (_full, boundary: string, cmd: string, group: string, sub?: string) => {
@@ -74,7 +72,12 @@ export function stripInventedCommands(text: string, corpus: DocItem[]): string {
     },
   );
 
-  if (!result.includes(SENT)) return text; // nothing invented; return original
+  // Strip hallucinated flags (e.g. --agent) that don't exist on any command.
+  result = result.replace(/(--[\w-]+)/g, (flag: string) => {
+    return validFlags.has(flag) ? flag : SENT;
+  });
+
+  if (!result.includes(SENT)) return text;
 
   return result
     .replace(/\s*,\s*/g, "")       // ", <removed>"

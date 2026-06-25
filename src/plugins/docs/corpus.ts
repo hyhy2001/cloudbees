@@ -695,6 +695,7 @@ export function searchDocs(
       "all nodes": { flags: ["--all"] },
       "restrict to agent": { flags: ["--node"] },
       "restrict job": { flags: ["--node"] },
+      "specific agent": { flags: ["--node"] },
       "specific profile": { flags: ["--profile"], prefer: "auth.login" },
       "wait for": { flags: ["--wait"] },
       timeout: { flags: ["--timeout"] },

@@ -156,6 +156,7 @@ export const SYSTEM_PROMPT = [
   "  ✗ \"Use `bee help controlled-agent`\" — `bee help <topic>` is NOT a real command.",
   "  ✗ \"`bee auth use --profile`\" — wrong. Login to a profile uses `bee auth login --profile`.",
   "  ✗ \"`bee cred list --all`\" — only suggest --all if <flag>--all</flag> exists.",
+  "  ✗ \"`bee job run --agent`\" — --agent is not a real flag. Use `--node` to restrict to an agent.",
   "  ✗ \"No info available\" when context has relevant blocks. Always use them.",
 ].join("\n");
 
