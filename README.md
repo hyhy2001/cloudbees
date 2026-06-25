@@ -543,14 +543,14 @@ Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful 
 
 ## `bee ask` — Offline Help & Natural-Language Search
 
-`bee ask` answers questions about how to use `bee` with a multi-stage RAG pipeline. Only the answer generator needs an external LM — everything else runs locally.
+`bee ask` answers questions about how to use `bee` with a multi-stage RAG pipeline. Only the answer generator needs an external LM — everything else runs locally (or optionally via an API embedding endpoint).
 
 ```
 User query
   → BM25 (FTS5, 84 items, top-15)
      Synonym expansion (100+ domain synonyms), relevance gate.
-  → Neural Vector Search (MiniLM, 384-dim, top-15)
-     Pre-computed corpus embeddings bundled in binary.
+  → Neural Vector Search (MiniLM or API, top-15)
+     Pre-computed corpus embeddings bundled in binary or via API.
   → RRF Fusion (k=60)
      Reciprocal Rank Fusion: BM25 + Vector results merged.
   → Graph Expansion (+3 CRUD neighbors)
@@ -560,7 +560,7 @@ User query
   → Top-5 → Prompt → LM Generator (API, 1 call)
 ```
 
-**1 API call per query** (generator only). Retrieval, vector search, graph, and reranker are all local via the bundled embedding model (MiniLM by default, configurable via `embedding_model` in `bee.lm.json` or `CB_EMBEDDING_MODEL` env var).
+**1 API call per query** (generator only) when using local MiniLM. Set `CB_EMBEDDING_MODEL` (e.g. `databricks-bge-large-en`) with a Databricks LM endpoint to use API embeddings — trades a second API call for higher accuracy, auto-detects output dimension, and skips the 31 MB model bundle.
 
 ### Retrieval components
 
@@ -813,12 +813,12 @@ Before compiling, `build.ts` runs code-generation scripts:
 
 1. `scripts/generate-help-index.ts` → `src/generated/help-index.ts` (help facts for `bee ask`)
 2. `scripts/generate-embeddings.ts` → `src/generated/embeddings.ts` (neural corpus vectors, 86 KB)
-3. `scripts/generate-embedding-model.ts` → `src/generated/embedding-model.ts` (model files, ~31 MB base64, gitignored — regenerated per build; model name from `bee.lm.json`/`CB_EMBEDDING_MODEL`, default `Xenova/all-MiniLM-L6-v2`)
+3. `scripts/generate-embedding-model.ts` → `src/generated/embedding-model.ts` (model files, ~31 MB base64, gitignored — regenerated per build; model name from `bee.lm.json`/`CB_EMBEDDING_MODEL`, default `Xenova/all-MiniLM-L6-v2`; skipped when `CB_EMBEDDING_MODEL` points to an API-served model)
 4. `scripts/generate-synonyms.ts` → `src/generated/synonyms.ts` (111 build-time LLM synonym entries, merged with hand-maintained map at runtime)
 
 If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. Supported auth: static Bearer token (`CB_API_KEY`) or Databricks OAuth M2M (`CB_CLIENT_ID` + `CB_CLIENT_SECRET`). The build logs which auth method was detected; it never logs the secret itself.
 
-Embedding model auto-switch: set `embedding_model` in `bee.lm.json` to any HuggingFace ONNX model (e.g. `Xenova/multilingual-e5-small`). The build scripts bundle that model's files; `bee ask` uses it for query and reranker embeddings at runtime. When the model bundle fails (no cache), a fallback `MODEL_FILES = {}` is written so compilation always succeeds — the model is downloaded from HuggingFace on first use instead.
+Embedding model: default `Xenova/all-MiniLM-L6-v2` is bundled as base64 (31 MB). Set `CB_EMBEDDING_MODEL` to any HuggingFace ONNX model name, or to a Databricks embedding model name (e.g. `databricks-bge-large-en`) while `CB_DATABRICK_URL` is set — the build will use the API endpoint `/v1/embeddings` with the same auth, skip local bundling, and generate corpus embeddings via API. At runtime, queries are embedded the same way.
 
 ## Security
 
@@ -843,7 +843,7 @@ This is a developer-tool threat model: the OS file permission on `.bee_secret` i
 | `CB_CLIENT_ID` | OAuth client ID for Databricks M2M |
 | `CB_CLIENT_SECRET` | OAuth client secret for Databricks M2M |
 | `CB_LM_MODEL` | LM model identifier (e.g. a HuggingFace model name) |
-| `CB_EMBEDDING_MODEL` | Embedding model name for vector search (default: `Xenova/all-MiniLM-L6-v2`) |
+| `CB_EMBEDDING_MODEL` | Embedding model (default: `Xenova/all-MiniLM-L6-v2` — local). Set to a Databricks model name (e.g. `databricks-bge-large-en`) to use API embeddings via `CB_DATABRICK_URL/v1/embeddings` with the same auth |
 
 ## Project Structure
 
