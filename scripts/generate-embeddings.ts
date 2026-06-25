@@ -58,16 +58,31 @@ let DIM = 384;
 if (API_URL) {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (BEARER) headers["authorization"] = `Bearer ${BEARER}`;
+  // Try the configured URL first, fallback to base URL without prefix
+  // (embedding models may not route through AI Gateway).
+  const urlCandidates = [API_URL];
+  if (PATH_PREFIX) {
+    urlCandidates.push(`${BASE_URL.replace(/\/+$/, "")}/v1/embeddings`);
+    urlCandidates.push(`${BASE_URL.replace(/\/+$/, "")}/serving-endpoints/${encodeURIComponent(MODEL_NAME)}/invocations`);
+  }
   embed = async (t: string) => {
-    const r = await fetch(API_URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ input: t.slice(0, 2048), model: MODEL_NAME }),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!r.ok) throw new Error(`Embedding API returned ${r.status}`);
-    const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };
-    return j.data?.[0]?.embedding ?? [];
+    for (const url of urlCandidates) {
+      const r = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ input: t.slice(0, 2048), model: MODEL_NAME }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (r.ok) {
+        const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };
+        return j.data?.[0]?.embedding ?? [];
+      }
+      if (r.status !== 404) {
+        throw new Error(`Embedding API returned ${r.status} at ${url}`);
+      }
+      process.stderr.write(`  Embedding API 404 at ${url} — trying next candidate\n`);
+    }
+    throw new Error(`Embedding API returned 404 for all candidates`);
   };
   console.log("Using API embedding…");
   // Detect dimension from first response

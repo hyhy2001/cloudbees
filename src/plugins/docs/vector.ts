@@ -26,7 +26,7 @@ function beeDir(): string {
   return dirname(p);
 }
 import type { DocItem } from "./corpus";
-import { EMBEDDING_MODEL, EMBEDDING_URL, LM_API_KEY } from "./config";
+import { EMBEDDING_MODEL, EMBEDDING_URL, LM_API_KEY, LM_URL } from "./config";
 import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
 import { MODEL_FILES } from "../../generated/embedding-model";
 
@@ -79,16 +79,28 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
     if (EMBEDDING_URL) {
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (LM_API_KEY) headers["authorization"] = `Bearer ${LM_API_KEY}`;
+      const urlCandidates = [EMBEDDING_URL];
+      if (!EMBEDDING_URL.endsWith("/v1/embeddings") && LM_URL) {
+        urlCandidates.push(`${LM_URL.replace(/\/+$/, "")}/v1/embeddings`);
+        urlCandidates.push(`${LM_URL.replace(/\/+$/, "")}/serving-endpoints/${encodeURIComponent(EMBEDDING_MODEL)}/invocations`);
+      }
       _embedFn = async (t: string) => {
-        const r = await fetch(EMBEDDING_URL, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ input: t.slice(0, 2048), model: EMBEDDING_MODEL }),
-          signal: AbortSignal.timeout(30000),
-        });
-        if (!r.ok) throw new Error(`Embedding API returned ${r.status}`);
-        const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };
-        return j.data?.[0]?.embedding ?? [];
+        for (const url of urlCandidates) {
+          const r = await fetch(url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ input: t.slice(0, 2048), model: EMBEDDING_MODEL }),
+            signal: AbortSignal.timeout(30000),
+          });
+          if (r.ok) {
+            const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };
+            return j.data?.[0]?.embedding ?? [];
+          }
+          if (r.status !== 404) {
+            throw new Error(`Embedding API returned ${r.status} at ${url}`);
+          }
+        }
+        throw new Error("Embedding API returned 404 for all candidates");
       };
       return _embedFn;
     }
