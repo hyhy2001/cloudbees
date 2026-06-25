@@ -36,7 +36,11 @@ function walk(dir: string) {
     }
   }
 }
-walk(CACHE);
+if (statSync(CACHE, { throwIfNoEntry: false })) {
+  walk(CACHE);
+} else {
+  process.stderr.write(`  Model cache not found: ${CACHE}\n  → install @xenova/transformers and run generate-embeddings.ts first, or set CB_EMBEDDING_MODEL to a cached model\n`);
+}
 
 // 2. @xenova's shared model registry files (needed for pipeline loading)
 function walkModels(dir: string, prefix: string) {
