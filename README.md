@@ -58,9 +58,11 @@ Bun is installed **locally into `./.bun`** (repo-contained, not system-wide). `m
 `bee` keeps all local state in a SQLite database. **The DB sits next to the binary**: when you run `dist/bee`, the database is created at `<directory containing the binary>/data/cb.db`. The `data/` directory is created lazily on first run (the first command that needs the DB), so a freshly-built binary has no `data/` until you run it.
 
 - **Binary**: `<bin dir>/data/cb.db` — wherever you copied `dist/bee`, the DB lives beside it. Move the binary, and its data does not follow unless you move `data/` too.
-- **From source** (`make dev`): the project root is used, so the DB is `./data/cb.db`. This is a *different* database from the binary's, so a login under `make dev` is not visible to `dist/bee` and vice-versa.
+- **From source** (`make dev`): the project root is used, so the DB is `./data/cb.db`. This is the *same* database as `dist/bee` when in the build tree (shares login state).
 - **Override**: set `CB_DB_PATH` to pin an exact DB file regardless of how `bee` is launched, or `BEE_DIR` to override just the root directory.
 - **Backup**: `make clean` auto-backups `dist/data/cb.db` to `backups/cb.db` before cleaning.
+
+Because the DB lives next to the binary, the directory you place `dist/bee` in must be **writable** — `data/` and the `.bee_secret` file (see [Security](#security)) are created there.
 
 Because the DB lives next to the binary, the directory you place `dist/bee` in must be **writable** — `data/` and the `.bee_secret` file (see [Security](#security)) are created there.
 
@@ -562,6 +564,8 @@ User query
 
 **1 API call per query** (generator only) when using local MiniLM. Set `CB_EMBEDDING_MODEL` (e.g. `databricks-bge-large-en`) with a Databricks LM endpoint to use API embeddings — trades a second API call for higher accuracy, auto-detects output dimension, and skips the 31 MB model bundle.
 
+Custom endpoint paths: by default chat uses `/v1/chat/completions` and embedding uses `/v1/embeddings` on `CB_DATABRICK_URL`. Override via `CB_CHAT_PATH` and `CB_EMBEDDING_PATH` (e.g. `/ai-gateway/mlflow/v1/chat/completions`).
+
 ### Retrieval components
 
 **BM25 / FTS5** (`corpus.ts`) — SQLite FTS5 search with synonym expansion (100+ hand-maintained domain synonyms + 111 build-time LLM-generated synonyms merged with priority), column weights (title×10, description×5, body×1), exact command-path promotion, and a word-start relevance gate (≥60% coverage). Generated synonyms are pruned (no self-references or multi-word entries) and guarded by a reserved-token blocklist. Hand-maintained entries always win over generated ones.
@@ -642,11 +646,14 @@ LLM by query type:
 | flag | 12 | 100.0% | 100.0% | 100.0% |
 
 Recent improvements:
-- **Synonym generation**: `scripts/generate-synonyms.ts` uses the LM at build time to produce 111 filtered synonyms (self-references, multi-word entries, and reserved tokens removed). Hand-maintained `SYNONYMS` in `corpus.ts` always win over generated ones.
+- **Synonym generation**: `scripts/generate-synonyms.ts` uses the LM at build time to produce ~200+ action synonyms and ~150+ flag synonyms with usage examples (2-pass per command). Hand-maintained `SYNONYMS` in `corpus.ts` always win over generated ones.
+- **Flag hallucination protection**: `stripInventedCommands` validates `--xxx` flags against a real flag whitelist; invented flags are removed from answers. System prompt includes negative examples (`--agent` → correct flag `--node`).
+- **Custom endpoint paths**: `CB_CHAT_PATH` and `CB_EMBEDDING_PATH` replace `CB_PATH_PREFIX` — explicitly set the full path suffix for each API (e.g. `/ai-gateway/mlflow/v1/chat/completions`). Chat and embedding can use different routing.
+- **Embedding API fallback**: when the primary embedding URL returns 404, automatically tries fallback paths (direct `/v1/embeddings`, then `/serving-endpoints/{model}/invocations`).
+- **MiniLM bundled**: `src/generated/embedding-model.ts` (31 MB) is now committed — `git clone` builds without downloading from HuggingFace. Also stored in `models/` for local regeneration.
+- **DB resilience**: `getSetting()` and `getVal()` auto-initialise the database when the `settings` table is missing. Command registration (job/node/credential) lazy-loads the active profile to avoid DB access during build.
+- **`test-endpoints.ts`**: standalone script to verify both chat and embedding endpoints work before building.
 - **System prompt**: added negative examples for `switch server`→`controller select`, `change freestyle job`→`job update freestyle`, `delete --yes`, and concept answers must show relevant commands.
-- **Corpus promotion**: intent pattern `switch (server|controller)` routes to `controller.select`.
-- **Benchmark scoring**: fixed `extractMentionedCommands` to capture `bee --ui` and filter false positives via command-group whitelist. Fixed ground truth for `auth use` (positional arg, not `--profile` flag).
-- **Query quality**: auto-generated queries cleaned from 798→377 — removed "i want to", "can i", "i need to" variants, "X option Y" artifacts, dot-containing queries, and nested concept questions ("what is how to...").
 
 Pipeline refinements:
 - **API calls reduced**: 3 → **1** (expansion and reranker now local via MiniLM)
@@ -813,10 +820,10 @@ Before compiling, `build.ts` runs code-generation scripts:
 
 1. `scripts/generate-help-index.ts` → `src/generated/help-index.ts` (help facts for `bee ask`)
 2. `scripts/generate-embeddings.ts` → `src/generated/embeddings.ts` (neural corpus vectors, 86 KB)
-3. `scripts/generate-embedding-model.ts` → `src/generated/embedding-model.ts` (model files, ~31 MB base64, gitignored — regenerated per build; model name from `bee.lm.json`/`CB_EMBEDDING_MODEL`, default `Xenova/all-MiniLM-L6-v2`; skipped when `CB_EMBEDDING_MODEL` points to an API-served model)
-4. `scripts/generate-synonyms.ts` → `src/generated/synonyms.ts` (111 build-time LLM synonym entries, merged with hand-maintained map at runtime)
+3. `scripts/generate-embedding-model.ts` → `src/generated/embedding-model.ts` (MiniLM model files, 31 MB base64, committed — no download needed; model name from `bee.lm.json`/`CB_EMBEDDING_MODEL`, default `Xenova/all-MiniLM-L6-v2`; skipped when `CB_EMBEDDING_MODEL` points to an API-served model)
+4. `scripts/generate-synonyms.ts` → `src/generated/synonyms.ts` (build-time LLM synonym entries and flag synonyms + usage examples, merged with hand-maintained map at runtime)
 
-If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. Supported auth: static Bearer token (`CB_API_KEY`) or Databricks OAuth M2M (`CB_CLIENT_ID` + `CB_CLIENT_SECRET`). The build logs which auth method was detected; it never logs the secret itself.
+If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. Chat and embedding endpoints are built from `CB_DATABRICK_URL` + `CB_CHAT_PATH` (default `/v1/chat/completions`) and `CB_EMBEDDING_PATH` (default `/v1/embeddings`) separately — both share the same auth. Supported auth: static Bearer token (`CB_API_KEY`) or Databricks OAuth M2M (`CB_CLIENT_ID` + `CB_CLIENT_SECRET`). The build logs which auth method was detected; it never logs the secret itself.
 
 Embedding model: default `Xenova/all-MiniLM-L6-v2` is bundled as base64 (31 MB). Set `CB_EMBEDDING_MODEL` to any HuggingFace ONNX model name, or to a Databricks embedding model name (e.g. `databricks-bge-large-en`) while `CB_DATABRICK_URL` is set — the build will use the API endpoint `/v1/embeddings` with the same auth, skip local bundling, and generate corpus embeddings via API. At runtime, queries are embedded the same way.
 
@@ -838,12 +845,14 @@ This is a developer-tool threat model: the OS file permission on `.bee_secret` i
 | `BEE_DIR` | Override the root directory used to locate the DB |
 | `BEE_DEBUG_TRACEBACK` | Set to `1` to enable debug logging and full stack traces (same as `--debug`) |
 | `BEE_ASCII` | Set to `1` to force ASCII symbols/borders in the TUI instead of Unicode |
-| `CB_DATABRICK_URL` | LM endpoint base URL |
+| `CB_DATABRICK_URL` | LM endpoint base URL (Databricks workspace or any OpenAI-compatible host) |
+| `CB_CHAT_PATH` | Chat endpoint path (default: `/v1/chat/completions`). Append to `CB_DATABRICK_URL` |
+| `CB_EMBEDDING_PATH` | Embedding endpoint path (default: `/v1/embeddings`). Append to `CB_DATABRICK_URL` |
 | `CB_API_KEY` | Static Bearer token / PAT |
 | `CB_CLIENT_ID` | OAuth client ID for Databricks M2M |
 | `CB_CLIENT_SECRET` | OAuth client secret for Databricks M2M |
 | `CB_LM_MODEL` | LM model identifier (e.g. a HuggingFace model name) |
-| `CB_EMBEDDING_MODEL` | Embedding model (default: `Xenova/all-MiniLM-L6-v2` — local). Set to a Databricks model name (e.g. `databricks-bge-large-en`) to use API embeddings via `CB_DATABRICK_URL/v1/embeddings` with the same auth |
+| `CB_EMBEDDING_MODEL` | Embedding model (default: `Xenova/all-MiniLM-L6-v2` — local). Set to a Databricks model name (e.g. `databricks-bge-large-en`) to use API embeddings with the same auth |
 
 ## Project Structure
 
@@ -867,8 +876,8 @@ cloudbees/
 │   ├── generated/
 │   │   ├── help-index.ts   # auto-generated help facts (committed)
 │   │   ├── embeddings.ts   # pre-computed neural corpus vectors (86 KB, committed)
-│   │   ├── embedding-model.ts # MiniLM model files (31 MB base64, gitignored, per-build)
-│   │   └── synonyms.ts     # build-time LLM synonym map (111 entries, committed)
+│   │   ├── embedding-model.ts # MiniLM model files (31 MB base64, committed — no download needed)
+│   │   └── synonyms.ts     # build-time LLM action+flag synonym map (committed)
 │   ├── core/             # Stable engine (never imports plugins/)
 │   │   ├── api/          # HTTP client, CSRF crumb, retry, typed errors
 │   │   ├── db/           # SQLite connection, schema, repositories/
