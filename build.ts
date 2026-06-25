@@ -51,26 +51,34 @@ const EMBEDDING_URL = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.
   (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && LM_URL ? `${LM_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}` : "");
 if (EMBEDDING_URL) process.stderr.write(`  Embedding: ${EMBEDDING_MODEL} @ ${EMBEDDING_URL}\n`);
 
-await Bun.$`bun run scripts/generate-help-index.ts`;
+const SKIP_CODEGEN = process.env["CB_SKIP_CODEGEN"] === "1";
+
+if (!SKIP_CODEGEN) {
+  await Bun.$`bun run scripts/generate-help-index.ts`;
+}
 
 // Generate pre-built embeddings (@xenova/transformers optional).
-try {
-  await Bun.$`bun run scripts/generate-embeddings.ts`;
-} catch {
-  console.log("  Vector embeddings: generation failed — BM25-only search at runtime.");
+if (!SKIP_CODEGEN) {
+  try {
+    await Bun.$`bun run scripts/generate-embeddings.ts`;
+  } catch {
+    console.log("  Vector embeddings: generation failed — BM25-only search at runtime.");
+  }
 }
 
 // Bundle the embedding model into the binary (so it's fully self-contained).
 // When a custom EMBEDDING_MODEL is set (non-default) with LM_URL, the model
 // is called via API — no local bundling needed.
 if (!EMBEDDING_URL) {
-  try {
-    await Bun.$`bun run scripts/generate-embedding-model.ts`;
-  } catch {
-    console.log("  Embedding model: not bundled (will download on first use if available)");
-    await Bun.write("src/generated/embedding-model.ts", `// Fallback — model not bundled at build time.
+  if (!SKIP_CODEGEN) {
+    try {
+      await Bun.$`bun run scripts/generate-embedding-model.ts`;
+    } catch {
+      console.log("  Embedding model: not bundled (will download on first use if available)");
+      await Bun.write("src/generated/embedding-model.ts", `// Fallback — model not bundled at build time.
 export const MODEL_FILES: Record<string, string> = {};
 `);
+    }
   }
 } else {
   console.log(`  Embedding model: API (${EMBEDDING_MODEL}) — skip local bundling`);
@@ -81,10 +89,12 @@ export const MODEL_FILES: Record<string, string> = {};
 
 // Generate build-time synonym map (LLM alternative verbs for commands).
 // This runs after embeddings so both neural and synonym data are available.
-try {
-  await Bun.$`bun run scripts/generate-synonyms.ts`;
-} catch {
-  console.log("  Synonyms: skipped (LM endpoint not available)");
+if (!SKIP_CODEGEN) {
+  try {
+    await Bun.$`bun run scripts/generate-synonyms.ts`;
+  } catch {
+    console.log("  Synonyms: skipped (LM endpoint not available)");
+  }
 }
 
 // ─── LM endpoint config (baked into the binary) ──────────────────────────────

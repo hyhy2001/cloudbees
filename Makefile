@@ -81,6 +81,11 @@ install: deps
 build: deps
 	@$(BUN_ENV) $(BUN) run build.ts
 
+# Quick rebuild — skip codegen (embeddings, synonyms, help-index).
+# Use when only source code changed, not corpus/config/LM.
+quick: $(BUN)
+	@CB_SKIP_CODEGEN=1 $(BUN_ENV) $(BUN) run build.ts
+
 init: build
 	@echo ""
 	@echo "  [OK] bee binary built at ./dist/bee"
