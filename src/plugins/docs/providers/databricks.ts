@@ -137,6 +137,15 @@ export class DatabricksOAuthProvider {
     }
   }
 
+  /**
+   * Public accessor for the cached OAuth bearer. Lets other call sites (e.g.
+   * embedding in vector.ts) reuse the robust token exchange + caching instead
+   * of duplicating a weaker inline copy. Throws on exchange failure.
+   */
+  async token(): Promise<string> {
+    return this.getToken();
+  }
+
   private async getToken(): Promise<string> {
     const now = Date.now();
     if (this.cache && this.cache.expiresAt > now) return this.cache.token;

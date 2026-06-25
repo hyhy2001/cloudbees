@@ -27,6 +27,7 @@ function beeDir(): string {
 }
 import type { DocItem } from "./corpus";
 import { EMBEDDING_MODEL, EMBEDDING_URL, LM_API_KEY, LM_URL, EMBEDDING_PATH, LM_CLIENT_ID, LM_CLIENT_SECRET } from "./config";
+import { DatabricksOAuthProvider, isDatabricksHost } from "./providers/databricks";
 import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
 import { MODEL_FILES } from "../../generated/embedding-model";
 
@@ -77,18 +78,27 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
   try {
     // API-based embedding (Databricks, OpenAI-compatible, etc.)
     if (EMBEDDING_URL) {
-      // Auth: OAuth (client_id + client_secret) → Bearer token, else static API_KEY
+      // Auth: static API key wins; else OAuth client-credentials. For Databricks
+      // OAuth, reuse DatabricksOAuthProvider's robust token exchange (OIDC
+      // discovery + Azure AD fallbacks + caching) rather than a weaker inline
+      // copy — otherwise embedding could silently fail on Azure-AD workspaces
+      // where chat succeeds, dropping vector search to BM25 with no error.
       let bearer = LM_API_KEY;
       if (!bearer && LM_CLIENT_ID && LM_CLIENT_SECRET && LM_URL) {
         try {
-          const r = await fetch(`${LM_URL.replace(/\/+$/, "")}/oidc/v1/token`, {
-            method: "POST",
-            headers: { "content-type": "application/x-www-form-urlencoded" },
-            body: `grant_type=client_credentials&scope=all-apis&client_id=${LM_CLIENT_ID}&client_secret=${LM_CLIENT_SECRET}`,
-            signal: AbortSignal.timeout(10000),
-          });
-          if (r.ok) bearer = ((await r.json()) as { access_token: string }).access_token;
-        } catch { /* fall through */ }
+          if (isDatabricksHost(LM_URL)) {
+            const provider = new DatabricksOAuthProvider(LM_URL, LM_CLIENT_ID, LM_CLIENT_SECRET, EMBEDDING_MODEL);
+            bearer = await provider.token();
+          } else {
+            const r = await fetch(`${LM_URL.replace(/\/+$/, "")}/oidc/v1/token`, {
+              method: "POST",
+              headers: { "content-type": "application/x-www-form-urlencoded" },
+              body: `grant_type=client_credentials&scope=all-apis&client_id=${LM_CLIENT_ID}&client_secret=${LM_CLIENT_SECRET}`,
+              signal: AbortSignal.timeout(10000),
+            });
+            if (r.ok) bearer = ((await r.json()) as { access_token: string }).access_token;
+          }
+        } catch { /* fall through — embedding skipped, BM25 still works */ }
       }
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (bearer) headers["authorization"] = `Bearer ${bearer}`;

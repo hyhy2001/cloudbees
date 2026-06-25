@@ -50,6 +50,11 @@ beforeAll(() => {
         return new Response(JSON.stringify({ choices: [{ message: { content: answer, role: "assistant" } }] }));
       }
 
+      // The AI Gateway embedding path (custom prefix).
+      if (url.pathname === "/ai-gateway/mlflow/v1/embeddings") {
+        return new Response(JSON.stringify({ data: [{ embedding: new Array(384).fill(0.01) }] }));
+      }
+
       // Legacy serving-endpoints path must NOT be hit.
       return new Response("not found", { status: 404 });
     },
@@ -114,5 +119,47 @@ describe("DatabricksOAuthProvider → AI Gateway chat path", () => {
     const chatHit = hits.find((h) => h.path === "/ai-gateway/mlflow/v1/chat/completions");
     expect(chatHit).toBeDefined();
     expect(chatHit!.auth).toBe("Bearer mock-token");
+  });
+});
+
+describe("embedding OAuth reuses the robust Databricks token exchange", () => {
+  // Run embed() in a subprocess so config reads CB_EMBEDDING_PATH at import.
+  // The mock serves only the OIDC discovery + token flow that
+  // DatabricksOAuthProvider drives. The behaviour that matters: embed() returns
+  // a real vector (OAuth succeeded) and the embedding call carries the bearer
+  // the provider obtained — i.e. embedding now goes through the same token path
+  // as chat, not a divergent inline copy.
+  test("embed() obtains an OAuth bearer and calls the AI Gateway embeddings path", async () => {
+    hits.length = 0;
+    const script = `
+      const { embed } = await import("${import.meta.dir}/../src/plugins/docs/vector.ts");
+      const v = await embed("cancel a running build");
+      process.stdout.write(v ? "len:" + v.length : "null");
+    `;
+    const proc = Bun.spawn(["bun", "-e", script], {
+      stdout: "pipe",
+      stderr: "pipe",
+      env: {
+        ...process.env,
+        CB_DATABRICK_URL: mockUrl,
+        CB_EMBEDDING_PATH: "/ai-gateway/mlflow/v1/embeddings",
+        CB_EMBEDDING_MODEL: "databricks-bge",
+        CB_CLIENT_ID: "id",
+        CB_CLIENT_SECRET: "secret",
+      },
+    });
+    const out = await new Response(proc.stdout).text();
+    const err = await new Response(proc.stderr).text();
+    expect(await proc.exited, err).toBe(0);
+
+    // Embedding returned a 384-dim vector → OAuth + call succeeded (not null).
+    expect(out).toBe("len:384");
+    // The embedding call carried the OAuth bearer obtained via token exchange.
+    const embHit = hits.find((h) => h.path === "/ai-gateway/mlflow/v1/embeddings");
+    expect(embHit).toBeDefined();
+    expect(embHit!.auth).toBe("Bearer mock-token");
+    // A token was exchanged (the OIDC token endpoint was hit), proving the
+    // OAuth path ran rather than an unauthenticated call.
+    expect(hits.some((h) => h.path === "/oidc/v1/token")).toBe(true);
   });
 });
