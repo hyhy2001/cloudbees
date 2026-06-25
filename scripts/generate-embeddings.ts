@@ -17,13 +17,30 @@ import { Command } from "commander";
 
 const lmFile = (await Bun.file("bee.lm.json").json().catch(() => ({}))) as Record<string, string>;
 const MODEL_NAME = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2";
-const LM_URL = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRICK_URL ?? "";
+const BASE_URL = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRICK_URL ?? "";
 const API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
-const EXPLICIT_URL = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ?? "";
-const API_URL = EXPLICIT_URL ||
-  (MODEL_NAME !== "Xenova/all-MiniLM-L6-v2" && LM_URL
-    ? `${LM_URL.replace(/\/+$/, "")}/v1/embeddings`
+const CLI_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
+const CLI_SEC = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";
+const PATH_PREFIX = lmFile.pathPrefix ?? lmFile.CB_PATH_PREFIX ?? process.env.CB_PATH_PREFIX ?? "";
+const EMBEDDING_URL_OVERRIDE = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ?? "";
+const API_URL = EMBEDDING_URL_OVERRIDE ||
+  (MODEL_NAME !== "Xenova/all-MiniLM-L6-v2" && BASE_URL
+    ? `${BASE_URL.replace(/\/+$/, "")}${PATH_PREFIX}/v1/embeddings`
     : "");
+
+// Auth: OAuth → Bearer, else static API_KEY
+let BEARER = API_KEY;
+if (CLI_ID && CLI_SEC && !BEARER) {
+  try {
+    const r = await fetch(`${BASE_URL.replace(/\/+$/, "")}/oidc/v1/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `grant_type=client_credentials&scope=all-apis&client_id=${CLI_ID}&client_secret=${CLI_SEC}`,
+      signal: AbortSignal.timeout(10000),
+    });
+    if (r.ok) BEARER = ((await r.json()) as { access_token: string }).access_token;
+  } catch { /* fall through */ }
+}
 
 const { initPlugins } = await import("../src/registry");
 const { buildCorpus } = await import("../src/plugins/docs/corpus");
@@ -40,7 +57,7 @@ let DIM = 384;
 
 if (API_URL) {
   const headers: Record<string, string> = { "content-type": "application/json" };
-  if (API_KEY) headers["authorization"] = `Bearer ${API_KEY}`;
+  if (BEARER) headers["authorization"] = `Bearer ${BEARER}`;
   embed = async (t: string) => {
     const r = await fetch(API_URL, {
       method: "POST",

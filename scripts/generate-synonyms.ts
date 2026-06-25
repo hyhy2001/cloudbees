@@ -24,9 +24,15 @@ interface LmConfig {
   url?: string;
   apiKey?: string;
   model?: string;
+  pathPrefix?: string;
+  clientId?: string;
+  clientSecret?: string;
   CB_DATABRICK_URL?: string;
   CB_API_KEY?: string;
   CB_LM_MODEL?: string;
+  CB_PATH_PREFIX?: string;
+  CB_CLIENT_ID?: string;
+  CB_CLIENT_SECRET?: string;
 }
 
 function ensureProtocol(url: string): string {
@@ -37,29 +43,52 @@ function ensureProtocol(url: string): string {
 
 const lmFile = (await Bun.file("bee.lm.json").json().catch(() => ({}))) as LmConfig;
 
-const LM_URL = ensureProtocol(
+const BASE_URL = ensureProtocol(
   lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env["CB_DATABRICK_URL"] ?? process.env["CB_LM_URL"] ?? "",
 );
+const PATH_PREFIX = lmFile.pathPrefix ?? lmFile.CB_PATH_PREFIX ?? process.env["CB_PATH_PREFIX"] ?? "";
 const LM_API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env["CB_API_KEY"] ?? "";
+const CLI_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env["CB_CLIENT_ID"] ?? "";
+const CLI_SEC = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env["CB_CLIENT_SECRET"] ?? "";
 const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env["CB_LM_MODEL"] ?? "oc/deepseek-v4-flash-free";
+const API_BASE = BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}${PATH_PREFIX}` : "";
 
-if (!LM_URL) {
+if (!API_BASE) {
   console.error("Set CB_DATABRICK_URL or create bee.lm.json to use this script.");
   process.exit(1);
 }
 
-// Quick connectivity check before iterating all commands (avoids 30s timeouts
-// per command when the LM endpoint is unreachable).
+// Auth: OAuth (client_id + client_secret) → Bearer token, else static API_KEY
+let BEARER = LM_API_KEY;
+if (CLI_ID && CLI_SEC && !BEARER) {
+  try {
+    const r = await fetch(`${BASE_URL.replace(/\/+$/, "")}/oidc/v1/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `grant_type=client_credentials&scope=all-apis&client_id=${CLI_ID}&client_secret=${CLI_SEC}`,
+      signal: AbortSignal.timeout(10000),
+    });
+    if (r.ok) BEARER = ((await r.json()) as { access_token: string }).access_token;
+  } catch { /* fall through */ }
+}
+
+const headers: Record<string, string> = { "content-type": "application/json" };
+if (BEARER) headers["authorization"] = `Bearer ${BEARER}`;
+
+// Quick connectivity: POST tiny chat (max_tokens=1) — /v1/models may not exist on AI Gateways.
 try {
-  const health = await fetch(`${LM_URL.replace(/\/+$/, "")}/v1/models`, {
-    signal: AbortSignal.timeout(5000),
+  const health = await fetch(`${API_BASE}/v1/chat/completions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ model: LM_MODEL, messages: [{ role: "user", content: "hi" }], max_tokens: 1, temperature: 0 }),
+    signal: AbortSignal.timeout(10000),
   });
-  if (!health.ok) {
-    console.error(`LM endpoint at ${LM_URL} returned ${health.status} — skipping synonym generation.`);
+  if (health.status === 404) {
+    console.error(`LM endpoint at ${API_BASE} returned 404 — endpoint may not support chat (synonym generation skipped).`);
     process.exit(1);
   }
 } catch {
-  console.error(`LM endpoint at ${LM_URL} is unreachable — skipping synonym generation.`);
+  console.error(`LM endpoint at ${API_BASE} is unreachable — skipping synonym generation.`);
   process.exit(1);
 }
 
@@ -99,12 +128,9 @@ for (const item of corpus) {
     .replace("${desc}", desc || "(no description)");
 
   try {
-    const r = await fetch(`${LM_URL.replace(/\/+$/, "")}/v1/chat/completions`, {
+    const r = await fetch(`${API_BASE}/v1/chat/completions`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(LM_API_KEY ? { authorization: `Bearer ${LM_API_KEY}` } : {}),
-      },
+      headers,
       body: JSON.stringify({
         model: LM_MODEL,
         messages: [{ role: "user", content: prompt }],
