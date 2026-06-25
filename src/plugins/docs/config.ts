@@ -27,7 +27,8 @@ declare const BEE_LM_CLIENT_ID: string | undefined;
 declare const BEE_LM_CLIENT_SECRET: string | undefined;
 declare const BEE_EMBEDDING_MODEL: string | undefined;
 declare const BEE_EMBEDDING_URL: string | undefined;
-declare const BEE_PATH_PREFIX: string | undefined;
+declare const BEE_CHAT_PATH: string | undefined;
+declare const BEE_EMBEDDING_PATH: string | undefined;
 
 function pick(baked: string | undefined, envKey: string): string {
   if (typeof baked !== "undefined" && baked !== "") return baked;
@@ -57,12 +58,17 @@ export const LM_CLIENT_SECRET = pick(
   typeof BEE_LM_CLIENT_SECRET !== "undefined" ? BEE_LM_CLIENT_SECRET : undefined,
   "CB_CLIENT_SECRET",
 );
-const LM_PATH_PREFIX = pick(
-  typeof BEE_PATH_PREFIX !== "undefined" ? BEE_PATH_PREFIX : undefined,
-  "CB_PATH_PREFIX",
-);
-// LM_URL is the base (for OAuth, host detection). API_BASE_URL adds path prefix
-// for actual API calls (chat, embeddings) — e.g. /ai-gateway/mlflow.
+const CHAT_PATH = pick(
+  typeof BEE_CHAT_PATH !== "undefined" ? BEE_CHAT_PATH : undefined,
+  "CB_CHAT_PATH",
+) || "/v1/chat/completions";
+const EMBEDDING_PATH = pick(
+  typeof BEE_EMBEDDING_PATH !== "undefined" ? BEE_EMBEDDING_PATH : undefined,
+  "CB_EMBEDDING_PATH",
+) || "/v1/embeddings";
+export { EMBEDDING_PATH };
+// LM_URL is the base (for OAuth, host detection). For chat/embedding, append
+// the corresponding path (default /v1/chat/completions, /v1/embeddings).
 const BASE_URL = ensureProtocol(
   pick(
     typeof BEE_LM_URL !== "undefined" ? BEE_LM_URL : undefined,
@@ -70,7 +76,7 @@ const BASE_URL = ensureProtocol(
   ),
 );
 export const LM_URL = BASE_URL;
-export const API_BASE_URL = BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}${LM_PATH_PREFIX}` : "";
+export const CHAT_ENDPOINT = BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}${CHAT_PATH}` : "";
 export const EMBEDDING_MODEL =
   pick(typeof BEE_EMBEDDING_MODEL !== "undefined" ? BEE_EMBEDDING_MODEL : undefined, "CB_EMBEDDING_MODEL") ||
   "Xenova/all-MiniLM-L6-v2";
@@ -78,6 +84,6 @@ const EXPLICIT_EMBEDDING_URL = ensureProtocol(
   pick(typeof BEE_EMBEDDING_URL !== "undefined" ? BEE_EMBEDDING_URL : undefined, "CB_EMBEDDING_URL"),
 );
 export const EMBEDDING_URL = EXPLICIT_EMBEDDING_URL ||
-  (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && API_BASE_URL
-    ? `${API_BASE_URL.replace(/\/+$/, "")}/v1/embeddings`
+  (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && BASE_URL
+    ? `${BASE_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}`
     : "");

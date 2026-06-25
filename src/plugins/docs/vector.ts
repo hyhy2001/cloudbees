@@ -26,7 +26,7 @@ function beeDir(): string {
   return dirname(p);
 }
 import type { DocItem } from "./corpus";
-import { EMBEDDING_MODEL, EMBEDDING_URL, LM_API_KEY, LM_URL } from "./config";
+import { EMBEDDING_MODEL, EMBEDDING_URL, LM_API_KEY, LM_URL, EMBEDDING_PATH } from "./config";
 import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
 import { MODEL_FILES } from "../../generated/embedding-model";
 
@@ -81,7 +81,7 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
       if (LM_API_KEY) headers["authorization"] = `Bearer ${LM_API_KEY}`;
       const urlCandidates = [EMBEDDING_URL];
       if (!EMBEDDING_URL.endsWith("/v1/embeddings") && LM_URL) {
-        urlCandidates.push(`${LM_URL.replace(/\/+$/, "")}/v1/embeddings`);
+        urlCandidates.push(`${LM_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}`);
         urlCandidates.push(`${LM_URL.replace(/\/+$/, "")}/serving-endpoints/${encodeURIComponent(EMBEDDING_MODEL)}/invocations`);
       }
       _embedFn = async (t: string) => {

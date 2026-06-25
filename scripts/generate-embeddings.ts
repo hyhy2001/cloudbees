@@ -21,11 +21,11 @@ const BASE_URL = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRI
 const API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
 const CLI_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
 const CLI_SEC = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";
-const PATH_PREFIX = lmFile.pathPrefix ?? lmFile.CB_PATH_PREFIX ?? process.env.CB_PATH_PREFIX ?? "";
+const EMBEDDING_PATH = lmFile.embeddingPath ?? lmFile.CB_EMBEDDING_PATH ?? process.env.CB_EMBEDDING_PATH ?? "/v1/embeddings";
 const EMBEDDING_URL_OVERRIDE = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ?? "";
 const API_URL = EMBEDDING_URL_OVERRIDE ||
   (MODEL_NAME !== "Xenova/all-MiniLM-L6-v2" && BASE_URL
-    ? `${BASE_URL.replace(/\/+$/, "")}${PATH_PREFIX}/v1/embeddings`
+    ? `${BASE_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}`
     : "");
 
 // Auth: OAuth → Bearer, else static API_KEY
@@ -59,10 +59,9 @@ if (API_URL) {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (BEARER) headers["authorization"] = `Bearer ${BEARER}`;
   process.stderr.write(`  Embedding URL: ${API_URL} auth=${BEARER ? "Bearer" : "none"}\n`);
-  // Try the configured URL first, fallback to base URL without prefix
-  // (embedding models may not route through AI Gateway).
+  // Try the configured URL first, then fallback paths without AI Gateway prefix
   const urlCandidates = [API_URL];
-  if (PATH_PREFIX) {
+  if (EMBEDDING_PATH.startsWith("/ai-gateway/")) {
     urlCandidates.push(`${BASE_URL.replace(/\/+$/, "")}/v1/embeddings`);
     urlCandidates.push(`${BASE_URL.replace(/\/+$/, "")}/serving-endpoints/${encodeURIComponent(MODEL_NAME)}/invocations`);
   }
