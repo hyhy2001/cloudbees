@@ -16,7 +16,7 @@
  * session_user) is migrated to the per-profile layout on first loadSession().
  */
 
-import { getConnection } from "../db/connection";
+import { getConnection, initDb, getDbPath } from "../db/connection";
 import { deriveKey, encryptToken, decryptToken } from "./crypto";
 
 export interface Session {
@@ -42,11 +42,19 @@ interface RawSession {
 }
 
 /** Read a single settings value within an open connection. */
-function getVal(db: ReturnType<typeof getConnection>, key: string): string | null {
-  const row = db.query<{ value: string }, [string]>(
-    "SELECT value FROM settings WHERE key = ?",
-  ).get(key);
-  return row !== null ? row.value : null;
+function getVal(db: ReturnType<typeof getConnection>, key: string, dbPath?: string, retried?: boolean): string | null {
+  try {
+    const row = db.query<{ value: string }, [string]>(
+      "SELECT value FROM settings WHERE key = ?",
+    ).get(key);
+    return row !== null ? row.value : null;
+  } catch (e) {
+    if (!retried && String(e).includes("no such table")) {
+      initDb(dbPath ?? getDbPath());
+      return getVal(db, key, dbPath, true);
+    }
+    throw e;
+  }
 }
 
 /** Read a profile's raw session fields within an open connection. */
