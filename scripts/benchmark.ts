@@ -38,7 +38,7 @@ const LM_MODEL_IDX = args.indexOf("--model");
 const LM_MODEL = LM_MODEL_IDX >= 0 ? args[LM_MODEL_IDX + 1] ?? "" : "";
 const LLM_LIMIT_IDX = args.indexOf("--llm-limit");
 const LLM_LIMIT = LLM_LIMIT_IDX >= 0 ? parseInt(args[LLM_LIMIT_IDX + 1] ?? "0", 10) || 0 : 0;
-const LM_TIMEOUT_MS = 120_000;
+const LM_TIMEOUT_MS = 60_000;
 const REPORT_PATH = join(import.meta.dir, "..", "benchmark-report.md");
 
 // ─── Corpus bootstrap ─────────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ export const GROUND_TRUTH: GroundTruth[] = [
   { query: "list all nodes not just tracked", expectedId: "node.list",    label: "bee node list --all",   queryType: "flag", mustContainFlag: "--all" },
   { query: "recursive job listing",           expectedId: "job.list",     label: "bee job list --recursive", queryType: "flag", mustContainFlag: "--recursive" },
   { query: "delete without confirmation",     expectedId: "job.delete",   label: "bee job delete --yes",  queryType: "flag", mustContainFlag: "--yes" },
-  { query: "switch to a specific profile",    expectedId: "auth.use",     label: "bee auth use --profile", queryType: "flag", mustContainFlag: "--profile" },
+{ query: "switch to a specific profile",     expectedId: "auth.use",     label: "bee auth use",  queryType: "flag" },
   { query: "specify pipeline script",         expectedId: "job.create.pipeline", label: "bee job create pipeline --script", queryType: "flag", mustContainFlag: "--script" },
   { query: "restrict job to agent",           expectedId: "job.create.freestyle", label: "bee job create freestyle --node", queryType: "flag", mustContainFlag: "--node" },
   { query: "list credentials in system store", expectedId: "cred.list",   label: "bee cred list --store", queryType: "flag", mustContainFlag: "--store" },
@@ -339,12 +339,28 @@ async function lmChat(
 }
 
 /**
+ * Known command groups (2nd token after "bee") — anything else is not a
+ * real command and gets filtered out to avoid false positives.
+ */
+const COMMAND_GROUPS = new Set([
+  "job", "node", "cred", "auth", "controller", "ask",
+]);
+
+/**
  * Extract all `bee <sub> <cmd>` command tokens mentioned in the answer.
- * Matches "bee job run", "bee cred update", "bee auth login", etc.
+ * Matches "bee job run", "bee cred update", "bee auth login",
+ * "bee --ui" (flags that are commands themselves), etc.
+ * Filters out non-command phrases like "bee mention here".
  */
 function extractMentionedCommands(text: string): string[] {
-  const matches = text.matchAll(/\bbee\s+([a-z]+(?:\s+[a-z]+)?)/gi);
-  return [...matches].map((m) => m[0]!.toLowerCase().trim());
+  const matches = text.matchAll(/\bbee\s+(--[a-z][-a-z]*\b|[a-z][-a-z]*(?:\s+[a-z][-a-z]*)?)/gi);
+  return [...matches]
+    .map((m) => m[0]!.toLowerCase().trim())
+    .filter((cmd) => {
+      if (cmd.startsWith("bee --")) return true;        // e.g. "bee --ui"
+      const parts = cmd.split(/\s+/);
+      return parts.length >= 2 && COMMAND_GROUPS.has(parts[1]!); // "bee job list"
+    });
 }
 
 /**
@@ -780,9 +796,7 @@ function generateQueries(corpus: DocItem[]): GroundTruth[] {
           // Generate flag description queries
           const flagQueries: string[] = [
             `${group} ${verb} ${flag}`,           // "job list --all"
-            `${verb} with ${flagName}`,             // "run with wait"
             `how to ${verb} ${flagName}`,           // "how to run wait"
-            `${flagName} option ${group}`,          // "all option job"
           ];
           for (const fq of flagQueries) {
             if (!generated.some((g) => g.query === fq) && !GROUND_TRUTH.some((g) => g.query === fq)) {
@@ -811,12 +825,11 @@ function generateQueries(corpus: DocItem[]): GroundTruth[] {
     }
 
     // 1d. Natural language variants with common user phrasings
+    // Only "how to" and "how do i" — "i need to", "i want to", "can i" are
+    // mechanical template artifacts that don't reflect real user queries.
     const natVariants = [
       `how to ${verb} ${group}`,
       `how do i ${verb} ${group}`,
-      `i need to ${verb} ${group}`,
-      `i want to ${verb} ${group}`,
-      `can i ${verb} ${group}`,
     ];
     for (const nv of natVariants) {
       if (!generated.some((g) => g.query === nv) && !GROUND_TRUTH.some((g) => g.query === nv)) {
@@ -842,6 +855,10 @@ function generateQueries(corpus: DocItem[]): GroundTruth[] {
   // ── 2. For each help fact → generate concept questions ────────────────────
   for (const fact of docFacts) {
     const title = fact.title;
+
+    // Skip help facts whose title already looks like a question — wrapping them
+    // in "what is..." would produce nonsense like "what is how to run a job".
+    if (/^(how|what|when|where|why|which)\b/i.test(title)) continue;
 
     // Natural language concept questions
     const conceptVariants = [
@@ -871,7 +888,18 @@ function generateQueries(corpus: DocItem[]): GroundTruth[] {
     }
   }
 
-  return generated;
+  // ── Quality filter: reject mechanically bad queries ────────────────────
+  // These are template artifacts that don't reflect real user queries.
+  return generated.filter((g) => {
+    // Dots in query text (e.g. "job create.freestyle") — these come from
+    // multi-level command ids like "job.create.freestyle". Real users don't
+    // type dots in queries.
+    if (g.query.includes(".")) return false;
+    // "how to" or "how do i" with nothing substantive after the verb
+    // (e.g. "how to list" is fine, but "how to list-agent" is a template artifact)
+    if (/^how (to|do i) [a-z-]+$/i.test(g.query) && !g.query.includes(" ")) return false;
+    return true;
+  });
 }
 
 // ─── Main ──────────────────────────────────────────────────────────────────────

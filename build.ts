@@ -27,6 +27,14 @@ try {
   console.log("  Embedding model: not bundled (will download on first use if available)");
 }
 
+// Generate build-time synonym map (LLM alternative verbs for commands).
+// This runs after embeddings so both neural and synonym data are available.
+try {
+  await Bun.$`bun run scripts/generate-synonyms.ts`;
+} catch {
+  console.log("  Synonyms: skipped (LM endpoint not available)");
+}
+
 // ─── LM endpoint config (baked into the binary) ──────────────────────────────
 // Source priority: bee.lm.json (gitignored) → CB_* env → empty (offline binary).
 // Values are inlined as string literals via `define`, so a copied binary carries

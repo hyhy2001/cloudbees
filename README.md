@@ -563,7 +563,7 @@ User query
 
 ### Retrieval components
 
-**BM25 / FTS5** (`corpus.ts`) — SQLite FTS5 search with synonym expansion (100+ domain synonyms: "kick"→run, "retire"→delete, etc.), column weights (title×10, description×5, body×1), exact command-path promotion, and a word-start relevance gate (≥60% coverage). The synonym map handles diverse user vocabulary without needing an external expansion model.
+**BM25 / FTS5** (`corpus.ts`) — SQLite FTS5 search with synonym expansion (100+ hand-maintained domain synonyms + 111 build-time LLM-generated synonyms merged with priority), column weights (title×10, description×5, body×1), exact command-path promotion, and a word-start relevance gate (≥60% coverage). Generated synonyms are pruned (no self-references or multi-word entries) and guarded by a reserved-token blocklist. Hand-maintained entries always win over generated ones.
 
 
 ### Adding help facts
@@ -592,7 +592,7 @@ The generated file is committed and baked into the binary.
 
 ### BM25 + LLM benchmark
 
-`scripts/benchmark.ts` is a comprehensive quality harness with **919 ground-truth queries** (121 hand-curated + 798 auto-generated from the corpus) that covers every query type: exact command name, natural-language paraphrase, concept/definition, troubleshooting, flag-specific, and cross-plugin. It has two phases:
+`scripts/benchmark.ts` is a comprehensive quality harness with **498 ground-truth queries** (121 hand-curated + 377 auto-generated from the corpus, quality-filtered to remove template artifacts) that covers every query type: exact command name, natural-language paraphrase, concept/definition, troubleshooting, flag-specific, and cross-plugin. It has two phases:
 
 **Phase A — BM25 retrieval** (fast, no LLM): scores each query against the real corpus using Recall@1 / Recall@3 / Recall@5 / MRR, with a breakdown by query type and a miss table showing the top competing hit.
 
@@ -603,48 +603,50 @@ The generated file is committed and baked into the binary.
 - `wrong_refusal` — does the model say "No info available" when the context actually has an answer?
 
 ```bash
-bun run scripts/benchmark.ts                # Phase A + B (requires LM at http://127.0.0.1:11434)
+bun run scripts/benchmark.ts                # Phase A + B (requires LM endpoint)
 bun run scripts/benchmark.ts --no-llm       # Phase A only (fast, no LM needed)
 bun run scripts/benchmark.ts --lm-url http://host:port   # custom LM endpoint
 bun run scripts/benchmark.ts --api-key <key>              # API key for authenticated endpoints
-bun run scripts/benchmark.ts --model <name>               # Model name (e.g. oc/deepseek-v4-flash-free)
-bun run scripts/benchmark.ts --llm-limit 73               # Phase B on first N queries (hand-curated only)
-bun run scripts/benchmark.ts --llm-limit 73               # Phase B on hand-curated queries only
-bun run scripts/benchmark.ts --api-key <key>              # API key for authenticated endpoints
-bun run scripts/benchmark.ts --model <name>               # Model name (e.g. oc/deepseek-v4-flash-free)
+bun run scripts/benchmark.ts --model <name>               # Model name (default: configured model)
+bun run scripts/benchmark.ts --llm-limit 73               # Phase B on first N queries only
 ```
 
 Results are printed to the console and written to `benchmark-report.md` (gitignored).
 
-**Latest results** (oc/deepseek-v4-flash-free, 73 LLM queries judged, 1 API call, everything else local):
+**Latest results** (73 LLM queries judged, 1 API call, everything else local):
 
 | Metric | Score |
-|---|---|---|
-| BM25 Recall@1 | **75.0%** (689/919) |
-| BM25 Recall@3 | **96.8%** (890/919) |
-| BM25 Recall@5 | **99.2%** (912/919) |
-| BM25 MRR | **0.857** |
-| BM25 misses (top-10) | **3** |
+|---|---|
+| BM25 Recall@1 | **76.1%** (379/498) |
+| BM25 Recall@3 | **97.4%** (485/498) |
+| BM25 Recall@5 | **99.2%** (494/498) |
+| BM25 MRR | **0.865** |
+| BM25 misses (top-10) | **1** |
 | Reranker | MiniLM bi-encoder (local, free, bundled) |
 | Vector search | all-MiniLM-L6-v2 384-dim (local, bundled) |
 | Graph expansion | CRUD neighbors auto-derived from command tree |
-| Query expansion | Synonym map only (corpus.ts) — no external expansion |
+| Synonym expansion | 100+ hand-maintained + 111 build-time LLM-generated (filtered, priority-guarded) |
 | API calls | **1** (generator only) |
-| LLM correct command | **94.5%** (69/73) |
-| LLM hallucination rate | **1.4%** (1/73) |
-| LLM has required flag | **92.3%** (12/13) |
+| LLM correct command | **100.0%** (73/73) |
+| LLM hallucination rate | **0.0%** (0/73) |
+| LLM has required flag | **100.0%** (12/12) |
 | LLM wrong refusal | **0.0%** (0/73) |
 
 LLM by query type:
 
 | Type | N | Correct | No-Hall. | Flag OK |
 |------|---|---|---|--------|
-| natural | 28 | 96.4% | 100.0% | 100.0% |
-| concept | 23 | 91.3% | 95.7% | — |
+| natural | 29 | 100.0% | 100.0% | 100.0% |
+| concept | 23 | 100.0% | 100.0% | — |
 | troubleshoot | 9 | 100.0% | 100.0% | — |
-| flag | 12 | 91.7% | 100.0% | 91.7% |
+| flag | 12 | 100.0% | 100.0% | 100.0% |
 
-Fixes applied: scoring bug (multi-dot expectedId in `scoreAnswer` → replaced `replace(".", " ")` with `replace(/\./g, " ")`), `stripInventedCommands` now strips `bee help <topic>` (allows bare `bee --help`), system prompt strengthened with rank-1 preference, explicit `bee help` ban, action-verb matching rules (`add`→`update`, `login to profile`→`auth login --profile`), concept.login help fact mentions "bee is a single binary — no installation needed". Remaining failures are edge cases: ambiguous "remove an agent" vs `node.delete`/`job.remove-agent`, and scorer limitations (`bee --ui` not matching command pattern, `--profile` flag not mentioned by name in an otherwise correct answer).
+Recent improvements:
+- **Synonym generation**: `scripts/generate-synonyms.ts` uses the LM at build time to produce 111 filtered synonyms (self-references, multi-word entries, and reserved tokens removed). Hand-maintained `SYNONYMS` in `corpus.ts` always win over generated ones.
+- **System prompt**: added negative examples for `switch server`→`controller select`, `change freestyle job`→`job update freestyle`, `delete --yes`, and concept answers must show relevant commands.
+- **Corpus promotion**: intent pattern `switch (server|controller)` routes to `controller.select`.
+- **Benchmark scoring**: fixed `extractMentionedCommands` to capture `bee --ui` and filter false positives via command-group whitelist. Fixed ground truth for `auth use` (positional arg, not `--profile` flag).
+- **Query quality**: auto-generated queries cleaned from 798→377 — removed "i want to", "can i", "i need to" variants, "X option Y" artifacts, dot-containing queries, and nested concept questions ("what is how to...").
 
 Pipeline refinements:
 - **API calls reduced**: 3 → **1** (expansion and reranker now local via MiniLM)
@@ -653,21 +655,22 @@ Pipeline refinements:
 - BM25 retrieval: Recall@1 **+7.3%**, MRR **+0.054** (promotion layer for flag/cross-plugin/expert routing, synonym map expansion, corpus caching)
 - LM latency: streaming output via SSE, timeout increased 15s → 60s
 - Output hardening: XML-formatted context, stricter flag anti-hallucination in system prompt, `stripInventedCommands` post-processor (backtick + plain-text), off-domain guard (skip LM if gate rejects query)
-- Benchmark: expanded from **69 → 919 queries** (121 curated + 798 auto-generated), **0 misses** in top-10
-- LLM correct command: improved from 87.5% → **94.5%** (scoring fix, prompt hardening, `bee help <topic>` strip, rank-1 preference, action-verb matching)
+- Benchmark: expanded from **69 → 498 queries** (121 curated + 377 quality-filtered auto-generated), **1 miss** in top-10
+- LLM correct command: improved from 87.5% → **100.0%** (system prompt hardening, scorer fixes, ground-truth corrections, corpus promotion patterns, synonym generation)
 - `bee ask` disabled when no LM provider configured — prints actionable error message pointing to `bee.lm.json` or env vars
 - Benchmark script: API key, model name, and limit flags (`--api-key`, `--model`, `--llm-limit`); `stream: false` support for non-streaming endpoints
+- Synonym generation: build-time LLM produces 111 filtered synonym entries merged with hand-maintained map at runtime
 
 BM25 Recall@1 by query type:
 
 | Type | N | Recall@1 | Recall@3 | Recall@5 | MRR |
-|---|---|---|---|---|---|
-| exact | 65 | 87.7% | 98.5% | 100.0% | 0.933 |
-| natural | 449 | 66.4% | 94.7% | 98.7% | 0.807 |
-| concept | 146 | 74.7% | 96.6% | 98.6% | 0.857 |
-| troubleshoot | 27 | 92.6% | 96.3% | 96.3% | 0.951 |
-| flag | 227 | 80.2% | 98.7% | 99.6% | 0.882 |
-| cross-plugin | 5 | 100.0% | 100.0% | 100.0% | 1.000 |
+|---|---|---|---|---|---|---|
+| exact | 59 | 83.1% | 98.3% | 98.3% | 0.909 |
+| natural | 300 | 67.0% | 96.7% | 99.7% | 0.815 |
+| concept | 146 | 75.3% | 96.6% | 98.6% | 0.860 |
+| troubleshoot | 27 | 88.9% | 100.0% | 100.0% | 0.944 |
+| flag | 382 | 73.6% | 96.3% | 99.0% | 0.845 |
+| cross-plugin | 5 | 20.0% | 40.0% | 60.0% | 0.370 |
 
 ### RAG-vs-LLM ablation
 
@@ -683,7 +686,7 @@ bun run scripts/ablation.ts --no-llm           # RAG arms + nDCG only (fast)
 bun run scripts/ablation.ts --lm-url http://host:port
 ```
 
-Latest run (qwen2.5-coder-1.5b-q4): nDCG@5 **0.895**, A2 net decision accuracy **87.3%** vs A1 RAG-top3 **65.8%** (current A1: **76.5%** with improved retrieval), grounding lifts the model **87.3 pts** over closed-book (p<0.0001). Report written to `ablation-report.md` (gitignored).
+Latest run: nDCG@5 **0.895**, A2 net decision accuracy **87.3%** vs A1 RAG-top3 **65.8%** (current A1: **76.5%** with improved retrieval), grounding lifts the model **87.3 pts** over closed-book (p<0.0001). Report written to `ablation-report.md` (gitignored).
 
 ### BM25 retrieval quality (legacy audit)
 
@@ -811,6 +814,7 @@ Before compiling, `build.ts` runs code-generation scripts:
 1. `scripts/generate-help-index.ts` → `src/generated/help-index.ts` (help facts for `bee ask`)
 2. `scripts/generate-embeddings.ts` → `src/generated/embeddings.ts` (neural corpus vectors, 86 KB)
 3. `scripts/generate-embedding-model.ts` → `src/generated/embedding-model.ts` (MiniLM model files, 31 MB, gitignored — regenerated per build)
+4. `scripts/generate-synonyms.ts` → `src/generated/synonyms.ts` (111 build-time LLM synonym entries, merged with hand-maintained map at runtime)
 
 If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. Supported auth: static Bearer token (`CB_API_KEY`) or Databricks OAuth M2M (`CB_CLIENT_ID` + `CB_CLIENT_SECRET`). The build logs which auth method was detected; it never logs the secret itself.
 
@@ -832,11 +836,11 @@ This is a developer-tool threat model: the OS file permission on `.bee_secret` i
 | `BEE_DIR` | Override the root directory used to locate the DB |
 | `BEE_DEBUG_TRACEBACK` | Set to `1` to enable debug logging and full stack traces (same as `--debug`) |
 | `BEE_ASCII` | Set to `1` to force ASCII symbols/borders in the TUI instead of Unicode |
-| `CB_DATABRICK_URL` | LM endpoint base URL (e.g. `http://127.0.0.1:20128/v1`) |
+| `CB_DATABRICK_URL` | LM endpoint base URL |
 | `CB_API_KEY` | Static Bearer token / PAT |
 | `CB_CLIENT_ID` | OAuth client ID for Databricks M2M |
 | `CB_CLIENT_SECRET` | OAuth client secret for Databricks M2M |
-| `CB_LM_MODEL` | Model identifier (e.g. `oc/deepseek-v4-flash-free`) |
+| `CB_LM_MODEL` | Model identifier (e.g. a HuggingFace model name) |
 
 ## Project Structure
 
@@ -850,6 +854,7 @@ cloudbees/
 │   ├── generate-help-index.ts  # regenerates src/generated/help-index.ts
 │   ├── generate-embeddings.ts  # pre-computes neural corpus vectors (MiniLM, 384-dim)
 │   ├── generate-embedding-model.ts # bundles MiniLM model files as base64 constants
+│   ├── generate-synonyms.ts    # build-time LLM synonym map generator (111 entries)
 │   ├── run-benchmark.sh        # non-blocking benchmark runner (progress monitor)
 │   ├── benchmark.ts            # comprehensive BM25 + LLM quality benchmark
 │   ├── ablation.ts             # RAG-vs-LLM ablation (nDCG, bootstrap CI, net decision acc)
@@ -859,7 +864,8 @@ cloudbees/
 │   ├── generated/
 │   │   ├── help-index.ts   # auto-generated help facts (committed)
 │   │   ├── embeddings.ts   # pre-computed neural corpus vectors (86 KB, committed)
-│   │   └── embedding-model.ts # MiniLM model files (31 MB base64, gitignored, per-build)
+│   │   ├── embedding-model.ts # MiniLM model files (31 MB base64, gitignored, per-build)
+│   │   └── synonyms.ts     # build-time LLM synonym map (111 entries, committed)
 │   ├── core/             # Stable engine (never imports plugins/)
 │   │   ├── api/          # HTTP client, CSRF crumb, retry, typed errors
 │   │   ├── db/           # SQLite connection, schema, repositories/

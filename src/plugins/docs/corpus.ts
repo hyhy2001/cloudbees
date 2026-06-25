@@ -22,6 +22,7 @@ import { Database } from "bun:sqlite";
 import type { Command } from "commander";
 import { buildDocChunks } from "./docs-index";
 import { HELP_FACTS } from "../../generated/help-index";
+import { GENERATED_SYNONYMS } from "../../generated/synonyms";
 
 // ─── DocItem ─────────────────────────────────────────────────────────────────
 
@@ -171,6 +172,9 @@ const STOP_WORDS = new Set([
  * to exactly one canonical term, which is then prefix-matched ("canonical"*).
  *
  * Add entries here when `bee ask` misses an obvious user phrasing.
+ *
+ * NOTE: GENERATED_SYNONYMS (build-time LLM output) is merged below with
+ * lower priority. Hand-maintained entries always win.
  */
 const SYNONYMS: Record<string, string> = {
   // job / build actions
@@ -354,11 +358,46 @@ const SYNONYMS: Record<string, string> = {
 };
 
 /**
+ * Tokens that must NEVER be remapped by GENERATED_SYNONYMS.
+ *
+ * These are canonical action verbs, domain nouns, and common English words
+ * that would cause false matches if a noisy LLM-generated synonym remapped
+ * them. Hand-maintained SYNONYMS entries are exempt from this blocklist
+ * because they are manually curated and audited.
+ *
+ * Generated entries that map TO these words are fine (e.g. "wipe" -> "delete");
+ * only entries that map FROM them are blocked.
+ */
+const RESERVED_TOKENS = new Set([
+  // Canonical action verbs
+  "create","update","delete","list","get","run","stop","copy","move","log",
+  "track","untrack","status","select","use","login","logout","info",
+  // Domain nouns that should match themselves
+  "job","node","credential","controller","auth","profile","environment",
+  "troubleshooting","concept","pipeline","folder","multibranch",
+  // Common English words that would cause false positives if redirected
+  "show","view","set","change","edit","add","remove","find","search",
+  "open","close","start","end","begin","finish","install","configure",
+  "enable","disable","suspend","resume","restart","reload","refresh",
+  "save","load","import","export","upload","download","sync","backup",
+  "restore","clean","clear","reset","init","setup","deploy",
+]);
+
+/**
  * Expand one token through the synonym map and return the canonical term.
  * Input and output are both lowercase single tokens (no spaces).
+ *
+ * Resolution order:
+ *   1. Hand-maintained SYNONYMS (authoritative, always wins)
+ *   2. GENERATED_SYNONYMS (build-time LLM output, fills gaps), but only if
+ *      the token is not in RESERVED_TOKENS — those are never remapped by
+ *      generated entries.
+ *   3. Identity (token unchanged)
  */
 export function expandToken(token: string): string {
-  return SYNONYMS[token] ?? token;
+  if (SYNONYMS[token]) return SYNONYMS[token]!;
+  if (!RESERVED_TOKENS.has(token) && GENERATED_SYNONYMS[token]) return GENERATED_SYNONYMS[token]!;
+  return token;
 }
 
 /**
@@ -758,6 +797,7 @@ export function searchDocs(
     const intentPatterns: [RegExp, string][] = [
       [/\blog\s+out\b/i, "auth.logout"],
       [/\btell\s+me\s+about\b/i, "concept."],
+      [/\bswitch\s+(server|controller)\b/i, "controller.select"],
     ];
     for (const [re, targetPrefix] of intentPatterns) {
       if (re.test(qNorm)) {
