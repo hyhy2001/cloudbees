@@ -156,7 +156,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   const sepLine = SYM.sep.repeat(Math.max(0, termCols - 2));
 
   const inner = (
-    <Box flexDirection="column" paddingX={1} width="100%">
+    <Box flexDirection="column" paddingX={1} width="100%" height="100%">
       {/* ── Tab bar ── */}
       <Box justifyContent="space-between">
         <Box>
