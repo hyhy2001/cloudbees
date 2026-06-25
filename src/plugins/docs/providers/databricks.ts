@@ -7,6 +7,7 @@
  *   3. PAT — static token (CB_API_KEY)
  */
 import { SYSTEM_PROMPT } from "../context";
+import { CHAT_ENDPOINT } from "../config";
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
@@ -17,12 +18,21 @@ interface TokenCache {
 
 const APP_ID = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
 
-async function servingCall(host: string, model: string, token: string, prompt: string): Promise<string> {
-  const url = `${host}/serving-endpoints/${encodeURIComponent(model)}/invocations`;
-  const response = await fetch(url, {
+/**
+ * Call the configured chat endpoint (CHAT_ENDPOINT = base + CB_CHAT_PATH).
+ *
+ * For Databricks AI Gateway this is e.g.
+ *   https://adb-xxxx.azuredatabricks.net/ai-gateway/mlflow/v1/chat/completions
+ * which speaks the OpenAI-compatible shape. The model is sent in the body
+ * (the gateway routes by it), unlike the legacy /serving-endpoints/{model}/
+ * invocations form where the model was in the path.
+ */
+async function chatCall(model: string, token: string, prompt: string): Promise<string> {
+  const response = await fetch(CHAT_ENDPOINT, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify({
+      model,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: prompt },
@@ -61,7 +71,60 @@ export class DatabricksOAuthProvider {
 
   async generate(prompt: string): Promise<string> {
     const token = await this.getToken();
-    return servingCall(this.host, this.model, token, prompt);
+    return chatCall(this.model, token, prompt);
+  }
+
+  /**
+   * Streaming variant over the OpenAI-compatible SSE shape. AI Gateway supports
+   * stream:true at the chat path; tokens arrive as `data: {choices:[{delta}]}`.
+   */
+  async *stream(prompt: string): AsyncGenerator<string, void, unknown> {
+    const token = await this.getToken();
+    const response = await fetch(CHAT_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: prompt },
+        ],
+        max_tokens: 256,
+        temperature: 0,
+        stream: true,
+      }),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!response.ok) {
+      throw new Error(`Databricks LM error (HTTP ${response.status})`);
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("LM response body is not readable");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === "data: [DONE]") continue;
+        if (!trimmed.startsWith("data: ")) continue;
+        try {
+          const json = JSON.parse(trimmed.slice(6)) as {
+            choices?: Array<{ delta?: { content?: string; reasoning_content?: string } }>;
+          };
+          const delta = json.choices?.[0]?.delta;
+          const content = delta?.content ?? delta?.reasoning_content;
+          if (content) yield content;
+        } catch {
+          // skip malformed SSE line
+        }
+      }
+    }
   }
 
   async validate(): Promise<boolean> {
