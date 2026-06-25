@@ -193,7 +193,7 @@ export function buildPipelineXml(opts: PipelineXmlOpts): string {
 // ---------------------------------------------------------------------------
 
 /** Parse config.xml and extract the presendScript text value. */
-export function extractPresendScriptFromXml(configXml: string): string | null {
+function extractPresendScriptFromXml(configXml: string): string | null {
   const doc = xmlParser.parse(configXml) as Record<string, unknown>;
   // Walk: project > publishers > ExtendedEmailPublisher > presendScript
   const project = doc["project"] as Record<string, unknown> | undefined;

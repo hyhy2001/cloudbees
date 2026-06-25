@@ -4,8 +4,4 @@ export {
   setCache,
   invalidate,
   invalidatePrefix,
-  invalidateResourceCache,
-  purgeExpired,
-  clearAll,
-  cacheAge,
 } from "./manager";

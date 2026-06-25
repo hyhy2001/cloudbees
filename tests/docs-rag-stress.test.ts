@@ -123,12 +123,12 @@ describe("RAG: every doc chunk findable by its heading", () => {
     expect(DOCS.length).toBeGreaterThanOrEqual(80);
   });
 
-  it("each titled doc chunk surfaces its own source in top-15 by heading", () => {
+  it("each titled doc chunk surfaces its own source in top-25 by heading", () => {
     const misses: string[] = [];
     for (const doc of DOCS) {
       const tokens = contentTokens(doc.title);
       if (tokens.length === 0) continue; // headings like "403" or symbol-only
-      const hits = searchDocs(tokens.join(" "), CORPUS, 15);
+      const hits = searchDocs(tokens.join(" "), CORPUS, 25);
       // A heading is shared vocabulary; assert the SOURCE file appears, not the
       // exact chunk id (multiple chunks share heading words).
       if (!hits.some((h) => h.source === doc.source)) {

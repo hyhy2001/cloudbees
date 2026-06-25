@@ -3,9 +3,7 @@
  */
 
 export * from "./base.js";
-export * from "./auth.js";
 export * from "./job.js";
 export * from "./node.js";
 export * from "./credential.js";
 export * from "./controller.js";
-export * from "./user.js";

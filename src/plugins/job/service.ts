@@ -319,7 +319,7 @@ export async function getBuildLog(
 }
 
 /** Resolves the latest build number then returns its full console log. Returns `"(No builds found)"` if the job has never run. */
-export async function getLastBuildLog(
+async function getLastBuildLog(
   client: CloudBeesClient,
   jobName: string,
 ): Promise<string> {

@@ -13,7 +13,6 @@ import { searchDocs, type DocItem } from "./corpus";
 import { rerank } from "./rerank";
 import { buildGraphFromCorpus, expandGraph, type CommandGraph } from "./graph";
 import { getVectorDb, searchVector, rrfFusion, embed } from "./vector";
-import { expandQuery } from "./expand";
 
 // --- Output hardening --------------------------------------------------------
 

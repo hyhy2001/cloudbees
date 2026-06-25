@@ -29,7 +29,7 @@ export function bool(v: unknown, def = false): boolean {
 }
 
 /** Return the value if it is an array, otherwise `def`. Does not validate element types. */
-export function arr<T>(v: unknown, def: T[] = []): T[] {
+function arr<T>(v: unknown, def: T[] = []): T[] {
   if (Array.isArray(v)) return v as T[];
   return def;
 }
@@ -67,6 +67,6 @@ export function pick<T extends object>(
 }
 
 /** Trivial identity serialiser — mirrors Python to_dict / dataclasses.asdict. */
-export function toDict<T extends object>(dto: T): Record<string, unknown> {
+function toDict<T extends object>(dto: T): Record<string, unknown> {
   return { ...dto } as Record<string, unknown>;
 }

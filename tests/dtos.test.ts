@@ -9,7 +9,6 @@ import { jobFromDict, buildFromDict } from "../src/core/dtos/job";
 import { nodeFromDict, nodeDetailFromDict } from "../src/core/dtos/node";
 import { credentialFromDict } from "../src/core/dtos/credential";
 import { controllerFromDict } from "../src/core/dtos/controller";
-import { userFromDict, teamFromDict } from "../src/core/dtos/user";
 
 // ---------------------------------------------------------------------------
 // JobDTO
@@ -307,60 +306,4 @@ describe("controllerFromDict", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// UserDTO
-// ---------------------------------------------------------------------------
 
-describe("userFromDict", () => {
-  test("url maps from absoluteUrl field", () => {
-    const user = userFromDict({
-      id: "alice",
-      fullName: "Alice Example",
-      description: "A user",
-      absoluteUrl: "https://ci.example.com/user/alice",
-    });
-    expect(user.url).toBe("https://ci.example.com/user/alice");
-  });
-
-  test("fullName maps correctly", () => {
-    const user = userFromDict({ id: "bob", fullName: "Bob Builder", absoluteUrl: "" });
-    expect(user.fullName).toBe("Bob Builder");
-  });
-
-  test("id maps correctly", () => {
-    const user = userFromDict({ id: "carol", fullName: "Carol", absoluteUrl: "" });
-    expect(user.id).toBe("carol");
-  });
-
-  test("description defaults to empty string when missing", () => {
-    const user = userFromDict({ id: "x", fullName: "X", absoluteUrl: "" });
-    expect(user.description).toBe("");
-  });
-
-  test("url defaults to empty string when absoluteUrl missing", () => {
-    const user = userFromDict({ id: "x", fullName: "X" });
-    expect(user.url).toBe("");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// TeamDTO
-// ---------------------------------------------------------------------------
-
-describe("teamFromDict", () => {
-  test("basic roundtrip", () => {
-    const team = teamFromDict({
-      name: "devs",
-      description: "Dev team",
-      members: ["alice", "bob"],
-    });
-    expect(team.name).toBe("devs");
-    expect(team.description).toBe("Dev team");
-    expect(team.members).toEqual(["alice", "bob"]);
-  });
-
-  test("members defaults to empty array when missing", () => {
-    const team = teamFromDict({ name: "empty", description: "" });
-    expect(team.members).toEqual([]);
-  });
-});

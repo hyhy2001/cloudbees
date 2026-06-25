@@ -47,7 +47,7 @@ beforeAll(() => {
 
 afterAll(() => { mockServer?.stop(); });
 
-async function runCli(args: string[], extraEnv: Record<string, string> = {}): Promise<{ code: number; out: string }> {
+async function runCli(args: string[], extraEnv: Record<string, string> = {}): Promise<{ code: number; out: string; err: string }> {
   const lmUrl = extraEnv.CB_DATABRICK_URL ?? mockUrl;
   // Ensure no OAuth credentials leak from parent env into subprocess.
   const env = {
@@ -63,7 +63,7 @@ async function runCli(args: string[], extraEnv: Record<string, string> = {}): Pr
   const out = await new Response(proc.stdout).text();
   const err = await new Response(proc.stderr).text();
   const code = await proc.exited;
-  return { code, out: out + err };
+  return { code, out, err };
 }
 
 describe("bee ask CLI", () => {
@@ -98,9 +98,9 @@ describe("bee ask CLI", () => {
   });
 
   test("errors when no LM provider is configured", async () => {
-    const { code, out } = await runCli(["ask", "list", "jobs"], { CB_DATABRICK_URL: "" });
+    const { code, err } = await runCli(["ask", "list", "jobs"], { CB_DATABRICK_URL: "" });
     expect(code).toBe(1);
-    expect(out.toLowerCase()).toContain("lm provider");
+    expect(err.toLowerCase()).toContain("lm provider");
   });
 
   test("shows helpful message with no LM and -h/--help", async () => {
