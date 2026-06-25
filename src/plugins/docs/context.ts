@@ -82,10 +82,20 @@ function renderCommand(item: DocItem): string {
     const bodyLines = item.body.split("\n").map((l) => l.trimEnd()).filter(Boolean);
     const flags = bodyLines.filter((l) => l.trimStart().startsWith("-"));
     if (flags.length > 0) {
+      lines.push(`  <flags>`);
       for (const f of flags) {
-        const flagName = f.trimStart().split(/\s+/)[0] ?? f.trimStart();
-        lines.push(`  <flag>${escapeXmlAttr(flagName)}</flag>`);
+        // Find the first flag that starts with -- (the primary flag name)
+        const tokens = f.trimStart().split(/\s+/);
+        const primaryIdx = tokens.findIndex((t) => t.startsWith("--"));
+        const flagName = primaryIdx >= 0 ? tokens[primaryIdx]! : tokens[0]!;
+        const flagDesc = tokens.slice(primaryIdx + 1).join(" ").trim();
+        if (flagDesc) {
+          lines.push(`    <flag name="${escapeXmlAttr(flagName)}">${escapeXmlAttr(flagDesc)}</flag>`);
+        } else {
+          lines.push(`    <flag>${escapeXmlAttr(flagName)}</flag>`);
+        }
       }
+      lines.push(`  </flags>`);
     }
   }
   lines.push(`</command>`);
@@ -126,6 +136,11 @@ export const SYSTEM_PROMPT = [
   "- If the context has relevant blocks, use them. Do not say \"No info available\" when the context has an answer.",
   "- If nothing is relevant, say: \"No info available — try `bee --help`\".",
   "- Do not answer questions unrelated to bee. Say: \"I only help with bee usage.\"",
+  "- When a question asks about a specific command or its behaviour, show ALL available flags from the <flags> block with their descriptions.",
+  "- Answer hierarchically: start with the command itself, then list relevant flags in detail.",
+  "  Example: 'How do I run a job with a specific node and wait?'",
+  "    → `bee job run <name> --node <agent> --wait`",
+  "    Then explain: --node restricts to an agent, --wait blocks until the build finishes.",
   "",
   "Action-verb matching:",
   "  \"add a build parameter\" → `bee job update` (adding to existing), not create.",
