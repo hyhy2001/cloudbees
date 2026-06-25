@@ -73,6 +73,14 @@ export interface GroundTruth {
   queryType: "exact" | "natural" | "concept" | "troubleshoot" | "flag" | "cross-plugin";
   /** If set, the LLM answer MUST contain this flag string to pass has_flag. */
   mustContainFlag?: string;
+  /**
+   * Additional ids that count as a correct hit for retrieval scoring.
+   * For genuinely ambiguous queries ("show everything") where several commands
+   * are equally valid answers (job.list, node.list, cred.list, ...), pinning a
+   * single expectedId measures arbitrary tie-breaking, not retrieval quality.
+   * A hit at any acceptableId scores as a match.
+   */
+  acceptableIds?: string[];
 }
 
 export const GROUND_TRUTH: GroundTruth[] = [
@@ -153,9 +161,9 @@ export const GROUND_TRUTH: GroundTruth[] = [
   { query: "login to a specific profile",     expectedId: "auth.login", label: "bee auth login --profile",  queryType: "flag", mustContainFlag: "--profile" },
 
   // ── cross-plugin: involves multiple command groups ─────────────────────────
-  { query: "show everything on the server",       expectedId: "job.list",   label: "list commands",     queryType: "cross-plugin" },
-  { query: "what commands are available",         expectedId: "job.list",   label: "list commands",     queryType: "cross-plugin" },
-  { query: "manage jenkins nodes and jobs",       expectedId: "node.list",  label: "node/job list",     queryType: "cross-plugin" },
+  { query: "show everything on the server",       expectedId: "job.list",   label: "list commands",     queryType: "cross-plugin", acceptableIds: ["node.list", "cred.list", "controller.list", "job", "node", "cred", "controller"] },
+  { query: "what commands are available",         expectedId: "job.list",   label: "list commands",     queryType: "cross-plugin", acceptableIds: ["node.list", "cred.list", "controller.list", "job", "node", "cred", "controller"] },
+  { query: "manage jenkins nodes and jobs",       expectedId: "node.list",  label: "node/job list",     queryType: "cross-plugin", acceptableIds: ["job.list", "job", "node"] },
 
   // ── pipeline commands (new in v2) ──────────────────────────────────────────
   { query: "create pipeline",         expectedId: "job.create.pipeline",  label: "bee job create pipeline",    queryType: "exact" },
@@ -222,8 +230,8 @@ export const GROUND_TRUTH: GroundTruth[] = [
   { query: "list credentials in system store", expectedId: "cred.list",   label: "bee cred list --store", queryType: "flag", mustContainFlag: "--store" },
 
   // ── more cross-plugin: broader coverage ────────────────────────────────────
-  { query: "how to list everything",          expectedId: "job.list",     label: "list commands",         queryType: "cross-plugin" },
-  { query: "see all resources",               expectedId: "job.list",     label: "list commands",         queryType: "cross-plugin" },
+  { query: "how to list everything",          expectedId: "job.list",     label: "list commands",         queryType: "cross-plugin", acceptableIds: ["node.list", "cred.list", "controller.list", "job", "node", "cred", "controller"] },
+  { query: "see all resources",               expectedId: "job.list",     label: "list commands",         queryType: "cross-plugin", acceptableIds: ["node.list", "cred.list", "controller.list", "job", "node", "cred", "controller"] },
 ];
 
 // ─── Phase A: BM25 retrieval scoring ─────────────────────────────────────────
@@ -238,7 +246,8 @@ export interface BM25Result {
 function runPhaseA(corpus: DocItem[], queries: GroundTruth[]): BM25Result[] {
   return queries.map((gt) => {
     const hits = searchDocs(gt.query, corpus, 10);
-    const idx = hits.findIndex((h) => h.id === gt.expectedId);
+    const accept = new Set([gt.expectedId, ...(gt.acceptableIds ?? [])]);
+    const idx = hits.findIndex((h) => accept.has(h.id));
     return {
       gt,
       rank: idx >= 0 ? idx + 1 : 0,
