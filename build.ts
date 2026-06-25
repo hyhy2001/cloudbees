@@ -25,6 +25,9 @@ try {
   await Bun.$`bun run scripts/generate-embedding-model.ts`;
 } catch {
   console.log("  Embedding model: not bundled (will download on first use if available)");
+  await Bun.write("src/generated/embedding-model.ts", `// Fallback — model not bundled at build time.
+export const MODEL_FILES: Record<string, string> = {};
+`);
 }
 
 // Generate build-time synonym map (LLM alternative verbs for commands).
