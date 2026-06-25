@@ -18,11 +18,11 @@ export class OpenAICompatProvider {
   public readonly name: string;
 
   public constructor(
-    private readonly baseUrl: string,
+    private readonly endpoint: string,
     private readonly apiKey: string,
     private readonly model: string,
   ) {
-    this.name = providerLabel(baseUrl);
+    this.name = providerLabel(endpoint);
   }
 
   /**
@@ -34,7 +34,7 @@ export class OpenAICompatProvider {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
 
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
+    const response = await fetch(this.endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -69,7 +69,7 @@ export class OpenAICompatProvider {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
 
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
+    const response = await fetch(this.endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify({
