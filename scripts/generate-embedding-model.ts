@@ -11,7 +11,12 @@
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
-const CACHE = join(import.meta.dir, "..", "node_modules", "@xenova", "transformers", ".cache", "Xenova", "all-MiniLM-L6-v2");
+const lmFile = (await Bun.file("bee.lm.json").json().catch(() => ({}))) as Record<string, string>;
+const MODEL_NAME = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2";
+const parts = MODEL_NAME.split("/");
+const MODEL_DIR = join(...parts);
+
+const CACHE = join(import.meta.dir, "..", "node_modules", "@xenova", "transformers", ".cache", ...parts);
 const MODELS = join(import.meta.dir, "..", "node_modules", "@xenova", "transformers", "models");
 
 const files: { path: string; data: string }[] = [];
@@ -25,7 +30,7 @@ function walk(dir: string) {
     } else {
       const data = readFileSync(full);
       files.push({
-        path: "Xenova/all-MiniLM-L6-v2/" + relative(CACHE, full),
+        path: MODEL_DIR + "/" + relative(CACHE, full),
         data: data.toString("base64"),
       });
     }
@@ -48,9 +53,9 @@ function walkModels(dir: string, prefix: string) {
     }
   }
 }
-const REGISTRY = join(MODELS, "Xenova", "all-MiniLM-L6-v2");
+const REGISTRY = join(MODELS, ...parts);
 if (statSync(REGISTRY, { throwIfNoEntry: false })) {
-  walkModels(REGISTRY, "models/Xenova/all-MiniLM-L6-v2");
+  walkModels(REGISTRY, "models/" + MODEL_DIR);
 }
 
 let totalBytes = 0;

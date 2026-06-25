@@ -25,6 +25,7 @@ declare const BEE_LM_API_KEY: string | undefined;
 declare const BEE_LM_MODEL: string | undefined;
 declare const BEE_LM_CLIENT_ID: string | undefined;
 declare const BEE_LM_CLIENT_SECRET: string | undefined;
+declare const BEE_EMBEDDING_MODEL: string | undefined;
 
 function pick(baked: string | undefined, envKey: string): string {
   if (typeof baked !== "undefined" && baked !== "") return baked;
@@ -60,3 +61,6 @@ export const LM_CLIENT_SECRET = pick(
   typeof BEE_LM_CLIENT_SECRET !== "undefined" ? BEE_LM_CLIENT_SECRET : undefined,
   "CB_CLIENT_SECRET",
 );
+export const EMBEDDING_MODEL =
+  pick(typeof BEE_EMBEDDING_MODEL !== "undefined" ? BEE_EMBEDDING_MODEL : undefined, "CB_EMBEDDING_MODEL") ||
+  "Xenova/all-MiniLM-L6-v2";

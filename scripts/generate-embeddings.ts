@@ -16,6 +16,9 @@ import { join } from "node:path";
 import { Command } from "commander";
 import { pipeline } from "@xenova/transformers";
 
+const lmFile = (await Bun.file("bee.lm.json").json().catch(() => ({}))) as Record<string, string>;
+const MODEL_NAME = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2";
+
 const DIM = 384; // all-MiniLM-L6-v2 output dimension
 
 const { initPlugins } = await import("../src/registry");
@@ -28,7 +31,7 @@ await initPlugins(program);
 const corpus = buildCorpus(program);
 
 console.log("Loading embedding model (first run downloads ~80 MB)…");
-const extract = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+const extract = await pipeline("feature-extraction", MODEL_NAME);
 
 const ids: string[] = [];
 const values: number[] = [];

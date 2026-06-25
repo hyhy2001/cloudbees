@@ -25,6 +25,7 @@ function beeDir(): string {
   return dirname(p);
 }
 import type { DocItem } from "./corpus";
+import { EMBEDDING_MODEL } from "./config";
 import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
 import { MODEL_FILES } from "../../generated/embedding-model";
 
@@ -84,7 +85,7 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
 
     // Override file reads: intercept model files and serve from the
     // base64 constants embedded in the binary — no disk access needed.
-    const modelRoot = "Xenova/all-MiniLM-L6-v2";
+    const modelRoot = EMBEDDING_MODEL;
     const origFs = (env as any).fs;
     (env as any).fs = {
       ...origFs,
@@ -100,7 +101,7 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
       },
     } as any;
 
-    const extract = await pipeline("feature-extraction", `Xenova/${modelRoot.split("/").pop()}`, {
+    const extract = await pipeline("feature-extraction", modelRoot, {
       quantized: true,
     });
     _embedFn = async (t: string) => {
