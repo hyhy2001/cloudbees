@@ -35,7 +35,10 @@ export const docsPlugin: Plugin = {
         }
       }
       if (!getProvider()) {
-        setProvider(new OpenAICompatProvider(CHAT_ENDPOINT || LM_URL, LM_API_KEY, LM_MODEL));
+        // CHAT_ENDPOINT already includes the chat path (config.ts honours
+        // CB_CHAT_PATH); the provider uses it verbatim. It is always non-empty
+        // when LM_URL is set, so no base-URL fallback is needed.
+        setProvider(new OpenAICompatProvider(CHAT_ENDPOINT, LM_API_KEY, LM_MODEL));
       }
     }
     registerDocsCommands(ctx);
