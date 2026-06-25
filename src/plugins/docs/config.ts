@@ -27,6 +27,7 @@ declare const BEE_LM_CLIENT_ID: string | undefined;
 declare const BEE_LM_CLIENT_SECRET: string | undefined;
 declare const BEE_EMBEDDING_MODEL: string | undefined;
 declare const BEE_EMBEDDING_URL: string | undefined;
+declare const BEE_PATH_PREFIX: string | undefined;
 
 function pick(baked: string | undefined, envKey: string): string {
   if (typeof baked !== "undefined" && baked !== "") return baked;
@@ -41,12 +42,6 @@ function ensureProtocol(url: string): string {
   return `https://${url}`;
 }
 
-export const LM_URL = ensureProtocol(
-  pick(
-    typeof BEE_LM_URL !== "undefined" ? BEE_LM_URL : undefined,
-    "CB_DATABRICK_URL",
-  ),
-);
 export const LM_API_KEY = pick(
   typeof BEE_LM_API_KEY !== "undefined" ? BEE_LM_API_KEY : undefined,
   "CB_API_KEY",
@@ -62,6 +57,18 @@ export const LM_CLIENT_SECRET = pick(
   typeof BEE_LM_CLIENT_SECRET !== "undefined" ? BEE_LM_CLIENT_SECRET : undefined,
   "CB_CLIENT_SECRET",
 );
+const LM_PATH_PREFIX = pick(
+  typeof BEE_PATH_PREFIX !== "undefined" ? BEE_PATH_PREFIX : undefined,
+  "CB_PATH_PREFIX",
+);
+// LM_URL includes path prefix so providers construct {LM_URL}/v1/chat/completions correctly
+const BASE_URL = ensureProtocol(
+  pick(
+    typeof BEE_LM_URL !== "undefined" ? BEE_LM_URL : undefined,
+    "CB_DATABRICK_URL",
+  ),
+);
+export const LM_URL = BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}${LM_PATH_PREFIX}` : "";
 export const EMBEDDING_MODEL =
   pick(typeof BEE_EMBEDDING_MODEL !== "undefined" ? BEE_EMBEDDING_MODEL : undefined, "CB_EMBEDDING_MODEL") ||
   "Xenova/all-MiniLM-L6-v2";

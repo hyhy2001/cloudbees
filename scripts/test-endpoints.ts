@@ -9,9 +9,10 @@ const BASE    = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRIC
 const API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
 const CLI_ID  = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
 const CLI_SEC = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";
+const PATH_PREF = lmFile.pathPrefix ?? lmFile.CB_PATH_PREFIX ?? process.env.CB_PATH_PREFIX ?? "";
 const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env.CB_LM_MODEL ?? "default";
 const EMB_MODEL = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "";
-const EMB_URL  = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ?? `${BASE}/ai-gateway/mlflow/v1/embeddings`;
+const EMB_URL  = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ?? `${BASE}${PATH_PREF}/v1/embeddings`;
 
 let token = API_KEY;
 
@@ -45,9 +46,9 @@ console.log(`Base: ${BASE}`);
 console.log(`LM model: ${LM_MODEL}`);
 console.log(`EMB model: ${EMB_MODEL}`);
 console.log(`EMB URL: ${EMB_URL}`);
-console.log(`Auth: ${CLI_ID ? "OAuth" : API_KEY ? "Bearer" : "none"}\n`);
+console.log(`Path prefix: ${PATH_PREF}\n`);
 
-const chatUrl = `${BASE.replace(/\/+$/, "")}/v1/chat/completions`;
+const chatUrl = `${BASE.replace(/\/+$/, "")}${PATH_PREF}/v1/chat/completions`;
 await test("Chat (v1/chat/completions)", chatUrl, {
   model: LM_MODEL, messages: [{ role: "user", content: "say hi" }], max_tokens: 10, temperature: 0,
 });
