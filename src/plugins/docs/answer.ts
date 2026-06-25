@@ -46,6 +46,10 @@ export function stripInventedCommands(text: string, corpus: DocItem[]): string {
   }
   valid.add("ask");
   valid.add("help");
+  // --help / --version are commander built-ins present on every command but
+  // absent from corpus bodies; without these they get stripped as "invented".
+  validFlags.add("--help");
+  validFlags.add("--version");
   if (valid.size === 0) return text;
 
   const SENT = "";
