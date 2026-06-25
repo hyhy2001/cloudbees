@@ -13,7 +13,6 @@ import { Box, Text } from "ink";
 import type { FC } from "react";
 import type { TuiScreen, TuiScreenProps, TuiContext } from "../../registry/types";
 import { SYM, borderStyle } from "../../core/tui/symbols";
-import { useOnClick } from "@ink-tools/ink-mouse";
 import { THEME } from "../../core/tui/theme";
 import { Spinner } from "../../core/tui/components/Spinner";
 import { DataTable } from "../../core/tui/components/DataTable";
@@ -411,23 +410,10 @@ const ScriptViewer: FC<ScriptViewerProps> = ({ ctx, jobName, onClose }) => {
 
 // ─── Jobs screen ─────────────────────────────────────────────────────────────
 
-const ScopeToggleHandler: FC<{
-  scopeRef: React.RefObject<any>;
-  setShowAll: React.Dispatch<React.SetStateAction<boolean>>;
-  dbPath?: string;
-}> = ({ scopeRef, setShowAll, dbPath }) => {
-  useOnClick(scopeRef as any, () => {
-    setShowAll((v: boolean) => { const nv = !v; setScopeShowAll("job", nv, dbPath); return nv; });
-  });
-  return null;
-};
-
 const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // Mine/All is now a pure client-side filter — no refetch on toggle (P6).
   // Initial scope is persisted per resource-type (Q10).
   const [showAll, setShowAll] = useState(() => getScopeShowAll("job", ctx.dbPath));
-  const scopeRef = useRef<typeof Box>(null);
-  const isTty = Boolean(process.stdout.isTTY);
   // Folder navigation stack — empty = root, each entry is a folder name (qualified).
   const [folderStack, setFolderStack] = useState<string[]>([]);
   // Live terminal width for auto-scaling the table (Q4).
@@ -1568,10 +1554,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       {/* ── Compact header ── */}
       <Box>
         <Text color={THEME.dim}>{SYM.gear} Jobs  </Text>
-        {isTty && (
-          <ScopeToggleHandler scopeRef={scopeRef} setShowAll={setShowAll} dbPath={ctx.dbPath} />
-        )}
-        <Box ref={isTty ? scopeRef as any : undefined}>
+        <Box>
         {showAll
           ? <Text color={THEME.yellow} bold>[ALL]</Text>
           : <Text color={THEME.success} bold>[MINE]</Text>}

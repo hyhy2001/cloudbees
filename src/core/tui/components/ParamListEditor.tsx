@@ -11,7 +11,7 @@
  * is the thin interactive shell around a StringParamDef[] in state.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { FC } from "react";
 import { Modal } from "./Modal";
@@ -20,21 +20,7 @@ import { THEME } from "../theme";
 import { SYM } from "../symbols";
 import type { StringParamDef } from "../../../plugins/job/types";
 import { addParam, removeParam, updateParam, finalizeParams } from "../data/param-list";
-import { useOnClick, getBoundingClientRect } from "@ink-tools/ink-mouse";
 
-const ParamListClickHandler: FC<{
-  listRef: React.RefObject<any>;
-  paramsLen: number;
-  onSelect: (i: number) => void;
-}> = ({ listRef, paramsLen, onSelect }) => {
-  useOnClick(listRef as any, (event) => {
-    const rect = getBoundingClientRect(listRef.current);
-    if (!rect) return;
-    const idx = event.y - rect.top;
-    if (idx >= 0 && idx < paramsLen) onSelect(idx);
-  });
-  return null;
-};
 
 export interface ParamListEditorProps {
   /** Initial parameter rows (e.g. parsed from the job config, or []). */
@@ -53,8 +39,6 @@ export const ParamListEditor: FC<ParamListEditorProps> = ({
 }) => {
   const [params, setParams] = useState<StringParamDef[]>(initial);
   const [cursor, setCursor] = useState(0);
-  const listRef = useRef<typeof Box>(null);
-  const isTty = Boolean(process.stdout.isTTY);
   // When set, the row index currently being edited via the FormModal.
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
@@ -151,17 +135,10 @@ export const ParamListEditor: FC<ParamListEditorProps> = ({
 
   return (
     <Modal title={`${SYM.gear} Edit Build Parameters`}>
-      {isTty && (
-        <ParamListClickHandler
-          listRef={listRef as any}
-          paramsLen={params.length}
-          onSelect={(i) => setCursor(i)}
-        />
-      )}
       {params.length === 0 ? (
         <Text color={THEME.dim}>No parameters. Press Ctrl+n to add one.</Text>
       ) : (
-        <Box ref={isTty ? listRef as any : undefined} flexDirection="column">
+        <Box flexDirection="column">
         {params.map((p, i) => {
           const on = i === cursor;
           return (

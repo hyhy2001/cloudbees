@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useState } from "react";
 import { Box, Text, useApp } from "ink";
 import type { TuiScreen } from "../../registry/types";
 import { useTui } from "./context";
@@ -12,58 +12,6 @@ import { ConfirmModal } from "./components/ConfirmModal";
 import { useKeymap, type KeyBinding } from "./keymap";
 import { useDimensions } from "./data/use-dimensions";
 import { listProfiles } from "../db/repositories/profile-repo";
-import { MouseProvider, useOnClick, getBoundingClientRect } from "@ink-tools/ink-mouse";
-
-// Shared helper: walk tab list to find which index a relative X hits.
-function tabAtX(relX: number, screens: TuiScreen[], tabIndex: number): number {
-  let x = 0;
-  for (let i = 0; i < screens.length; i++) {
-    const s = screens[i]!;
-    const num = i < 9 ? String(i + 1) : "0";
-    const tabWidth = 1 + num.length + (s.icon ? s.icon.length + 1 : 0) + s.title.length + (i === tabIndex ? 2 : 0);
-    if (relX >= x && relX < x + tabWidth) return i;
-    x += tabWidth + 2; // +2 for "  " separator between tabs
-  }
-  return -1;
-}
-
-// Compute relative X within the tab-bar content (0 = first char of prefix).
-function tabRelX(event: { x: number; y: number }, rect: { left: number }): number {
-  const relX = event.x - rect.left;
-  if (relX < 0) return -1;
-  const prefix = (SYM.bee === "🐝" ? 2 : 3) + 2;
-  return relX - prefix;
-}
-
-// Guard: mouse hooks must be inside <MouseProvider>. This sub-component is only
-// rendered when isTty is true, so the hooks never fire without the provider.
-// Also disables terminal motion tracking (?1003l) after the MouseProvider enables
-// it — motion floods stdin with SGR sequences that leak through Ink's input
-// handler as spurious keystrokes into text fields.
-const TabClickHandler: React.FC<{
-  tabBarRef: React.RefObject<any>;
-  screens: TuiScreen[];
-  tabIndex: number;
-  onSwitchTab: (i: number) => void;
-}> = ({ tabBarRef, screens, tabIndex, onSwitchTab }) => {
-  useOnClick(tabBarRef as any, (event) => {
-    const rect = getBoundingClientRect(tabBarRef.current);
-    if (!rect) return;
-    const rx = tabRelX(event, rect);
-    if (rx < 0) return;
-    const idx = tabAtX(rx, screens, tabIndex);
-    if (idx >= 0) onSwitchTab(idx);
-  });
-  // Disable motion tracking — the MouseProvider's autoEnable writes
-  // \x1B[?1003h which makes the terminal report every cursor movement.
-  // Without it only button press/release events arrive, so mouse movement
-  // no longer injects SGR bytes into Ink's keypress pipeline.
-  useEffect(() => {
-    process.stdout.write("\x1B[?1003l");
-    return () => { process.stdout.write("\x1B[?1003h"); };
-  }, []);
-  return null;
-};
 
 export interface BeeAppProps {
   screens: TuiScreen[];
@@ -84,12 +32,9 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
   const [showHelp, setShowHelp] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const { columns: termCols } = useDimensions();
-  const tabBarRef = useRef<typeof Box>(null);
 
   const modalOpen = tui.activeModal !== null;
   const count = screens.length;
-
-  const isTty = Boolean(process.stdout.isTTY);
 
   const globalActive = !modalOpen && !showHelp && !tui.inputCaptured;
 
@@ -212,17 +157,9 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
 
   const inner = (
     <Box flexDirection="column" paddingX={1} width="100%">
-      {isTty && (
-        <TabClickHandler
-          tabBarRef={tabBarRef}
-          screens={screens}
-          tabIndex={tabIndex}
-          onSwitchTab={setTabIndex}
-        />
-      )}
       {/* ── Tab bar ── */}
       <Box justifyContent="space-between">
-        <Box ref={isTty ? tabBarRef as any : undefined}>
+        <Box>
           <Text color={THEME.active} bold>{SYM.bee}  </Text>
           {screens.map((s, i) => {
             const on = i === tabIndex;
@@ -290,7 +227,7 @@ export const BeeApp: React.FC<BeeAppProps> = ({ screens }) => {
       </Box>
     </Box>
   );
-  return isTty ? <MouseProvider autoEnable cacheInvalidationMs={0}>{inner}</MouseProvider> : inner;
+  return inner;
 };
 
 const HelpScreen: React.FC<{ screens: TuiScreen[] }> = ({ screens }) => (

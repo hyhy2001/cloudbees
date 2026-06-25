@@ -14,21 +14,7 @@ import type { FC } from "react";
 import { Modal } from "./Modal";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
-import { useOnClick, getBoundingClientRect } from "@ink-tools/ink-mouse";
 
-const EmailClickHandler: FC<{
-  rowsRef: React.RefObject<any>;
-  rowCount: number;
-  onFocus: (i: number) => void;
-}> = ({ rowsRef, rowCount, onFocus }) => {
-  useOnClick(rowsRef as any, (event) => {
-    const rect = getBoundingClientRect(rowsRef.current);
-    if (!rect) return;
-    const idx = event.y - rect.top;
-    if (idx >= 0 && idx < rowCount) onFocus(idx);
-  });
-  return null;
-};
 
 export interface EmailSpec {
   enabled: boolean;
@@ -88,8 +74,6 @@ export const EmailBuilder: FC<EmailBuilderProps> = ({
 }) => {
   const [spec, setSpec] = useState<EmailSpec>(initial);
   const [cursor, setCursor] = useState(0);
-  const rowsRef = useRef<typeof Box>(null);
-  const isTty = Boolean(process.stdout.isTTY);
   // Which text row (email/keywords/regex) is being edited inline.
   const [editing, setEditing] = useState<RowKind | null>(null);
   // The live text value while editing.
@@ -236,14 +220,7 @@ export const EmailBuilder: FC<EmailBuilderProps> = ({
 
   return (
     <Modal title={`${SYM.gear} Email Settings`}>
-      {isTty && (
-        <EmailClickHandler
-          rowsRef={rowsRef as any}
-          rowCount={rows.length}
-          onFocus={(i) => setCursor(i)}
-        />
-      )}
-      <Box ref={isTty ? rowsRef as any : undefined} flexDirection="column">
+      <Box flexDirection="column">
       {rows.map((kind, idx) => renderRow(kind, idx))}
       </Box><Box marginTop={1}>
         <Text color={THEME.dim}>{hint}</Text>

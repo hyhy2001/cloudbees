@@ -18,7 +18,6 @@ import React, { useCallback, useMemo, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
-import { useOnClick, getBoundingClientRect } from "@ink-tools/ink-mouse";
 
 const PAGE = 10;
 
@@ -137,25 +136,6 @@ export const DataTable: React.FC<DataTableProps> = ({
     [rows.length],
   );
 
-  // Mouse: click a visible row to jump cursor there.
-  const tableRef = useRef<typeof Box>(null);
-  const isTty = Boolean(process.stdout.isTTY);
-
-  // Guard: only rendered inside <MouseProvider> when isTty.
-  const TableMouseHandler: React.FC<{ start: number; height: number; rowsLen: number }> =
-    ({ start, height: h, rowsLen }) => {
-    // Header (row 0) + separator (row 1) → visible rows start at offset 2.
-    useOnClick(tableRef as any, (event) => {
-      const rect = getBoundingClientRect(tableRef.current as any);
-      if (!rect || rowsLen === 0) return;
-      const vi = event.y - rect.top - 2;
-      if (vi >= 0 && vi < h) {
-        onCursorChange(clamp(start + vi));
-      }
-    });
-    return null;
-  };
-
   // Navigation only. Enter (and every action key) is owned by the screen's
   // keymap — the table never handles selection, so there's no double-fire.
   const handleInput = useCallback(
@@ -194,10 +174,7 @@ export const DataTable: React.FC<DataTableProps> = ({
   const colWidths = useMemo(() => resolveColumnWidths(columns, effectiveTableWidth), [columns, effectiveTableWidth]);
 
   return (
-    <Box ref={isTty ? tableRef as any : undefined} flexDirection="column">
-      {isTty && rows.length > 0 && (
-        <TableMouseHandler start={start} height={height} rowsLen={rows.length} />
-      )}
+    <Box flexDirection="column">
       {/* Header */}
       <Box>
         <Text color={THEME.subtle}>{"  "}</Text>

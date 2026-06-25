@@ -10,27 +10,12 @@
  * is the pure helpers in domain/schedule; this is the interactive shell.
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { FC } from "react";
 import { Modal } from "./Modal";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
-import { useOnClick, getBoundingClientRect } from "@ink-tools/ink-mouse";
-
-const ScheduleClickHandler: FC<{
-  rowsRef: React.RefObject<any>;
-  rowCount: number;
-  onFocus: (i: number) => void;
-}> = ({ rowsRef, rowCount, onFocus }) => {
-  useOnClick(rowsRef as any, (event) => {
-    const rect = getBoundingClientRect(rowsRef.current);
-    if (!rect) return;
-    const idx = event.y - rect.top;
-    if (idx >= 0 && idx < rowCount) onFocus(idx);
-  });
-  return null;
-};
 import {
   buildCron,
   describeSchedule,
@@ -94,8 +79,6 @@ export const ScheduleBuilder: FC<ScheduleBuilderProps> = ({
 }) => {
   const [spec, setSpec] = useState<ScheduleSpec>(initial);
   const [cursor, setCursor] = useState(0);
-  const rowsRef = useRef<typeof Box>(null);
-  const isTty = Boolean(process.stdout.isTTY);
 
   useEffect(() => {
     setInputCaptured(true);
@@ -231,14 +214,7 @@ export const ScheduleBuilder: FC<ScheduleBuilderProps> = ({
 
   return (
     <Modal title={`${SYM.gear} Schedule Builder${jobName ? ` — ${jobName}` : ""}`}>
-      {isTty && (
-        <ScheduleClickHandler
-          rowsRef={rowsRef as any}
-          rowCount={rows.length}
-          onFocus={(i) => setCursor(i)}
-        />
-      )}
-      <Box ref={isTty ? rowsRef as any : undefined} flexDirection="column">
+      <Box flexDirection="column">
       {rows.map((kind, idx) => renderRow(kind, idx))}
       </Box>
       <Box marginTop={1} flexDirection="column">

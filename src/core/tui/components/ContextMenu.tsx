@@ -14,22 +14,6 @@ import type { FC } from "react";
 import { Modal } from "./Modal";
 import { THEME } from "../theme";
 import { SYM } from "../symbols";
-import { useOnClick, getBoundingClientRect } from "@ink-tools/ink-mouse";
-
-// Guard: only rendered inside <MouseProvider> when isTty is true.
-const CtxMenuMouseHandler: FC<{
-  menuRef: React.RefObject<any>;
-  itemCount: number;
-  onPick: (index: number) => void;
-}> = ({ menuRef, itemCount, onPick }) => {
-  useOnClick(menuRef as any, (event) => {
-    const rect = getBoundingClientRect(menuRef.current);
-    if (!rect) return;
-    const idx = event.y - rect.top - 1; // -1 for modal title row
-    if (idx >= 0 && idx < itemCount) onPick(idx);
-  });
-  return null;
-};
 
 export interface ContextMenuAction {
   label: string;
@@ -67,7 +51,6 @@ export const ContextMenu: FC<ContextMenuProps> = ({ title, actions, onClose, isA
   const visible = actions.filter((a) => !a.when || a.when());
   const [cursor, setCursor] = useState(0);
   const menuRef = useRef<typeof Box>(null);
-  const isTty = Boolean(process.stdout.isTTY);
 
   const run = useCallback(
     (idx: number) => {
@@ -100,17 +83,10 @@ export const ContextMenu: FC<ContextMenuProps> = ({ title, actions, onClose, isA
 
   return (
     <Modal title={displayTitle}>
-      {isTty && (
-        <CtxMenuMouseHandler
-          menuRef={menuRef as any}
-          itemCount={visible.length}
-          onPick={(i) => run(i)}
-        />
-      )}
       {visible.length === 0 ? (
         <Text color={THEME.dim}>(no actions available)</Text>
       ) : (
-        <Box ref={isTty ? menuRef as any : undefined} flexDirection="column">
+        <Box ref={menuRef as any} flexDirection="column">
         {visible.map((action, i) => {
           const on = i === cursor;
           const numStr = i < 9 ? String(i + 1) : "0";
