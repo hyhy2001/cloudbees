@@ -55,13 +55,11 @@ Bun is installed **locally into `./.bun`** (repo-contained, not system-wide). `m
 
 ## Where Data Lives
 
-`bee` keeps all local state in a SQLite database. **The DB sits next to the binary**: when you run `dist/bee`, the database is created at `<directory containing the binary>/data/cb.db`. The `data/` directory is created lazily on first run (the first command that needs the DB), so a freshly-built binary has no `data/` until you run it.
+`bee` keeps all local state in a SQLite database. **The DB sits at the project root** when running from the build tree (`dist/bee`), and **next to the binary** when deployed standalone (binary copied elsewhere). The `data/` directory is created lazily on first run.
 
-- **Binary**: `<bin dir>/data/cb.db` — wherever you copied `dist/bee`, the DB lives beside it. Move the binary, and its data does not follow unless you move `data/` too.
-- **From source** (`make dev`): the project root is used, so the DB is `./data/cb.db`. This is a *different* database from the binary's, so a login under `make dev` is not visible to `dist/bee` and vice-versa.
+- **In the build tree** (`dist/bee` with `package.json` in the parent): DB at `<project root>/data/cb.db`. Same database as `make dev` — a login under `make dev` is visible to `dist/bee` and vice-versa. Survives `make clean`.
+- **Deployed standalone** (binary copied to another host): DB at `<binary directory>/data/cb.db`. Move the binary, and its data does not follow unless you move `data/` too.
 - **Override**: set `CB_DB_PATH` to pin an exact DB file regardless of how `bee` is launched, or `BEE_DIR` to override just the root directory.
-
-Because the DB lives next to the binary, the directory you place `dist/bee` in must be **writable** — `data/` and the `.bee_secret` file (see [Security](#security)) are created there.
 
 ## Quick Start
 
