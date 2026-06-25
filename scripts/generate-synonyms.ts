@@ -104,12 +104,14 @@ const corpus = buildCorpus(program);
 
 const promptTemplate = [
   "You are a CLI synonym generator.",
-  "For the command below, list 3-5 single-word alternative verbs a user might use instead.",
+  "For the command below, list 8-15 alternative single words (verbs or short nouns) a user might use instead.",
   "Command action: ${action}",
   "Command description: ${desc}",
   "",
   "Return ONLY comma-separated lowercase words, no punctuation or explanation:",
 ].join("\n");
+
+const synonyms: Record<string, string> = {};
 
 const synonyms: Record<string, string> = {};
 
@@ -136,7 +138,7 @@ for (const item of corpus) {
         model: LM_MODEL,
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
-        max_tokens: 100,
+        max_tokens: 200,
         reasoning_effort: "none",
       }),
       signal: AbortSignal.timeout(30000),
