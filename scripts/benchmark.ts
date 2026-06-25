@@ -235,8 +235,8 @@ export interface BM25Result {
   topId: string;      // id of rank-1 result (or "" if empty)
 }
 
-function runPhaseA(corpus: DocItem[]): BM25Result[] {
-  return GROUND_TRUTH.map((gt) => {
+function runPhaseA(corpus: DocItem[], queries: GroundTruth[]): BM25Result[] {
+  return queries.map((gt) => {
     const hits = searchDocs(gt.query, corpus, 10);
     const idx = hits.findIndex((h) => h.id === gt.expectedId);
     return {
@@ -441,12 +441,12 @@ function scoreAnswer(
   return { hallucinated, correct_command, has_flag, refused };
 }
 
-async function runPhaseB(corpus: DocItem[], limit = 0): Promise<LLMResult[]> {
+async function runPhaseB(corpus: DocItem[], queries: GroundTruth[], limit = 0): Promise<LLMResult[]> {
   const results: LLMResult[] = [];
 
   // Only test ground-truth entries that have a real LLM signal: concept, troubleshoot, flag, natural.
   // "exact" queries are too mechanical to measure LLM quality meaningfully.
-  const filtered = GROUND_TRUTH.filter((gt) =>
+  const filtered = queries.filter((gt) =>
     ["natural", "concept", "troubleshoot", "flag"].includes(gt.queryType),
   );
   const sample = limit > 0 ? filtered.slice(0, limit) : filtered;
@@ -496,6 +496,7 @@ function pad(s: string | number, w: number, right = false): string {
 function buildReport(
   corpus: DocItem[],
   bm25: BM25Result[],
+  devBm25: BM25Result[],
   llm: LLMResult[],
   lmUp: boolean,
 ): string {
@@ -505,11 +506,12 @@ function buildReport(
   L.push("");
   L.push(`Generated: ${new Date().toISOString()}`);
   L.push(`Corpus: ${corpus.length} items (${corpus.filter((d) => d.type === "command").length} commands, ${corpus.filter((d) => d.type === "doc").length} doc chunks)`);
-  L.push(`Ground-truth queries: ${GROUND_TRUTH.length}`);
+  L.push(`Test-set (frozen): ${bm25.length} queries — **the production metric**. Tuning must NOT optimize against these.`);
+  L.push(`Dev-set (auto-generated): ${devBm25.length} queries — for synonym/heuristic tuning only.`);
   L.push("");
 
   // ── Phase A summary ──────────────────────────────────────────────────────
-  L.push("## Phase A — BM25 Retrieval");
+  L.push("## Phase A — BM25 Retrieval (test-set, frozen)");
   L.push("");
 
   const { overall, byType } = phaseAStats(bm25);
@@ -570,8 +572,22 @@ function buildReport(
     L.push("");
   }
 
+  // ── Dev-set summary (tuning only — not a production metric) ───────────────
+  {
+    const d = phaseAStats(devBm25).overall;
+    L.push("## Phase A — BM25 Retrieval (dev-set, tuning only)");
+    L.push("");
+    L.push(`| Metric     | Score |`);
+    L.push(`|------------|-------|`);
+    L.push(`| Recall@1   | ${pct(d.r1, d.n)} (${d.r1}/${d.n}) |`);
+    L.push(`| Recall@3   | ${pct(d.r3, d.n)} (${d.r3}/${d.n}) |`);
+    L.push(`| Recall@5   | ${pct(d.r5, d.n)} (${d.r5}/${d.n}) |`);
+    L.push(`| MRR        | ${d.mrr.toFixed(3)} |`);
+    L.push("");
+  }
+
   // ── Phase B ──────────────────────────────────────────────────────────────
-  L.push("## Phase B — LLM Answer Quality");
+  L.push("## Phase B — LLM Answer Quality (test-set only)");
   L.push("");
 
   if (!lmUp) {
@@ -915,26 +931,28 @@ async function main(): Promise<void> {
     `(${corpus.filter((d) => d.type === "command").length} commands, ` +
     `${corpus.filter((d) => d.type === "doc").length} doc chunks)`,
   );
-  // Merge hand-curated + auto-generated queries
-  const generated = generateQueries(corpus);
-  const allQueries = [...GROUND_TRUTH, ...generated];
-  // Deduplicate by (query, expectedId)
+  // ── Test-set vs dev-set ───────────────────────────────────────────────────
+  // GROUND_TRUTH (hand-curated) is the FROZEN test-set: the production metric.
+  // Never tune against it. generateQueries() output is the dev-set, used to
+  // tune synonyms/heuristics. Dev-set is deduped against the test-set so a
+  // query never counts twice and tuning can't leak by overlapping the gold set.
+  const testSet = GROUND_TRUTH;
+  const testKeys = new Set(testSet.map((q) => `${q.query}|${q.expectedId}`));
   const seen = new Set<string>();
-  const deduped = allQueries.filter((q) => {
+  const devSet = generateQueries(corpus).filter((q) => {
     const key = `${q.query}|${q.expectedId}`;
-    if (seen.has(key)) return false;
+    if (testKeys.has(key) || seen.has(key)) return false;
     seen.add(key);
     return true;
   });
-  // Replace GROUND_TRUTH with merged set
-  (GROUND_TRUTH as GroundTruth[]).splice(0, GROUND_TRUTH.length, ...deduped);
-  console.log(`Ground-truth queries: ${GROUND_TRUTH.length} (${GROUND_TRUTH.length - generated.length} hand-curated + ${generated.length} auto-generated)`);
+  console.log(`Test-set (frozen): ${testSet.length} | Dev-set (auto): ${devSet.length}`);
 
-  // Phase A
+  // Phase A — run on both sets
   console.log("\nRunning Phase A — BM25 retrieval…");
-  const bm25Results = runPhaseA(corpus);
+  const bm25Results = runPhaseA(corpus, testSet);
+  const devBm25Results = runPhaseA(corpus, devSet);
 
-  // Phase B
+  // Phase B — test-set ONLY (the trustworthy LLM metric; dev-set would inflate it)
   let llmResults: LLMResult[] = [];
   const lmUp = !NO_LLM && await lmReachable();
 
@@ -945,14 +963,14 @@ async function main(): Promise<void> {
   } else {
     const sampleLabel = LLM_LIMIT > 0 ? ` (limited to ${LLM_LIMIT} queries)` : "";
     console.log(`\nRunning Phase B — LLM at ${LM_URL}${sampleLabel}…`);
-    llmResults = await runPhaseB(corpus, LLM_LIMIT);
+    llmResults = await runPhaseB(corpus, testSet, LLM_LIMIT);
   }
 
   // Console summary
   printConsoleSummary(bm25Results, llmResults, lmUp);
 
   // Markdown report
-  const report = buildReport(corpus, bm25Results, llmResults, lmUp);
+  const report = buildReport(corpus, bm25Results, devBm25Results, llmResults, lmUp);
   writeFileSync(REPORT_PATH, report);
   console.log(`\nReport written: ${REPORT_PATH}`);
 }
