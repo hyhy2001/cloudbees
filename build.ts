@@ -57,8 +57,7 @@ await Bun.$`bun run scripts/generate-help-index.ts`;
 try {
   await Bun.$`bun run scripts/generate-embeddings.ts`;
 } catch {
-  console.log("  Vector embeddings: skipped (@xenova/transformers not available)");
-  console.log("  → Will use BM25-only search at runtime.");
+  console.log("  Vector embeddings: generation failed — BM25-only search at runtime.");
 }
 
 // Bundle the embedding model into the binary (so it's fully self-contained).
