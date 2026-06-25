@@ -50,6 +50,7 @@ const EMBEDDING_URL = EXPLICIT_EMBEDDING_URL ||
   (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && LM_URL
     ? `${LM_URL.replace(/\/+$/, "")}${LM_PATH_PREFIX}/v1/embeddings`
     : "");
+if (EMBEDDING_URL) process.stderr.write(`  Embedding: ${EMBEDDING_MODEL} @ ${EMBEDDING_URL}\n`);
 
 await Bun.$`bun run scripts/generate-help-index.ts`;
 

@@ -58,6 +58,7 @@ let DIM = 384;
 if (API_URL) {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (BEARER) headers["authorization"] = `Bearer ${BEARER}`;
+  process.stderr.write(`  Embedding URL: ${API_URL} auth=${BEARER ? "Bearer" : "none"}\n`);
   // Try the configured URL first, fallback to base URL without prefix
   // (embedding models may not route through AI Gateway).
   const urlCandidates = [API_URL];
@@ -67,6 +68,7 @@ if (API_URL) {
   }
   embed = async (t: string) => {
     for (const url of urlCandidates) {
+      process.stderr.write(`    → trying ${url}\n`);
       const r = await fetch(url, {
         method: "POST",
         headers,
