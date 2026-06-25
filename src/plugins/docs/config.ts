@@ -43,6 +43,21 @@ function ensureProtocol(url: string): string {
   return `https://${url}`;
 }
 
+/**
+ * Join a base URL and a path, collapsing a duplicated leading segment.
+ * Users often set CB_DATABRICK_URL to ".../v1" while the default chat/embedding
+ * paths also start with "/v1", which would yield ".../v1/v1/chat/completions".
+ * If base already ends with path's first segment, drop it from the base.
+ */
+export function joinUrl(base: string, path: string): string {
+  const b = base.replace(/\/+$/, "");
+  const firstSeg = path.replace(/^\/+/, "").split("/")[0];
+  if (firstSeg && b.endsWith(`/${firstSeg}`)) {
+    return `${b.slice(0, -(firstSeg.length + 1))}${path}`;
+  }
+  return `${b}${path}`;
+}
+
 export const LM_API_KEY = pick(
   typeof BEE_LM_API_KEY !== "undefined" ? BEE_LM_API_KEY : undefined,
   "CB_API_KEY",
@@ -76,7 +91,7 @@ const BASE_URL = ensureProtocol(
   ),
 );
 export const LM_URL = BASE_URL;
-export const CHAT_ENDPOINT = BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}${CHAT_PATH}` : "";
+export const CHAT_ENDPOINT = BASE_URL ? joinUrl(BASE_URL, CHAT_PATH) : "";
 export const EMBEDDING_MODEL =
   pick(typeof BEE_EMBEDDING_MODEL !== "undefined" ? BEE_EMBEDDING_MODEL : undefined, "CB_EMBEDDING_MODEL") ||
   "Xenova/all-MiniLM-L6-v2";
@@ -85,5 +100,5 @@ const EXPLICIT_EMBEDDING_URL = ensureProtocol(
 );
 export const EMBEDDING_URL = EXPLICIT_EMBEDDING_URL ||
   (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && BASE_URL
-    ? `${BASE_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}`
+    ? joinUrl(BASE_URL, EMBEDDING_PATH)
     : "");

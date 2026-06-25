@@ -6,6 +6,7 @@
  * (the declare-const path is only present in the compiled binary).
  */
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { joinUrl } from "../src/plugins/docs/config";
 
 // ─── The pick logic (mirrored from config.ts for testability) ─────────────────
 
@@ -64,5 +65,33 @@ describe("LM config — pick logic (env resolution)", () => {
     process.env["CB_LM_MODEL"] = "my-model";
     const model = pick(undefined, "CB_LM_MODEL") || "default";
     expect(model).toBe("my-model");
+  });
+});
+
+describe("joinUrl — collapse duplicated leading path segment", () => {
+  test("base ending in /v1 + path starting /v1 does not double", () => {
+    expect(joinUrl("http://h:20128/v1", "/v1/chat/completions")).toBe("http://h:20128/v1/chat/completions");
+    expect(joinUrl("http://h:20128/v1", "/v1/embeddings")).toBe("http://h:20128/v1/embeddings");
+  });
+
+  test("base without /v1 appends path normally", () => {
+    expect(joinUrl("http://h:20128", "/v1/chat/completions")).toBe("http://h:20128/v1/chat/completions");
+  });
+
+  test("trailing slash on base is trimmed", () => {
+    expect(joinUrl("http://h:20128/v1/", "/v1/embeddings")).toBe("http://h:20128/v1/embeddings");
+  });
+
+  test("different first segment is NOT stripped (AI Gateway path preserved)", () => {
+    expect(joinUrl("https://x.databricks.net", "/ai-gateway/mlflow/v1/chat/completions"))
+      .toBe("https://x.databricks.net/ai-gateway/mlflow/v1/chat/completions");
+    // base /v1 + path /ai-gateway → first segments differ, no strip
+    expect(joinUrl("https://x.databricks.net/v1", "/ai-gateway/v1/chat/completions"))
+      .toBe("https://x.databricks.net/v1/ai-gateway/v1/chat/completions");
+  });
+
+  test("only collapses one segment, not a shared multi-segment suffix", () => {
+    // base ends in /api/v1, path starts /v1 → only /v1 considered as first seg
+    expect(joinUrl("http://h/api/v1", "/v1/embeddings")).toBe("http://h/api/v1/embeddings");
   });
 });
