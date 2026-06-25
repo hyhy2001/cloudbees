@@ -15,7 +15,7 @@
 - Job lifecycle: list / get / create / update / delete / run / stop / log / status / copy / move / track / untrack, plus String build parameters, an email anti-spam content filter, and CloudBees Folders Plus controlled-agent approval (list-agents / approve-agent / remove-agent)
 - Credential lifecycle: list / get / create / update / delete / track / untrack (system & user stores)
 - Node lifecycle: list / get / create / update / delete / offline / online / copy / track / untrack (SSH and JNLP/Inbound launchers, Always/On-demand availability), plus Folders Plus controlled-agent mode toggle
-- **Offline help** (`bee ask`) — multi-stage RAG pipeline: BM25 + neural vector search + graph expansion + MiniLM reranker → LM answer generation via any OpenAI-compatible endpoint (disabled until LM endpoint configured)
+- **Help** (`bee ask`) — multi-stage RAG pipeline: BM25 + neural vector search + graph expansion + reranker → LM answer generation via any OpenAI-compatible endpoint (disabled until LM endpoint configured)
 
 ## Requirements
 
@@ -42,12 +42,13 @@ Other useful targets:
 make bun           # install bun locally into ./.bun (auto-runs as needed)
 make install       # deps + build + create bee.csh wrapper + ~/.local/bin/bee symlink
 make build         # compile dist/bee
+make quick         # quick rebuild — skip codegen (embeddings, synonyms, help-index)
 make deps          # install dependencies only (bun install)
 make dev ARGS='job list'   # run from source without compiling
 make run ARGS='job list'   # run the compiled binary
 make test          # run tests (bun test)
 make typecheck     # type-check with tsc --noEmit
-make clean         # remove dist/ and node_modules/
+make clean         # backup DB to backups/, then remove dist/ and node_modules/
 make distclean     # clean + remove the local ./.bun toolchain
 ```
 
@@ -73,7 +74,7 @@ bee auth login                       # prompts for URL, username, API token
 bee controller list
 bee controller select <controller-name>
 bee job list
-bee ask "how do I run a job"         # offline help — no network needed
+bee ask "how do I run a job"         # RAG-powered help (local BM25 + vector, optional API embedding)
 bee ask "403 error"                  # troubleshooting
 bee --ui                             # or drive everything from the TUI
 ```
@@ -93,7 +94,7 @@ Running `bee` with no subcommand prints help.
 
 ### Help (`bee ask`)
 
-Search the built-in help without a network connection:
+Search the built-in help (local BM25 + vector, optional API embedding):
 
 ```bash
 bee ask <query>
@@ -457,8 +458,6 @@ Tabs (one per plugin, contributed via the plugin's optional `screen()`), in orde
 
 `Enter` on a row opens a numbered **action menu**; the menu is where Run/Edit/Delete/etc. live, so the table itself only needs cursor + Enter:
 
-**Mouse support**: click on tab headings to switch tabs, click on form fields to focus, click on table rows to move cursor, click on context menu items to run actions, click on search bar to start filtering, click on `[MINE]/[ALL]` to toggle scope, click on confirm/cancel buttons in confirmation dialogs. All mouse interactions are disabled when stdout is not a TTY.
-
 ```
   list ──Enter──▶ ContextMenu ──pick──▶ action
                        │                   ├─▶ ConfirmModal   (Delete, Stop, Logout)
@@ -543,23 +542,26 @@ Form fields show a short hint on the right. Fields that take a filesystem path (
 
 Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful on terminals with limited glyph support).
 
-## `bee ask` — Offline Help & Natural-Language Search
+## `bee ask` — Help & Natural-Language Search
 
-`bee ask` answers questions about how to use `bee` with a multi-stage RAG pipeline. Only the answer generator needs an external LM — everything else runs locally (or optionally via an API embedding endpoint).
+`bee ask` answers questions about how to use `bee` with a multi-stage RAG pipeline. The answer generator and (optionally) the embedding step need an external LM — everything else runs locally. The embedding model is configurable via `CB_EMBEDDING_MODEL`: use the bundled local MiniLM (31 MB, free, no API call) or a remote model via the same LM endpoint for higher accuracy.
 
 ```
 User query
-  → BM25 (FTS5, 84 items, top-15)
-     Synonym expansion (100+ domain synonyms), relevance gate.
-  → Neural Vector Search (MiniLM or API, top-15)
-     Pre-computed corpus embeddings bundled in binary or via API.
+   → BM25 (FTS5, 84 items, top-15)
+     Synonym expansion (~200+ action + ~150+ flag synonyms, 2-pass), relevance gate.
+   → Neural Vector Search (MiniLM or API embedding, top-15)
+      Pre-computed corpus embeddings bundled in binary or via API.
   → RRF Fusion (k=60)
      Reciprocal Rank Fusion: BM25 + Vector results merged.
   → Graph Expansion (+3 CRUD neighbors)
      Same-group and same-resource commands.
   → MiniLM Reranker (local, free)
-     Cosine similarity between query and each hit's corpus vector.
-  → Top-5 → Prompt → LM Generator (API, 1 call)
+      Cosine similarity between query and each hit's corpus vector.
+   → Top-5 → Prompt → LM Generator (API, 1 call)
+   ↓
+   Flag hallucination protection: `stripInventedCommands` validates `--xxx` flags
+   against a real flag whitelist; invented flags are removed from answers.
 ```
 
 **1 API call per query** (generator only) when using local MiniLM. Set `CB_EMBEDDING_MODEL` (e.g. `databricks-bge-large-en`) with a Databricks LM endpoint to use API embeddings — trades a second API call for higher accuracy, auto-detects output dimension, and skips the 31 MB model bundle.
@@ -568,7 +570,7 @@ Custom endpoint paths: by default chat uses `/v1/chat/completions` and embedding
 
 ### Retrieval components
 
-**BM25 / FTS5** (`corpus.ts`) — SQLite FTS5 search with synonym expansion (100+ hand-maintained domain synonyms + 111 build-time LLM-generated synonyms merged with priority), column weights (title×10, description×5, body×1), exact command-path promotion, and a word-start relevance gate (≥60% coverage). Generated synonyms are pruned (no self-references or multi-word entries) and guarded by a reserved-token blocklist. Hand-maintained entries always win over generated ones.
+**BM25 / FTS5** (`corpus.ts`) — SQLite FTS5 search with synonym expansion (~200+ action synonyms + ~150+ flag synonyms, 2-pass LLM generation merged with hand-maintained priority), column weights (title×10, description×5, body×1), exact command-path promotion, and a word-start relevance gate (≥60% coverage). Generated synonyms are pruned (no self-references or multi-word entries) and guarded by a reserved-token blocklist. Hand-maintained entries always win over generated ones.
 
 ### Adding help facts
 
@@ -758,6 +760,10 @@ bun test tests/docs-search.test.ts
 
 The same `service.ts` layer backs both the CLI command and the TUI screen for each plugin, so the two front-ends can never drift in behaviour — only in presentation.
 
+### TUI (`core/tui/`)
+
+The TUI is **keyboard-only** — mouse support was removed because Ink's `useInput` + `<App>` mouse mode conflicted with form fields and scrolling, making click-to-focus unreliable. Every interaction uses a key binding or the `Enter` action menu (see [TUI](#tui) for the full key reference).
+
 ### HTTP client (`core/api/client.ts`)
 
 `CloudBeesClientImpl` wraps Bun's global `fetch` and is the single chokepoint for every server call:
@@ -821,11 +827,13 @@ Before compiling, `build.ts` runs code-generation scripts:
 1. `scripts/generate-help-index.ts` → `src/generated/help-index.ts` (help facts for `bee ask`)
 2. `scripts/generate-embeddings.ts` → `src/generated/embeddings.ts` (neural corpus vectors, 86 KB)
 3. `scripts/generate-embedding-model.ts` → `src/generated/embedding-model.ts` (MiniLM model files, 31 MB base64, committed — no download needed; model name from `bee.lm.json`/`CB_EMBEDDING_MODEL`, default `Xenova/all-MiniLM-L6-v2`; skipped when `CB_EMBEDDING_MODEL` points to an API-served model)
-4. `scripts/generate-synonyms.ts` → `src/generated/synonyms.ts` (build-time LLM synonym entries and flag synonyms + usage examples, merged with hand-maintained map at runtime)
+4. `scripts/generate-synonyms.ts` → `src/generated/synonyms.ts` (build-time LLM generates ~200+ action synonyms + ~150+ flag synonyms with usage examples in 2 passes per command, merged with hand-maintained map at runtime)
+
+Set `CB_SKIP_CODEGEN=1` to skip all code-generation steps — this is what `make quick` does internally for fast iterative rebuilds when the corpus, embeddings, or synonyms haven't changed.
 
 If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. Chat and embedding endpoints are built from `CB_DATABRICK_URL` + `CB_CHAT_PATH` (default `/v1/chat/completions`) and `CB_EMBEDDING_PATH` (default `/v1/embeddings`) separately — both share the same auth. Supported auth: static Bearer token (`CB_API_KEY`) or Databricks OAuth M2M (`CB_CLIENT_ID` + `CB_CLIENT_SECRET`). The build logs which auth method was detected; it never logs the secret itself.
 
-Embedding model: default `Xenova/all-MiniLM-L6-v2` is bundled as base64 (31 MB). Set `CB_EMBEDDING_MODEL` to any HuggingFace ONNX model name, or to a Databricks embedding model name (e.g. `databricks-bge-large-en`) while `CB_DATABRICK_URL` is set — the build will use the API endpoint `/v1/embeddings` with the same auth, skip local bundling, and generate corpus embeddings via API. At runtime, queries are embedded the same way.
+Embedding model: default `Xenova/all-MiniLM-L6-v2` is bundled as base64 (31 MB). Set `CB_EMBEDDING_MODEL` to any HuggingFace ONNX model name, or to a Databricks embedding model name (e.g. `databricks-bge-large-en`) while `CB_DATABRICK_URL` is set — the build will use the API embedding endpoint (`CB_DATABRICK_URL` + `CB_EMBEDDING_PATH`, default `/v1/embeddings`) with the same auth, skip local bundling, and generate corpus embeddings via API. At runtime, queries are embedded the same way.
 
 ## Security
 
@@ -845,14 +853,15 @@ This is a developer-tool threat model: the OS file permission on `.bee_secret` i
 | `BEE_DIR` | Override the root directory used to locate the DB |
 | `BEE_DEBUG_TRACEBACK` | Set to `1` to enable debug logging and full stack traces (same as `--debug`) |
 | `BEE_ASCII` | Set to `1` to force ASCII symbols/borders in the TUI instead of Unicode |
-| `CB_DATABRICK_URL` | LM endpoint base URL (Databricks workspace or any OpenAI-compatible host) |
+| `CB_SKIP_CODEGEN` | Set to `1` to skip all build-time codegen steps (what `make quick` does) |
+| `CB_DATABRICK_URL` | LM endpoint base URL (Databricks workspace or any OpenAI-compatible host). Both chat (`CB_CHAT_PATH`) and embedding (`CB_EMBEDDING_PATH`) use this as the base |
 | `CB_CHAT_PATH` | Chat endpoint path (default: `/v1/chat/completions`). Append to `CB_DATABRICK_URL` |
 | `CB_EMBEDDING_PATH` | Embedding endpoint path (default: `/v1/embeddings`). Append to `CB_DATABRICK_URL` |
 | `CB_API_KEY` | Static Bearer token / PAT |
 | `CB_CLIENT_ID` | OAuth client ID for Databricks M2M |
 | `CB_CLIENT_SECRET` | OAuth client secret for Databricks M2M |
 | `CB_LM_MODEL` | LM model identifier (e.g. a HuggingFace model name) |
-| `CB_EMBEDDING_MODEL` | Embedding model (default: `Xenova/all-MiniLM-L6-v2` — local). Set to a Databricks model name (e.g. `databricks-bge-large-en`) to use API embeddings with the same auth |
+| `CB_EMBEDDING_MODEL` | Embedding model (default: `Xenova/all-MiniLM-L6-v2` — local MiniLM bundled). Set to a Databricks model name (e.g. `databricks-bge-large-en`) to use API embeddings with the same auth; output dimension auto-detected |
 
 ## Project Structure
 
@@ -870,7 +879,8 @@ cloudbees/
 │   ├── run-benchmark.sh        # non-blocking benchmark runner (progress monitor)
 │   ├── benchmark.ts            # comprehensive BM25 + LLM quality benchmark
 │   ├── ablation.ts             # RAG-vs-LLM ablation (nDCG, bootstrap CI, net decision acc)
-│   └── rag-eval.ts             # BM25 retrieval quality eval (legacy)
+│   ├── rag-eval.ts             # BM25 retrieval quality eval (legacy)
+│   └── test-endpoints.ts       # standalone LM endpoint connectivity checker (chat + embedding)
 ├── src/
 │   ├── main.ts           # Entry: initDb → initPlugins → parse; --ui → launchTui()
 │   ├── generated/
