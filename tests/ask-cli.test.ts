@@ -1,7 +1,13 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 
 const MAIN = join(import.meta.dir, "..", "src", "main.ts");
+
+// Unique per-process DB so a stale file from a prior run (or a parallel test
+// file sharing /tmp) can't leak state into these assertions.
+const TEST_DB = join(tmpdir(), `bee-ask-cli-${process.pid}.db`);
 
 // ── Mock LM server: responds instantly with a canned answer ─────────────────
 let mockUrl = "";
@@ -45,7 +51,12 @@ beforeAll(() => {
   mockUrl = `http://127.0.0.1:${mockServer.port}`;
 });
 
-afterAll(() => { mockServer?.stop(); });
+afterAll(() => {
+  mockServer?.stop();
+  rmSync(TEST_DB, { force: true });
+  rmSync(`${TEST_DB}-shm`, { force: true });
+  rmSync(`${TEST_DB}-wal`, { force: true });
+});
 
 async function runCli(args: string[], extraEnv: Record<string, string> = {}): Promise<{ code: number; out: string; err: string }> {
   const lmUrl = extraEnv.CB_DATABRICK_URL ?? mockUrl;
@@ -53,7 +64,7 @@ async function runCli(args: string[], extraEnv: Record<string, string> = {}): Pr
   const env = {
     ...process.env,
     ...extraEnv,
-    CB_DB_PATH: "/tmp/bee-ask-cli-test.db",
+    CB_DB_PATH: TEST_DB,
     CB_DATABRICK_URL: lmUrl,
     CB_LM_URL: "",
     CB_CLIENT_ID: "",
