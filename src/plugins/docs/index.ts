@@ -1,6 +1,6 @@
 import type { Plugin, PluginContext } from "../../registry/types";
 import { registerDocsCommands } from "./commands";
-import { LM_URL, LM_API_KEY, LM_MODEL, LM_CLIENT_ID, LM_CLIENT_SECRET } from "./config";
+import { LM_URL, LM_API_KEY, LM_MODEL, LM_CLIENT_ID, LM_CLIENT_SECRET, API_BASE_URL } from "./config";
 import { setProvider, getProvider } from "./answer";
 import { OpenAICompatProvider } from "./providers/openai";
 import { DatabricksOAuthProvider, isDatabricksHost } from "./providers/databricks";
@@ -35,7 +35,7 @@ export const docsPlugin: Plugin = {
         }
       }
       if (!getProvider()) {
-        setProvider(new OpenAICompatProvider(LM_URL, LM_API_KEY, LM_MODEL));
+        setProvider(new OpenAICompatProvider(API_BASE_URL || LM_URL, LM_API_KEY, LM_MODEL));
       }
     }
     registerDocsCommands(ctx);

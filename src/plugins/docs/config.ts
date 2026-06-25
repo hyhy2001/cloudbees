@@ -61,14 +61,16 @@ const LM_PATH_PREFIX = pick(
   typeof BEE_PATH_PREFIX !== "undefined" ? BEE_PATH_PREFIX : undefined,
   "CB_PATH_PREFIX",
 );
-// LM_URL includes path prefix so providers construct {LM_URL}/v1/chat/completions correctly
+// LM_URL is the base (for OAuth, host detection). API_BASE_URL adds path prefix
+// for actual API calls (chat, embeddings) — e.g. /ai-gateway/mlflow.
 const BASE_URL = ensureProtocol(
   pick(
     typeof BEE_LM_URL !== "undefined" ? BEE_LM_URL : undefined,
     "CB_DATABRICK_URL",
   ),
 );
-export const LM_URL = BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}${LM_PATH_PREFIX}` : "";
+export const LM_URL = BASE_URL;
+export const API_BASE_URL = BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}${LM_PATH_PREFIX}` : "";
 export const EMBEDDING_MODEL =
   pick(typeof BEE_EMBEDDING_MODEL !== "undefined" ? BEE_EMBEDDING_MODEL : undefined, "CB_EMBEDDING_MODEL") ||
   "Xenova/all-MiniLM-L6-v2";
@@ -76,6 +78,6 @@ const EXPLICIT_EMBEDDING_URL = ensureProtocol(
   pick(typeof BEE_EMBEDDING_URL !== "undefined" ? BEE_EMBEDDING_URL : undefined, "CB_EMBEDDING_URL"),
 );
 export const EMBEDDING_URL = EXPLICIT_EMBEDDING_URL ||
-  (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && LM_URL
-    ? `${LM_URL.replace(/\/+$/, "")}/v1/embeddings`
+  (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && API_BASE_URL
+    ? `${API_BASE_URL.replace(/\/+$/, "")}/v1/embeddings`
     : "");
