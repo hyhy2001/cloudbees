@@ -48,6 +48,21 @@ if (!LM_URL) {
   process.exit(1);
 }
 
+// Quick connectivity check before iterating all commands (avoids 30s timeouts
+// per command when the LM endpoint is unreachable).
+try {
+  const health = await fetch(`${LM_URL.replace(/\/+$/, "")}/v1/models`, {
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!health.ok) {
+    console.error(`LM endpoint at ${LM_URL} returned ${health.status} — skipping synonym generation.`);
+    process.exit(1);
+  }
+} catch {
+  console.error(`LM endpoint at ${LM_URL} is unreachable — skipping synonym generation.`);
+  process.exit(1);
+}
+
 // ---- Build corpus -----------------------------------------------------------
 
 const program = new Command("bee");

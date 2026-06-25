@@ -2,7 +2,8 @@
 
 SHELL        := /bin/bash
 WRAPPER_CSH  := $(CURDIR)/bee.csh
-WRAPPER_LINK := $(HOME)/.local/bin/bee
+INSTALL_DIR  ?= $(HOME)/.local/bin
+WRAPPER_LINK := $(INSTALL_DIR)/bee
 
 # Version pulled from package.json — used to name the release tarball.
 VERSION      := $(shell grep '"version"' package.json | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
@@ -22,10 +23,16 @@ BUN          := $(BUN_INSTALL)/bin/bun
 # (overlayfs, panel jails, per-user quotas), the default hardlink backend
 # fails with a misleading "EDQUOT: disk quota exceeded" while creating a
 # temporary directory. copyfile + a co-located cache/tmp avoids that.
+# Also override npm/node-gyp cache paths so packages like sharp don't try
+# to write to ~/.npm (which may have disk quota on a different filesystem).
 BUN_TMP      := $(BUN_INSTALL)/tmp
 BUN_CACHE    := $(BUN_INSTALL)/cache
 # Prefix applied to every bun invocation that writes to disk.
-BUN_ENV      := TMPDIR="$(BUN_TMP)" BUN_INSTALL_CACHE_DIR="$(BUN_CACHE)"
+BUN_ENV      := TMPDIR="$(BUN_TMP)" \
+                BUN_INSTALL_CACHE_DIR="$(BUN_CACHE)" \
+                npm_config_cache="$(BUN_CACHE)/npm" \
+                npm_config_tmp="$(BUN_TMP)/npm" \
+                XDG_CACHE_HOME="$(BUN_CACHE)"
 
 help:
 	@echo ""
@@ -62,10 +69,14 @@ install: deps
 	@echo "  [OK] tarball: $(TARBALL)"
 	@printf '#!/usr/bin/env csh\nexec "%s/dist/bee" $$*\n' "$(CURDIR)" > "$(WRAPPER_CSH)"
 	@chmod +x "$(WRAPPER_CSH)"
-	@mkdir -p "$(HOME)/.local/bin"
-	@ln -sf "$(WRAPPER_CSH)" "$(WRAPPER_LINK)"
-	@echo "  [OK] wrapper: $(WRAPPER_CSH)"
-	@echo "  [OK] symlink: $(WRAPPER_LINK) -> $(WRAPPER_CSH)"
+	@if mkdir -p "$(INSTALL_DIR)" 2>/dev/null; then \
+	  ln -sf "$(WRAPPER_CSH)" "$(WRAPPER_LINK)"; \
+	  echo "  [OK] symlink: $(WRAPPER_LINK) -> $(WRAPPER_CSH)"; \
+	else \
+	  echo "  [SKIP] $(INSTALL_DIR): not writable (set INSTALL_DIR to override)"; \
+	  echo "  [HINT] Add $(CURDIR)/dist/bee to your PATH, or"; \
+	  echo "         run: sudo make install INSTALL_DIR=/usr/local/bin"; \
+	fi
 
 build: deps
 	@$(BUN_ENV) $(BUN) run build.ts
