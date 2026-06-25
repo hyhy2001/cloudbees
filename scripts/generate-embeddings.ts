@@ -19,9 +19,11 @@ const lmFile = (await Bun.file("bee.lm.json").json().catch(() => ({}))) as Recor
 const MODEL_NAME = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2";
 const LM_URL = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRICK_URL ?? "";
 const API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
-const API_URL = MODEL_NAME !== "Xenova/all-MiniLM-L6-v2" && LM_URL
-  ? `${LM_URL.replace(/\/+$/, "")}/v1/embeddings`
-  : "";
+const EXPLICIT_URL = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ?? "";
+const API_URL = EXPLICIT_URL ||
+  (MODEL_NAME !== "Xenova/all-MiniLM-L6-v2" && LM_URL
+    ? `${LM_URL.replace(/\/+$/, "")}/v1/embeddings`
+    : "");
 
 const { initPlugins } = await import("../src/registry");
 const { buildCorpus } = await import("../src/plugins/docs/corpus");

@@ -22,6 +22,7 @@ interface LmConfig {
   clientId?: string;
   clientSecret?: string;
   embeddingModel?: string;
+  embeddingUrl?: string;
   // Legacy keys from bee.lm.json (env-var-named)
   CB_DATABRICK_URL?: string;
   CB_API_KEY?: string;
@@ -29,6 +30,7 @@ interface LmConfig {
   CB_CLIENT_ID?: string;
   CB_CLIENT_SECRET?: string;
   CB_EMBEDDING_MODEL?: string;
+  CB_EMBEDDING_URL?: string;
 }
 const lmFile = (await Bun.file("bee.lm.json")
   .json()
@@ -40,9 +42,11 @@ const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env.CB_LM_MODEL ?
 const LM_CLIENT_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
 const LM_CLIENT_SECRET = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";
 const EMBEDDING_MODEL = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2";
-const EMBEDDING_URL = EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && LM_URL
-  ? `${LM_URL.replace(/\/+$/, "")}/v1/embeddings`
-  : "";
+const EXPLICIT_EMBEDDING_URL = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ?? "";
+const EMBEDDING_URL = EXPLICIT_EMBEDDING_URL ||
+  (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && LM_URL
+    ? `${LM_URL.replace(/\/+$/, "")}/v1/embeddings`
+    : "");
 
 await Bun.$`bun run scripts/generate-help-index.ts`;
 
@@ -109,6 +113,7 @@ const result = await Bun.build({
     BEE_LM_CLIENT_ID: JSON.stringify(LM_CLIENT_ID),
     BEE_LM_CLIENT_SECRET: JSON.stringify(LM_CLIENT_SECRET),
     BEE_EMBEDDING_MODEL: JSON.stringify(EMBEDDING_MODEL),
+    BEE_EMBEDDING_URL: JSON.stringify(EMBEDDING_URL),
   },
   jsx: {
     runtime: "automatic",

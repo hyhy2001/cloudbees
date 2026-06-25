@@ -26,6 +26,7 @@ declare const BEE_LM_MODEL: string | undefined;
 declare const BEE_LM_CLIENT_ID: string | undefined;
 declare const BEE_LM_CLIENT_SECRET: string | undefined;
 declare const BEE_EMBEDDING_MODEL: string | undefined;
+declare const BEE_EMBEDDING_URL: string | undefined;
 
 function pick(baked: string | undefined, envKey: string): string {
   if (typeof baked !== "undefined" && baked !== "") return baked;
@@ -64,6 +65,10 @@ export const LM_CLIENT_SECRET = pick(
 export const EMBEDDING_MODEL =
   pick(typeof BEE_EMBEDDING_MODEL !== "undefined" ? BEE_EMBEDDING_MODEL : undefined, "CB_EMBEDDING_MODEL") ||
   "Xenova/all-MiniLM-L6-v2";
-export const EMBEDDING_URL = LM_URL && EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2"
-  ? ensureProtocol(`${LM_URL.replace(/\/+$/, "")}/v1/embeddings`)
-  : "";
+const EXPLICIT_EMBEDDING_URL = ensureProtocol(
+  pick(typeof BEE_EMBEDDING_URL !== "undefined" ? BEE_EMBEDDING_URL : undefined, "CB_EMBEDDING_URL"),
+);
+export const EMBEDDING_URL = EXPLICIT_EMBEDDING_URL ||
+  (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && LM_URL
+    ? `${LM_URL.replace(/\/+$/, "")}/v1/embeddings`
+    : "");
