@@ -559,7 +559,7 @@ User query
   → Top-5 → Prompt → LM Generator (API, 1 call)
 ```
 
-**1 API call per query** (generator only). Retrieval, vector search, graph, and reranker are all local via the bundled MiniLM model.
+**1 API call per query** (generator only). Retrieval, vector search, graph, and reranker are all local via the bundled embedding model (MiniLM by default, configurable via `embedding_model` in `bee.lm.json` or `CB_EMBEDDING_MODEL` env var).
 
 ### Retrieval components
 
@@ -812,10 +812,12 @@ Before compiling, `build.ts` runs code-generation scripts:
 
 1. `scripts/generate-help-index.ts` → `src/generated/help-index.ts` (help facts for `bee ask`)
 2. `scripts/generate-embeddings.ts` → `src/generated/embeddings.ts` (neural corpus vectors, 86 KB)
-3. `scripts/generate-embedding-model.ts` → `src/generated/embedding-model.ts` (MiniLM model files, 31 MB, gitignored — regenerated per build)
+3. `scripts/generate-embedding-model.ts` → `src/generated/embedding-model.ts` (model files, ~31 MB base64, gitignored — regenerated per build; model name from `bee.lm.json`/`CB_EMBEDDING_MODEL`, default `Xenova/all-MiniLM-L6-v2`)
 4. `scripts/generate-synonyms.ts` → `src/generated/synonyms.ts` (111 build-time LLM synonym entries, merged with hand-maintained map at runtime)
 
 If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. Supported auth: static Bearer token (`CB_API_KEY`) or Databricks OAuth M2M (`CB_CLIENT_ID` + `CB_CLIENT_SECRET`). The build logs which auth method was detected; it never logs the secret itself.
+
+Embedding model auto-switch: set `embedding_model` in `bee.lm.json` to any HuggingFace ONNX model (e.g. `Xenova/multilingual-e5-small`). The build scripts bundle that model's files; `bee ask` uses it for query and reranker embeddings at runtime. When the model bundle fails (no cache), a fallback `MODEL_FILES = {}` is written so compilation always succeeds — the model is downloaded from HuggingFace on first use instead.
 
 ## Security
 
@@ -839,7 +841,8 @@ This is a developer-tool threat model: the OS file permission on `.bee_secret` i
 | `CB_API_KEY` | Static Bearer token / PAT |
 | `CB_CLIENT_ID` | OAuth client ID for Databricks M2M |
 | `CB_CLIENT_SECRET` | OAuth client secret for Databricks M2M |
-| `CB_LM_MODEL` | Model identifier (e.g. a HuggingFace model name) |
+| `CB_LM_MODEL` | LM model identifier (e.g. a HuggingFace model name) |
+| `CB_EMBEDDING_MODEL` | Embedding model name for vector search (default: `Xenova/all-MiniLM-L6-v2`) |
 
 ## Project Structure
 
