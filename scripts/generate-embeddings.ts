@@ -14,12 +14,14 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Command } from "commander";
-import { pipeline } from "@xenova/transformers";
 
 const lmFile = (await Bun.file("bee.lm.json").json().catch(() => ({}))) as Record<string, string>;
 const MODEL_NAME = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2";
-
-const DIM = 384; // all-MiniLM-L6-v2 output dimension
+const LM_URL = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRICK_URL ?? "";
+const API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
+const API_URL = MODEL_NAME !== "Xenova/all-MiniLM-L6-v2" && LM_URL
+  ? `${LM_URL.replace(/\/+$/, "")}/v1/embeddings`
+  : "";
 
 const { initPlugins } = await import("../src/registry");
 const { buildCorpus } = await import("../src/plugins/docs/corpus");
@@ -30,8 +32,37 @@ program.exitOverride();
 await initPlugins(program);
 const corpus = buildCorpus(program);
 
-console.log("Loading embedding model (first run downloads ~80 MB)…");
-const extract = await pipeline("feature-extraction", MODEL_NAME);
+type EmbedFn = (text: string) => Promise<number[]>;
+let embed: EmbedFn;
+let DIM = 384;
+
+if (API_URL) {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (API_KEY) headers["authorization"] = `Bearer ${API_KEY}`;
+  embed = async (t: string) => {
+    const r = await fetch(API_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ input: t.slice(0, 2048), model: MODEL_NAME }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!r.ok) throw new Error(`Embedding API returned ${r.status}`);
+    const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };
+    return j.data?.[0]?.embedding ?? [];
+  };
+  console.log("Using API embedding…");
+  // Detect dimension from first response
+  const first = await embed(corpus[0]!.title);
+  DIM = first.length;
+} else {
+  const { pipeline } = await import("@xenova/transformers");
+  console.log("Loading embedding model (first run downloads ~80 MB)…");
+  const extract = await pipeline("feature-extraction", MODEL_NAME);
+  embed = async (t: string) => {
+    const result = await extract(t.slice(0, 512), { pooling: "mean", normalize: true });
+    return Array.from(result.data) as number[];
+  };
+}
 
 const ids: string[] = [];
 const values: number[] = [];

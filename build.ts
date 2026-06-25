@@ -10,34 +10,6 @@ const VERSION =
 
 console.log(`Building bee v${VERSION} → ./dist/bee`);
 
-await Bun.$`bun run scripts/generate-help-index.ts`;
-
-// Generate pre-built embeddings (@xenova/transformers optional).
-try {
-  await Bun.$`bun run scripts/generate-embeddings.ts`;
-} catch {
-  console.log("  Vector embeddings: skipped (@xenova/transformers not available)");
-  console.log("  → Will use BM25-only search at runtime.");
-}
-
-// Bundle the embedding model into the binary (so it's fully self-contained).
-try {
-  await Bun.$`bun run scripts/generate-embedding-model.ts`;
-} catch {
-  console.log("  Embedding model: not bundled (will download on first use if available)");
-  await Bun.write("src/generated/embedding-model.ts", `// Fallback — model not bundled at build time.
-export const MODEL_FILES: Record<string, string> = {};
-`);
-}
-
-// Generate build-time synonym map (LLM alternative verbs for commands).
-// This runs after embeddings so both neural and synonym data are available.
-try {
-  await Bun.$`bun run scripts/generate-synonyms.ts`;
-} catch {
-  console.log("  Synonyms: skipped (LM endpoint not available)");
-}
-
 // ─── LM endpoint config (baked into the binary) ──────────────────────────────
 // Source priority: bee.lm.json (gitignored) → CB_* env → empty (offline binary).
 // Values are inlined as string literals via `define`, so a copied binary carries
@@ -68,7 +40,52 @@ const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env.CB_LM_MODEL ?
 const LM_CLIENT_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
 const LM_CLIENT_SECRET = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";
 const EMBEDDING_MODEL = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2";
+const EMBEDDING_URL = EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && LM_URL
+  ? `${LM_URL.replace(/\/+$/, "")}/v1/embeddings`
+  : "";
 
+await Bun.$`bun run scripts/generate-help-index.ts`;
+
+// Generate pre-built embeddings (@xenova/transformers optional).
+try {
+  await Bun.$`bun run scripts/generate-embeddings.ts`;
+} catch {
+  console.log("  Vector embeddings: skipped (@xenova/transformers not available)");
+  console.log("  → Will use BM25-only search at runtime.");
+}
+
+// Bundle the embedding model into the binary (so it's fully self-contained).
+// When a custom EMBEDDING_MODEL is set (non-default) with LM_URL, the model
+// is called via API — no local bundling needed.
+if (!EMBEDDING_URL) {
+  try {
+    await Bun.$`bun run scripts/generate-embedding-model.ts`;
+  } catch {
+    console.log("  Embedding model: not bundled (will download on first use if available)");
+    await Bun.write("src/generated/embedding-model.ts", `// Fallback — model not bundled at build time.
+export const MODEL_FILES: Record<string, string> = {};
+`);
+  }
+} else {
+  console.log(`  Embedding model: API (${EMBEDDING_MODEL}) — skip local bundling`);
+  await Bun.write("src/generated/embedding-model.ts", `// API-based embedding — no local model files.
+export const MODEL_FILES: Record<string, string> = {};
+`);
+}
+
+// Generate build-time synonym map (LLM alternative verbs for commands).
+// This runs after embeddings so both neural and synonym data are available.
+try {
+  await Bun.$`bun run scripts/generate-synonyms.ts`;
+} catch {
+  console.log("  Synonyms: skipped (LM endpoint not available)");
+}
+
+// ─── LM endpoint config (baked into the binary) ──────────────────────────────
+// Source priority: bee.lm.json (gitignored) → CB_* env → empty (offline binary).
+// Values are inlined as string literals via `define`, so a copied binary carries
+// its own config. The API key is embedded in the binary (extractable via
+// `strings`); only bake keys whose scope you accept being shipped in the binary.
 // Never log the key — only whether the LM is wired and to which endpoint.
 console.log(
   LM_URL

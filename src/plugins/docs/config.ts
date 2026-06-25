@@ -64,3 +64,6 @@ export const LM_CLIENT_SECRET = pick(
 export const EMBEDDING_MODEL =
   pick(typeof BEE_EMBEDDING_MODEL !== "undefined" ? BEE_EMBEDDING_MODEL : undefined, "CB_EMBEDDING_MODEL") ||
   "Xenova/all-MiniLM-L6-v2";
+export const EMBEDDING_URL = LM_URL && EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2"
+  ? ensureProtocol(`${LM_URL.replace(/\/+$/, "")}/v1/embeddings`)
+  : "";

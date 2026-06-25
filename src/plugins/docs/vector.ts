@@ -25,7 +25,7 @@ function beeDir(): string {
   return dirname(p);
 }
 import type { DocItem } from "./corpus";
-import { EMBEDDING_MODEL } from "./config";
+import { EMBEDDING_MODEL, EMBEDDING_URL, LM_API_KEY } from "./config";
 import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
 import { MODEL_FILES } from "../../generated/embedding-model";
 
@@ -77,8 +77,26 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
   if (_embedFn === false) return null;
   if (_embedFn) return _embedFn;
   try {
-    // Serve bundled model files from memory via env.fs override —
-    // zero disk writes, zero temp files, completely sealed in the binary.
+    // API-based embedding (Databricks, OpenAI-compatible, etc.)
+    if (EMBEDDING_URL) {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (LM_API_KEY) headers["authorization"] = `Bearer ${LM_API_KEY}`;
+      _embedFn = async (t: string) => {
+        const r = await fetch(EMBEDDING_URL, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ input: t.slice(0, 2048), model: EMBEDDING_MODEL }),
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!r.ok) throw new Error(`Embedding API returned ${r.status}`);
+        const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };
+        return j.data?.[0]?.embedding ?? [];
+      };
+      if (!_statusLogged) { _statusLogged = true; process.stderr.write("[vector] API embedding OK\n"); }
+      return _embedFn;
+    }
+
+    // Local model (@xenova/transformers, bundled in binary)
     const { pipeline, env } = await import("@xenova/transformers");
     env.cacheDir = join(beeDir(), ".bee-models");
     env.localModelPath = env.cacheDir;
