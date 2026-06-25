@@ -78,7 +78,7 @@ function parseParamDefs(raw: string[]): StringParamDef[] {
 
 export function registerJobCommands(ctx: PluginContext): void {
   const dbPath = process.env["CB_DB_PATH"];
-  const profile = getActiveProfileName(dbPath);
+  const profile = (() => { try { return getActiveProfileName(dbPath) ?? ""; } catch { return ""; } })();
 
   const grp = ctx.program
     .command("job")

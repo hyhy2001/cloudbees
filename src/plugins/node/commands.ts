@@ -26,7 +26,7 @@ import {
 
 export function registerNodeCommands(ctx: PluginContext): void {
   const dbPath = process.env["CB_DB_PATH"];
-  const profile = getActiveProfileName(dbPath);
+  const profile = (() => { try { return getActiveProfileName(dbPath) ?? ""; } catch { return ""; } })();
 
   const grp = ctx.program.command("node").description("Manage CloudBees build agents, workers, and executor nodes");
 

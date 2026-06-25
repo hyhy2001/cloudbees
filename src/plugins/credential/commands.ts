@@ -60,7 +60,7 @@ function warnUserStoreFallback(store: string, dbPath?: string): void {
 
 export function registerCredentialCommands(ctx: PluginContext): void {
   const dbPath = process.env["CB_DB_PATH"];
-  const profile = getActiveProfileName(dbPath);
+  const profile = (() => { try { return getActiveProfileName(dbPath) ?? ""; } catch { return ""; } })();
 
   const grp = ctx.program.command("cred").description("Manage CloudBees credentials (secrets, tokens, passwords, API keys, SSH keys)");
 
