@@ -104,7 +104,7 @@ clean:
 	  mkdir -p backups; \
 	  cp dist/data/cb.db backups/cb.db; \
 	  echo "  [BACKUP] dist/data/cb.db → backups/cb.db"; \
-	  [ -f dist/data/.bee_secret ] && cp dist/data/.bee_secret backups/.bee_secret; \
+	  [ -f dist/data/.bee_secret ] && cp dist/data/.bee_secret backups/.bee_secret || true; \
 	fi
 	@rm -rf dist node_modules
 
