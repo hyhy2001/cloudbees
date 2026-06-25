@@ -565,7 +565,6 @@ User query
 
 **BM25 / FTS5** (`corpus.ts`) — SQLite FTS5 search with synonym expansion (100+ hand-maintained domain synonyms + 111 build-time LLM-generated synonyms merged with priority), column weights (title×10, description×5, body×1), exact command-path promotion, and a word-start relevance gate (≥60% coverage). Generated synonyms are pruned (no self-references or multi-word entries) and guarded by a reserved-token blocklist. Hand-maintained entries always win over generated ones.
 
-
 ### Adding help facts
 
 Help facts live in `scripts/generate-help-index.ts`. Each fact has:
@@ -732,8 +731,8 @@ bun test tests/docs-search.test.ts
   plugins/           auth · controller · job · node · credential · system · foldersplus
       │   per plugin: commands.ts (CLI) + service.ts (logic), plus screen.tsx (TUI tab)
       │   and xml-builder.ts (config.xml) where that plugin needs them.
-      │   foldersplus is a stub (no commands, no tab); its handshake lives on
-      │   the node/job services and is driven via `bee job` / `bee node update`
+│   foldersplus has no standalone CLI — its handshake lives on the
+│   node/job services and is driven via `bee job` / `bee node update`
       ▼
   core/              stable engine — NEVER imports plugins/
    ├── api/          HTTP client, CSRF crumb, retry, typed errors
