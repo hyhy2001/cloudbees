@@ -71,8 +71,8 @@ const values: number[] = [];
 
 for (const item of corpus) {
   const text = [item.title, item.description, item.body].filter(Boolean).join(" ").slice(0, 512);
-  const result = await extract(text, { pooling: "mean", normalize: true });
-  const vec = Array.from(result.data) as number[];
+  const result = await embed(text);
+  const vec = Array.from(result) as number[];
   ids.push(item.id);
   values.push(...vec);
 
