@@ -26,7 +26,7 @@ function beeDir(): string {
   return dirname(p);
 }
 import type { DocItem } from "./corpus";
-import { EMBEDDING_MODEL, EMBEDDING_URL, LM_API_KEY, LM_URL, EMBEDDING_PATH } from "./config";
+import { EMBEDDING_MODEL, EMBEDDING_URL, LM_API_KEY, LM_URL, EMBEDDING_PATH, LM_CLIENT_ID, LM_CLIENT_SECRET } from "./config";
 import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
 import { MODEL_FILES } from "../../generated/embedding-model";
 
@@ -77,8 +77,21 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
   try {
     // API-based embedding (Databricks, OpenAI-compatible, etc.)
     if (EMBEDDING_URL) {
+      // Auth: OAuth (client_id + client_secret) → Bearer token, else static API_KEY
+      let bearer = LM_API_KEY;
+      if (!bearer && LM_CLIENT_ID && LM_CLIENT_SECRET && LM_URL) {
+        try {
+          const r = await fetch(`${LM_URL.replace(/\/+$/, "")}/oidc/v1/token`, {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: `grant_type=client_credentials&scope=all-apis&client_id=${LM_CLIENT_ID}&client_secret=${LM_CLIENT_SECRET}`,
+            signal: AbortSignal.timeout(10000),
+          });
+          if (r.ok) bearer = ((await r.json()) as { access_token: string }).access_token;
+        } catch { /* fall through */ }
+      }
       const headers: Record<string, string> = { "content-type": "application/json" };
-      if (LM_API_KEY) headers["authorization"] = `Bearer ${LM_API_KEY}`;
+      if (bearer) headers["authorization"] = `Bearer ${bearer}`;
       const urlCandidates = [EMBEDDING_URL];
       if (!EMBEDDING_URL.endsWith("/v1/embeddings") && LM_URL) {
         urlCandidates.push(`${LM_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}`);
