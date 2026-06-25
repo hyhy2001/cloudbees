@@ -60,7 +60,7 @@ $(BUN):
 bun: $(BUN)
 
 deps: $(BUN)
-	@mkdir -p "$(BUN_TMP)" "$(BUN_CACHE)"
+	@mkdir -p "$(BUN_TMP)" "$(BUN_CACHE)" "$(BUN_CACHE)/npm" "$(BUN_TMP)/npm"
 	@$(BUN_ENV) $(BUN) install --backend=copyfile
 
 install: deps
