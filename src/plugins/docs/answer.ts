@@ -123,7 +123,7 @@ Examples:
 async function rewriteQuery(query: string, provider: LMProvider): Promise<string> {
   try {
     const prompt = `${REWRITE_PROMPT}\n\n  "${query}" →`;
-    const raw = await provider.generate(prompt);
+    const raw = await provider.generate(prompt, 64);
     const keywords = raw.trim().split(/\s+/).slice(0, 8).join(" ");
     if (keywords.length > 0) return keywords;
   } catch {
@@ -149,7 +149,7 @@ async function rewriteQuery(query: string, provider: LMProvider): Promise<string
  */
 export interface LMProvider {
   readonly name: string;
-  generate(prompt: string): Promise<string>;
+  generate(prompt: string, maxTokens?: number): Promise<string>;
   stream?(prompt: string): AsyncGenerator<string, void, unknown>;
 }
 
