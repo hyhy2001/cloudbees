@@ -10,7 +10,7 @@
 
 import { buildUserPrompt } from "./context";
 import { searchDocs, type DocItem } from "./corpus";
-import { rerank } from "./rerank";
+// import { rerank } from "./rerank"; // disabled — see answer() comment
 import { buildGraphFromCorpus, expandGraph, type CommandGraph } from "./graph";
 import { getVectorDb, searchVector, rrfFusion, embed } from "./vector";
 
@@ -212,9 +212,10 @@ export async function answer(
   const graphExtra = expandGraph(fused, corpus, graph, 3);
   fused = [...fused, ...graphExtra];
 
-  // LM reranker: score top candidates, keep top-K.
-  const reRanked = await rerank(query, fused.slice(0, 15));
-  const contextHits = reRanked.slice(0, limit);
+  // LM reranker disabled — BM25+RRF order is already high-quality (98.4%
+  // Recall@1) and reranking with a mismatched embedding endpoint corrupts it.
+  // ponytail: re-enable when corpus and runtime always share the same embedding endpoint.
+  const contextHits = fused.slice(0, limit);
 
   if (process.env.BEE_DEBUG_TRACEBACK) {
     process.stderr.write(`[bee ask] context hits: ${contextHits.map(h => h.id).join(", ")}\n`);
