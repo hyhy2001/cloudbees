@@ -544,31 +544,38 @@ Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful 
 
 ## `bee ask` — Help & Natural-Language Search
 
-`bee ask` answers questions about how to use `bee` with a multi-stage RAG pipeline. The answer generator and (optionally) the embedding step need an external LM — everything else runs locally. Embedding uses the configured API endpoint (`CB_EMBEDDING_URL` or derived from `CB_DATABRICK_URL`); no local model is bundled.
+`bee ask` answers questions about how to use `bee` in natural language. Output is rendered as formatted markdown in the terminal (colors, tables, code blocks). A spinner shows while the model is thinking.
 
 ```
 User query
-   → BM25 (FTS5, 84 items, top-15)
-     Synonym expansion (145+ hand-maintained + ~108 build-time generated), relevance gate.
-   → Neural Vector Search (API embedding, top-15)
-      Pre-computed corpus embeddings baked into binary (1024-dim by default).
-  → RRF Fusion (k=60)
-     Reciprocal Rank Fusion: BM25 + Vector results merged.
-  → Graph Expansion (+3 CRUD neighbors)
-     Same-group and same-resource commands.
-  → Bi-encoder Reranker (local, free)
-      Cosine similarity between query and each hit's corpus vector.
-   → Top-5 → Prompt → LM Generator (API, 1 call)
-   ↓
-   Flag hallucination protection: `stripInventedCommands` validates `--xxx` flags
-   against a real flag whitelist; invented flags are removed from answers.
+   → BM25 hard-gate search (local, FTS5)
+       │
+       ├─ hits > 0 ───────────────────────────┐
+       │                                       │
+       └─ hits = 0                             │
+            → LM query rewrite (+1 call, 32 tokens)  │
+              "hello I am newbie" → "getting started login"
+            → BM25 soft-gate search with rewritten query
+              └──────────────────────────────┤
+                                             ▼
+                          BM25 + Vector RRF fusion (when embedding model matches corpus)
+                                             │
+                                         Graph expansion (+3 CRUD neighbors)
+                                             │
+                                         Top-5 → LM answer (+1 call, stream)
+                                             │
+                          stripInventedCommands → markdown render → terminal
 ```
 
-**2 API calls per query**: 1 for embedding, 1 for generation (both use the same endpoint). Custom paths: `CB_CHAT_PATH` (default `/v1/chat/completions`) and `CB_EMBEDDING_PATH` (default `/v1/embeddings`) can be set independently (e.g. for AI Gateway routing like `/ai-gateway/mlflow/v1/chat/completions`).
+**API calls per query**: 1 (well-formed queries) or 2 (colloquial queries that need rewriting). Vector embedding adds 1 call only when the runtime embedding model matches the baked corpus model. Custom paths: `CB_CHAT_PATH` (default `/v1/chat/completions`) and `CB_EMBEDDING_PATH` (default `/v1/embeddings`) can be set independently.
 
-### Retrieval components
+### Output rendering
 
-**BM25 / FTS5** (`corpus.ts`) — SQLite FTS5 search with synonym expansion (145+ hand-maintained action synonyms + ~108 build-time LLM-generated, merged with hand-maintained priority), column weights (title×10, description×5, body×1), exact command-path promotion, flag-phrase promotion, intent patterns, and a word-start relevance gate (≥60% coverage). Generated synonyms are pruned (no self-references or multi-word entries) and guarded by a reserved-token blocklist. Hand-maintained entries always win over generated ones.
+Responses are rendered as terminal markdown:
+- `` `code` `` and ` ```blocks``` ` → green
+- `**bold**` → bold, `## headings` → cyan bold
+- `- bullets` → `•` indented
+- `| tables |` → aligned columns with headers
 
 ### Adding help facts
 

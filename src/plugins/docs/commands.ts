@@ -13,6 +13,24 @@ import { buildCorpus } from "./corpus";
 import { answer, getProvider } from "./answer";
 import { presentAnswer } from "./presenter";
 import { renderMarkdown, StreamingMarkdownRenderer } from "./render";
+import chalk from "chalk";
+
+// ─── Spinner ──────────────────────────────────────────────────────────────────
+
+function startSpinner(text: string): () => void {
+  if (!process.stdout.isTTY) return () => {};
+  const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  let i = 0;
+  process.stderr.write("\x1b[?25l"); // hide cursor
+  const timer = setInterval(() => {
+    process.stderr.write(`\r${chalk.cyan(frames[i++ % frames.length]!)} ${chalk.dim(text)}`);
+  }, 80);
+  return () => {
+    clearInterval(timer);
+    process.stderr.write("\r\x1b[2K"); // clear line
+    process.stderr.write("\x1b[?25h"); // restore cursor
+  };
+}
 
 export function registerDocsCommands(ctx: PluginContext): void {
   ctx.program
@@ -57,7 +75,10 @@ export function registerDocsCommands(ctx: PluginContext): void {
           ctx.program,
           { includeDocChunks: process.env["BEE_ASK_INCLUDE_DOC_CHUNKS"] === "1" },
         );
+
+        const stopSpinner = startSpinner("Thinking…");
         const result = await answer(query, corpus, limit);
+        stopSpinner();
 
         if (result.source === "raw" && result.hits.length === 0) {
           printInfo(`INFO No results matched '${query}'. Try 'bee --help' for commands.`);
