@@ -11,8 +11,9 @@ import { getTrackedResources, trackResource, untrackResource } from "../../core/
 import { colorForLine } from "../../core/tui/data/log-buffer";
 import chalk from "chalk";
 
-/** Apply color to each line of build log output. */
+/** Apply color to each line of build log output. No-op when stdout is not a TTY (pipe/redirect). */
 function colorizeLog(text: string): string {
+  if (!process.stdout.isTTY) return text;
   return text.split("\n").map((line) => {
     const color = colorForLine(line);
     return color ? chalk.hex(color)(line) : line;
