@@ -83,7 +83,7 @@ build: deps
 
 # Quick rebuild — skip codegen (embeddings, synonyms, help-index).
 # Use when only source code changed, not corpus/config/LM.
-quick: $(BUN)
+quick: deps
 	@CB_SKIP_CODEGEN=1 $(BUN_ENV) $(BUN) run build.ts
 
 init: build
