@@ -39,8 +39,9 @@ export function registerDocsCommands(ctx: PluginContext): void {
     .argument("<query...>", "What you want to do (e.g. 'create node --host', 'what is a profile')")
     .option("--limit <n>", "Max context items to retrieve", "5")
     .option("--json", "Output machine-readable JSON", false)
+    .option("--no-stream", "Disable streaming — collect full response before printing", false)
     .allowUnknownOption()
-    .action(async (queryParts: string[], opts: { limit: string; json: boolean }) => {
+    .action(async (queryParts: string[], opts: { limit: string; json: boolean; stream: boolean }) => {
       try {
         // passThroughOptions passes unknown --flags into queryParts so users can
         // query "create node --host" without commander treating --host as an error.
@@ -51,9 +52,11 @@ export function registerDocsCommands(ctx: PluginContext): void {
         const cleanParts: string[] = [];
         let jsonFlag = opts.json;
         let limitFlag = opts.limit;
+        let streamFlag = opts.stream; // false when --no-stream is passed
         for (let i = 0; i < queryParts.length; i++) {
           const part = queryParts[i]!;
           if (part === "--json") { jsonFlag = true; continue; }
+          if (part === "--no-stream") { streamFlag = false; continue; }
           if (part === "--limit" && i + 1 < queryParts.length) { limitFlag = queryParts[++i]!; continue; }
           cleanParts.push(part);
         }
@@ -113,7 +116,7 @@ export function registerDocsCommands(ctx: PluginContext): void {
         }
 
         if (result.source === "lm") {
-          if (result.stream && result.streamOutput) {
+          if (streamFlag && result.stream && result.streamOutput) {
             const renderer = new StreamingMarkdownRenderer(
               (s) => process.stdout.write(s),
             );
@@ -122,13 +125,15 @@ export function registerDocsCommands(ctx: PluginContext): void {
               if (!stopped) { stopSpinner(); stopped = true; }
               renderer.push(chunk);
             });
-            if (!stopped) stopSpinner(); // no tokens arrived
+            if (!stopped) stopSpinner();
             renderer.flush();
             process.stdout.write("\n");
             return;
           }
+          // --no-stream or no stream method: collect full response then render.
+          const text = result.text || (result.streamOutput ? await result.streamOutput(() => {}) : "");
           stopSpinner();
-          printMessage(renderMarkdown(result.text));
+          printMessage(renderMarkdown(text));
           return;
         }
 

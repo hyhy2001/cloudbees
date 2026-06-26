@@ -79,14 +79,14 @@ async function runCli(args: string[], extraEnv: Record<string, string> = {}): Pr
 
 describe("bee ask CLI", () => {
   test("returns command answer with usage", async () => {
-    const { code, out } = await runCli(["ask", "stop", "build"]);
+    const { code, out } = await runCli(["ask", "stop", "build", "--no-stream"]);
     expect(code).toBe(0);
     expect(out).toContain("bee job stop <name>");
     expect(out).not.toContain("concepts.md");
   });
 
   test("returns concept answer with explanation text", async () => {
-    const { code, out } = await runCli(["ask", "what", "is", "a", "profile"]);
+    const { code, out } = await runCli(["ask", "what", "is", "a", "profile", "--no-stream"]);
     expect(code).toBe(0);
     expect(out).toContain("A profile is a saved login target");
     expect(out).not.toContain("concepts.md");
