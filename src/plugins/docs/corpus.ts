@@ -821,6 +821,8 @@ export function searchDocs(
       // login + profile → auth.login (overrides auth.use patterns above)
       [/\blogin\s+.*\bprofile\b/i, "auth.login"],
       [/\bprofile\s+.*\blogin\b/i, "auth.login"],
+      // "auth login --profile" explicit command path → auth.login not auth.use
+      [/\bauth\s+login\b/i, "auth.login"],
       // pipeline command vs concept: imperative → command, how-to → concept
       [/\bhow\s+(do\s+i|to|can\s+i)\s+(create|make)\s+(a\s+)?pipeline\b/i, "concept.create-pipeline"],
       [/\b(create|make|add)\s+(a\s+)?pipeline\b/i, "job.create.pipeline"],
@@ -830,12 +832,23 @@ export function searchDocs(
       [/\bremove\s+agent\b/i, "job.remove-agent"],
       // "what is a pipeline job" → concept.pipeline
       [/\bpipeline\s+job\b/i, "concept.pipeline"],
-      // "add an agent/node" → node.create
-      [/\badd\s+(a[n]?\s+)?(agent|node)\b/i, "node.create"],
+      // "add an agent/node/machine" → node.create
+      [/\badd\s+(a[n]?\s+)?(agent|node|machine)\b/i, "node.create"],
       // "what is a/the X" concept queries
       [/\bwhat\s+is\s+(a\s+)?controller\b/i, "concept.controller"],
       [/\bwhat\s+is\s+(a\s+)?job\b/i, "concept.what-is-job"],
       [/\bcontrolled\s+agent\b/i, "concept.controlled-agent"],
+      // "what is credential store" → concept.credential-store (not concept.what-is-credential)
+      [/\bwhat\s+is\s+(a\s+|the\s+)?credential\s+store\b/i, "concept.credential-store"],
+      [/\bcredential\s+store\b.*\b(mean|what|explain|concept)\b/i, "concept.credential-store"],
+      [/\b(mean|what|explain)\b.*\bcredential\s+store\b/i, "concept.credential-store"],
+      // "add a build machine" → concept.add-node
+      [/\badd\s+(a\s+)?(build\s+)?machine\b/i, "concept.add-node"],
+      // "how to run job" → job.run (not concept.job-run-stop)
+      [/\bhow\s+(to|do\s+i)\s+run\s+job\b/i, "job.run"],
+      // "how to create/update node" → node.create/node.update (not pipeline or track)
+      [/\bhow\s+(to|do\s+i)\s+create\s+node\b/i, "node.create"],
+      [/\bhow\s+(to|do\s+i)\s+update\s+node\b/i, "node.update"],
       // "run job with parameter values" → job.run (explicit run with values = execution)
       [/\brun\s+.*\bparam.*\bvalue/i, "job.run"],
       [/\brun\s+job\s+.*\bparam/i, "job.run"],
@@ -919,6 +932,27 @@ export function searchDocs(
     if (/\bcred\s+list\b/i.test(qNorm)) {
       const ci = items.findIndex((it) => it.id === "cred.list");
       if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
+    }
+    // "job list" / "show/list all jobs" → job.list (node.list/controller.list can rank higher)
+    // Guard: skip when query mentions "agents" (→ job.list-agents instead)
+    if (!(/\bagents?\b/i.test(qNorm)) &&
+        (/\bjob\s+list\b/i.test(qNorm) || /\b(show|list|get)\s+all\s+jobs\b/i.test(qNorm) || /\ball\s+jobs\b/i.test(qNorm))) {
+      const ci = items.findIndex((it) => it.id === "job.list");
+      if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
+      else if (ci < 0) { const fb = corpus.find((c) => c.id === "job.list"); if (fb) items.unshift(fb); }
+    }
+    // "node update/create" explicit → ensure right command (pipeline/track don't win)
+    if (/\bnode\s+(update|create)\b/i.test(qNorm) || /\b(update|create)\s+node\b/i.test(qNorm)) {
+      const target = /\bupdate\b/i.test(qNorm) ? "node.update" : "node.create";
+      const ci = items.findIndex((it) => it.id === target);
+      if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
+      else if (ci < 0) { const fb = corpus.find((c) => c.id === target); if (fb) items.unshift(fb); }
+    }
+    // "auth login" explicit command path → auth.login beats auth.use
+    if (/\bauth\s+login\b/i.test(qNorm)) {
+      const ci = items.findIndex((it) => it.id === "auth.login");
+      if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
+      else if (ci < 0) { const fb = corpus.find((c) => c.id === "auth.login"); if (fb) items.unshift(fb); }
     }
     // "how do I create a pipeline" → concept doc (not job.create.pipeline)
     if (/\bhow\s+(do\s+i|to|can\s+i)\s+(create|make)\s+(a\s+)?pipeline\b/i.test(qNorm)) {
