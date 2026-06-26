@@ -660,17 +660,28 @@ export const HELP_FACTS: HelpFact[] = [
       "quick start",
       "setup steps",
       "first steps",
-      "how does this work"
+      "how does this work",
+      "newbie",
+      "newcomer",
+      "novice",
+      "how to use bee",
+      "how do i use it",
+      "how to use it",
+      "just started",
+      "introduction",
+      "intro",
+      "tutorial",
+      "onboarding"
     ],
-    "answer": "Start by logging in to your CloudBees server, then pick a controller, then you can list and manage jobs. Step 1: bee auth login. Step 2: bee controller select <name>. Step 3: bee job list.",
+    "answer": "Start with three steps: (1) log in to your CloudBees server with 'bee auth login', (2) pick a controller with 'bee controller select <name>', (3) list jobs with 'bee job list'. Run 'bee --ui' for a full interactive interface, or 'bee --help' to see all commands.",
     "commands": [
       "bee auth login",
       "bee controller select <name>",
-      "bee job list"
+      "bee job list",
+      "bee --ui"
     ],
     "related": [
-      "bee --help",
-      "bee --ui"
+      "bee --help"
     ]
   },
   {
