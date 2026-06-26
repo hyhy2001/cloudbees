@@ -113,6 +113,7 @@ const code = [
   "",
   `export const DIM = ${DIM} as const;`,
   `export const SCALE = ${SCALE} as const;`,
+  `export const CORPUS_MODEL = ${JSON.stringify(MODEL_NAME)} as const;`,
   `export const VEC_IDS: readonly string[] = ${JSON.stringify(ids)};`,
   "",
   `// Quantized Int16 flat array (base64).`,
