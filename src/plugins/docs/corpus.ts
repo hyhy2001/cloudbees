@@ -704,6 +704,7 @@ export function searchDocs(
       everything: { flags: ["--all"] },
       "all jobs": { flags: ["--all"] },
       "all nodes": { flags: ["--all"] },
+      "recursive": { flags: ["--recursive"], prefer: "job.list" },
       "restrict to agent": { flags: ["--node"], prefer: "job.create.freestyle" },
       "restrict job": { flags: ["--node"], prefer: "job.create.freestyle" },
       "specific agent": { flags: ["--node"], prefer: "job.create.freestyle" },
@@ -845,6 +846,8 @@ export function searchDocs(
       [/\b(create|make|add)\s+(a\s+)?pipeline\b/i, "job.create.pipeline"],
       [/\bnew\s+pipeline\b/i, "job.create.pipeline"],
       [/\bupdate\s+pipeline\b/i, "job.update.pipeline"],
+      // "make/create job" (bare, no type qualifier) → job.create group
+      [/\b(make|create|new)\s+job\b/i, "job.create"],
       [/\bdifference\s+between\b/i, "concept.pipeline"],
       [/\bfreestyle\s+(vs|and|or)\s+pipeline\b/i, "concept.pipeline"],
       [/\bapprove\s+agent\b/i, "job.approve-agent"],
@@ -1100,6 +1103,12 @@ export function searchDocs(
       if (!result.some((it) => it.id === "concept.build-params")) {
         const fb = corpus.find((c) => c.id === "concept.build-params"); if (fb) result.unshift(fb);
       } else { const ci = result.findIndex((it) => it.id === "concept.build-params"); if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); } }
+    }
+    // "make/create job" bare → inject job.create (doc chunks drown out commands when includeDocChunks=true)
+    if (/^(make|create|new)\s+job$/i.test(qNorm)) {
+      if (!result.some((it) => it.id === "job.create")) {
+        const fb = corpus.find((c) => c.id === "job.create"); if (fb) result.unshift(fb);
+      } else { const ci = result.findIndex((it) => it.id === "job.create"); if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); } }
     }
     // "node unreachable cannot connect" → troubleshooting.node-connect (not troubleshooting.login)
     if (/\b(unreachable|cannot\s+connect|can'?t\s+connect)\b/i.test(qNorm) && /\bnode\b/i.test(qNorm)) {
