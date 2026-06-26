@@ -7,45 +7,36 @@
  *   - - bullet / * bullet → indented with •
  *   - Blank lines → preserved
  *   - Everything else → plain
+ *
+ * Two modes:
+ *   - renderMarkdown(text)         — batch render full string
+ *   - StreamingMarkdownRenderer    — incremental char-by-char streaming
  */
 import chalk from "chalk";
-
-/** Render a single line (no block context needed). */
-function renderLine(line: string): string {
-  // Bullet list
-  const bulletMatch = line.match(/^(\s*)[*-] (.+)$/);
-  if (bulletMatch) {
-    const indent = bulletMatch[1]!;
-    const content = renderInline(bulletMatch[2]!);
-    return `${indent}${chalk.dim("•")} ${content}`;
-  }
-
-  // Numbered list
-  const numMatch = line.match(/^(\s*)(\d+)\. (.+)$/);
-  if (numMatch) {
-    const indent = numMatch[1]!;
-    const num = numMatch[2]!;
-    const content = renderInline(numMatch[3]!);
-    return `${indent}${chalk.dim(`${num}.`)} ${content}`;
-  }
-
-  return renderInline(line);
-}
 
 /** Render inline markdown spans within a line. */
 function renderInline(text: string): string {
   return text
-    // `code` → green
     .replace(/`([^`]+)`/g, (_, code: string) => chalk.green(code))
-    // **bold** or __bold__
     .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, (_, a: string, b: string) => chalk.bold(a ?? b))
-    // *italic* or _italic_ (single)
     .replace(/\*([^*]+)\*|_([^_]+)_/g, (_, a: string, b: string) => chalk.italic(a ?? b));
 }
 
+/** Render a single line (no block context needed). */
+function renderLine(line: string): string {
+  const bulletMatch = line.match(/^(\s*)[*-] (.+)$/);
+  if (bulletMatch) {
+    return `${bulletMatch[1]}${chalk.dim("•")} ${renderInline(bulletMatch[2]!)}`;
+  }
+  const numMatch = line.match(/^(\s*)(\d+)\. (.+)$/);
+  if (numMatch) {
+    return `${numMatch[1]}${chalk.dim(`${numMatch[2]}.`)} ${renderInline(numMatch[3]!)}`;
+  }
+  return renderInline(line);
+}
+
 /**
- * Render markdown text from LM output to terminal-friendly string.
- * Handles fenced code blocks, bullets, inline code/bold.
+ * Batch render — collect full text then render.
  */
 export function renderMarkdown(text: string): string {
   const lines = text.split("\n");
@@ -54,33 +45,82 @@ export function renderMarkdown(text: string): string {
   let fenceBuffer: string[] = [];
 
   for (const line of lines) {
-    // Fenced code block start/end
     if (/^```/.test(line)) {
-      if (!inFence) {
-        inFence = true;
-        fenceBuffer = [];
-      } else {
-        // End fence — render accumulated block
-        const code = fenceBuffer.join("\n");
-        out.push(chalk.green(code));
-        inFence = false;
-        fenceBuffer = [];
-      }
+      if (!inFence) { inFence = true; fenceBuffer = []; }
+      else { out.push(chalk.green(fenceBuffer.join("\n"))); inFence = false; fenceBuffer = []; }
       continue;
     }
-
-    if (inFence) {
-      fenceBuffer.push(line);
-      continue;
-    }
-
+    if (inFence) { fenceBuffer.push(line); continue; }
     out.push(renderLine(line));
   }
+  if (fenceBuffer.length > 0) out.push(chalk.green(fenceBuffer.join("\n")));
+  return out.join("\n");
+}
 
-  // Unclosed fence — render as-is
-  if (fenceBuffer.length > 0) {
-    out.push(chalk.green(fenceBuffer.join("\n")));
+/**
+ * Streaming markdown renderer — processes chunks incrementally and writes
+ * rendered output as soon as it's safe (i.e., outside an open span/block).
+ *
+ * Strategy:
+ *   - Buffer incoming chunks into a line buffer.
+ *   - When a newline arrives, the completed line is safe to render and flush.
+ *   - Inside a fenced code block (``` ... ```) accumulate until closing fence.
+ *   - The last incomplete line stays buffered until flush() is called at end.
+ *
+ * Usage:
+ *   const r = new StreamingMarkdownRenderer(chunk => process.stdout.write(chunk));
+ *   for await (const chunk of stream) r.write(chunk);
+ *   r.flush();
+ */
+export class StreamingMarkdownRenderer {
+  private buf = "";          // current incomplete line
+  private inFence = false;
+  private fenceBuffer: string[] = [];
+
+  constructor(private readonly write: (s: string) => void) {}
+
+  /** Feed a chunk — renders completed lines immediately. */
+  push(chunk: string): void {
+    this.buf += chunk;
+    const lines = this.buf.split("\n");
+    // Last element is the incomplete line — keep it buffered.
+    this.buf = lines.pop() ?? "";
+    for (const line of lines) {
+      this.writeLine(line);
+      this.write("\n");
+    }
   }
 
-  return out.join("\n");
+  /** Call after the stream ends to flush the final partial line. */
+  flush(): void {
+    if (this.buf.length > 0) {
+      this.writeLine(this.buf);
+      this.buf = "";
+    }
+    // Flush unclosed fence block
+    if (this.fenceBuffer.length > 0) {
+      this.write(chalk.green(this.fenceBuffer.join("\n")));
+      this.fenceBuffer = [];
+      this.inFence = false;
+    }
+  }
+
+  private writeLine(line: string): void {
+    if (/^```/.test(line)) {
+      if (!this.inFence) {
+        this.inFence = true;
+        this.fenceBuffer = [];
+      } else {
+        this.write(chalk.green(this.fenceBuffer.join("\n")));
+        this.fenceBuffer = [];
+        this.inFence = false;
+      }
+      return;
+    }
+    if (this.inFence) {
+      this.fenceBuffer.push(line);
+      return;
+    }
+    this.write(renderLine(line));
+  }
 }
