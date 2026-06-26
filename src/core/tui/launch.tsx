@@ -13,7 +13,9 @@ import { getActiveController } from "../client-factory";
 
 // Alternate screen buffer control (ncurses-style): enter on launch so the TUI
 // owns the full terminal, leave on exit to restore the user's prior scrollback.
-const ENTER_ALT_SCREEN = "\x1b[?1049h";
+// \x1b[2J clears the screen, \x1b[H moves cursor to top-left — needed on some
+// terminals (RHEL8) that don't reset cursor position on alt-screen entry.
+const ENTER_ALT_SCREEN = "\x1b[?1049h\x1b[2J\x1b[H";
 const LEAVE_ALT_SCREEN = "\x1b[?1049l";
 
 export async function launchTui(dbPath?: string): Promise<void> {
