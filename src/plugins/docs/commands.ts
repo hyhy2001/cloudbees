@@ -13,6 +13,7 @@ import { buildCorpus } from "./corpus";
 import { answer, getProvider } from "./answer";
 import { presentAnswer } from "./presenter";
 import { renderMarkdown, StreamingMarkdownRenderer } from "./render";
+import { saveAskHistory, getAskHistory, clearAskHistory } from "../../core/db/repositories/ask-history-repo";
 import chalk from "chalk";
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ function startSpinner(text: string): () => void {
 }
 
 export function registerDocsCommands(ctx: PluginContext): void {
+  // ── bee ask <query> ────────────────────────────────────────────────────────
   ctx.program
     .command("ask")
     .description("Ask how to use bee — requires LM endpoint configured in bee.lm.json or env")
@@ -40,23 +42,41 @@ export function registerDocsCommands(ctx: PluginContext): void {
     .option("--limit <n>", "Max context items to retrieve", "5")
     .option("--json", "Output machine-readable JSON", false)
     .option("--no-stream", "Disable streaming — collect full response before printing", false)
+    .option("--history", "Show recent ask history", false)
+    .option("--clear-history", "Clear ask history", false)
     .allowUnknownOption()
-    .action(async (queryParts: string[], opts: { limit: string; json: boolean; stream: boolean }) => {
+    .action(async (queryParts: string[], opts: { limit: string; json: boolean; stream: boolean; history: boolean; clearHistory: boolean }) => {
       try {
-        // passThroughOptions passes unknown --flags into queryParts so users can
-        // query "create node --host" without commander treating --host as an error.
-        // But it also passes our own --json/--limit through when they appear after
-        // the query — re-extract them here so both usages work:
-        //   bee ask "create node --host"          → query includes --host
-        //   bee ask create node --json            → --json is a flag, not query text
+        const dbPath = process.env["CB_DB_PATH"];
+
+        // History commands — no query needed
+        if (opts.clearHistory) {
+          clearAskHistory(dbPath);
+          printInfo("Ask history cleared.");
+          return;
+        }
+        if (opts.history) {
+          const entries = getAskHistory(parseInt(opts.limit, 10) || 20, dbPath);
+          if (entries.length === 0) { printInfo("No ask history yet."); return; }
+          for (const e of entries) {
+            const date = new Date(e.created_at).toLocaleString();
+            printMessage(`${chalk.dim(`[${date}]`)} ${chalk.cyan(e.query)}`);
+            printMessage(renderMarkdown(e.answer));
+            printMessage(chalk.dim("─".repeat(60)));
+          }
+          return;
+        }
+
         const cleanParts: string[] = [];
         let jsonFlag = opts.json;
         let limitFlag = opts.limit;
-        let streamFlag = opts.stream; // false when --no-stream is passed
+        let streamFlag = opts.stream;
         for (let i = 0; i < queryParts.length; i++) {
           const part = queryParts[i]!;
           if (part === "--json") { jsonFlag = true; continue; }
           if (part === "--no-stream") { streamFlag = false; continue; }
+          if (part === "--history") continue;
+          if (part === "--clear-history") continue;
           if (part === "--limit" && i + 1 < queryParts.length) { limitFlag = queryParts[++i]!; continue; }
           cleanParts.push(part);
         }
@@ -121,24 +141,28 @@ export function registerDocsCommands(ctx: PluginContext): void {
               (s) => process.stdout.write(s),
             );
             let stopped = false;
-            await result.streamOutput((chunk) => {
+            const fullText = await result.streamOutput((chunk) => {
               if (!stopped) { stopSpinner(); stopped = true; }
               renderer.push(chunk);
             });
             if (!stopped) stopSpinner();
             renderer.flush();
             process.stdout.write("\n");
+            saveAskHistory(query, fullText, dbPath);
             return;
           }
           // --no-stream or no stream method: collect full response then render.
           const text = result.text || (result.streamOutput ? await result.streamOutput(() => {}) : "");
           stopSpinner();
           printMessage(renderMarkdown(text));
+          saveAskHistory(query, text, dbPath);
           return;
         }
 
         stopSpinner();
-        printMessage(presentAnswer(query, result.hits).text);
+        const presented = presentAnswer(query, result.hits).text;
+        printMessage(presented);
+        saveAskHistory(query, presented, dbPath);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
