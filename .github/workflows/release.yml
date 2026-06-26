@@ -7,40 +7,21 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
-      - run: bun install --frozen-lockfile
+      - name: Run tests
+        run: bun test
 
-      - run: bun test
-
-      - name: Regenerate codegen artifacts
-        # Run codegen with credentials so embeddings/synonyms are fresh,
-        # but do NOT build the binary here — credentials must not be baked in.
-        run: |
-          bun run scripts/generate-help-index.ts
-          bun run scripts/generate-embeddings.ts || echo "embeddings skipped"
-          bun run scripts/generate-synonyms.ts   || echo "synonyms skipped"
-        env:
-          CB_DATABRICK_URL: ${{ secrets.CB_DATABRICK_URL }}
-          CB_API_KEY: ${{ secrets.CB_API_KEY }}
-          CB_CLIENT_ID: ${{ secrets.CB_CLIENT_ID }}
-          CB_CLIENT_SECRET: ${{ secrets.CB_CLIENT_SECRET }}
-          CB_EMBEDDING_URL: ${{ secrets.CB_EMBEDDING_URL }}
-
-      - name: Build binary (no credentials baked in)
-        # CB_SKIP_CODEGEN=1 skips re-running codegen (already done above).
-        # No CB_* secrets passed here — binary ships without any embedded key.
+      - name: Build binary (with codegen)
+        # Runs on the VPS — credentials are available via the local environment.
         run: bun run build.ts
-        env:
-          CB_SKIP_CODEGEN: "1"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
