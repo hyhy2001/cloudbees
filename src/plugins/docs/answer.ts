@@ -99,7 +99,37 @@ export function stripInventedCommands(text: string, corpus: DocItem[]): string {
     .trim();
 }
 
-// --- Provider contract -------------------------------------------------------
+// --- Query rewriting ---------------------------------------------------------
+
+const REWRITE_PROMPT = `You are a search query normalizer for the \`bee\` CLI (CloudBees/Jenkins tool).
+Convert the user's natural-language question into 3-6 lowercase keyword tokens that a BM25 index can match.
+Output ONLY the keywords, space-separated, no punctuation, no explanation.
+
+Examples:
+  "Hello I am a newbie, how to use this?" → getting started login auth
+  "how do I kick off a pipeline job?" → job run pipeline trigger
+  "rotate my api key" → credential update secret rotate
+  "put agent into maintenance mode" → node offline
+  "I cannot log in, 403 forbidden" → auth error 403 troubleshoot
+  "show me all create node options" → node create flags options`;
+
+/**
+ * Rewrite a free-form user query into BM25-friendly keywords using the LM.
+ * Falls back to the original query on any error — retrieval still works,
+ * just without normalization.
+ */
+async function rewriteQuery(query: string, provider: LMProvider): Promise<string> {
+  try {
+    const prompt = `${REWRITE_PROMPT}\n\n  "${query}" →`;
+    const raw = await provider.generate(prompt);
+    const keywords = raw.trim().split(/\s+/).slice(0, 8).join(" ");
+    if (keywords.length > 0) return keywords;
+  } catch {
+    // fall through
+  }
+  return query;
+}
+
 
 /**
  * A configured language-model backend.
@@ -190,15 +220,22 @@ export async function answer(
     return { source: "raw", text: "", hits };
   }
 
+  // Rewrite the query into BM25-friendly keywords so colloquial phrasings
+  // ("hello I am a newbie") map to corpus tokens ("getting started login").
+  const searchQuery = await rewriteQuery(query, provider);
+  if (process.env.BEE_DEBUG_TRACEBACK && searchQuery !== query) {
+    process.stderr.write(`[bee ask] rewritten query: ${searchQuery}\n`);
+  }
+
   // ── Multi-stage retrieval pipeline ──────────────────────────────────────
   // BM25 (sparse) + Vector (dense) → RRF fusion → Graph expansion → Reranker
-  const bm25Candidates = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
+  const bm25Candidates = searchDocs(searchQuery, corpus, limit * 3, { gate: true, softGate: true });
 
   // Vector search — neural embeddings via @xenova/transformers (optional).
   let fused = bm25Candidates;
   try {
     const vdb = getVectorDb();
-    const queryEmb = await embed(query);
+    const queryEmb = await embed(searchQuery);
     if (queryEmb) {
       const vectorCandidates = searchVector(queryEmb, vdb, corpus, limit * 3);
       fused = rrfFusion(bm25Candidates, vectorCandidates);
