@@ -12,7 +12,7 @@ import { buildUserPrompt } from "./context";
 import { searchDocs, type DocItem } from "./corpus";
 // import { rerank } from "./rerank"; // disabled — see answer() comment
 import { buildGraphFromCorpus, expandGraph, type CommandGraph } from "./graph";
-import { getVectorDb, searchVector, rrfFusion, embed } from "./vector";
+// import { getVectorDb, searchVector, rrfFusion, embed } from "./vector"; // disabled with reranker
 
 // --- Output hardening --------------------------------------------------------
 
@@ -237,23 +237,15 @@ export async function answer(
     ? directHits
     : searchDocs(searchQuery, corpus, limit * 3, { gate: true, softGate: true });
 
-  // Vector search — neural embeddings via @xenova/transformers (optional).
-  let fused = bm25Candidates;
-  try {
-    const vdb = getVectorDb();
-    const queryEmb = await embed(searchQuery);
-    if (queryEmb) {
-      const vectorCandidates = searchVector(queryEmb, vdb, corpus, limit * 3);
-      fused = rrfFusion(bm25Candidates, vectorCandidates);
-    }
-  } catch {
-    // Vector search unavailable — fall back to BM25-only.
-  }
+  // Vector search disabled — reranker is off so vector fusion doesn't improve
+  // BM25 order, and the embed() API call costs an extra round-trip for no gain.
+  // ponytail: re-enable together with reranker when embedding endpoint is stable.
+  const fused_base = bm25Candidates;
 
   // Graph expansion: append related commands from the same group/CRUD family.
   const graph = getGraph(corpus);
-  const graphExtra = expandGraph(fused, corpus, graph, 3);
-  fused = [...fused, ...graphExtra];
+  const graphExtra = expandGraph(fused_base, corpus, graph, 3);
+  const fused = [...fused_base, ...graphExtra];
 
   // LM reranker disabled — BM25+RRF order is already high-quality (98.4%
   // Recall@1) and reranking with a mismatched embedding endpoint corrupts it.
