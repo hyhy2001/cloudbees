@@ -242,6 +242,9 @@ export async function answer(
         // When streaming yielded nothing, fall back to non-streaming
         // (e.g., endpoint returned plain JSON instead of SSE).
         const full = chunks.length > 0 ? chunks.join("") : await provider.generate(prompt);
+        if (process.env.BEE_DEBUG_TRACEBACK) {
+          process.stderr.write(`[bee ask] LM stream full: ${full.slice(0, 500)}\n`);
+        }
         return stripInventedCommands(full, corpus);
       },
     };
