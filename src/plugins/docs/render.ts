@@ -27,7 +27,10 @@ function renderInline(text: string): string {
 
 /** Parse a markdown table row into cells. */
 function parseTableRow(line: string): string[] {
-  return line.split("|").slice(1, -1).map((c) => c.trim());
+  // Escaped pipes \| inside cells must not be treated as column separators.
+  // Replace \| temporarily, split, then restore.
+  const escaped = line.replace(/\\\|/g, "\x00");
+  return escaped.split("|").slice(1, -1).map((c) => c.trim().replace(/\x00/g, "|"));
 }
 
 function isTableRow(line: string): boolean {
