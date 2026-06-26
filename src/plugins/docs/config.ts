@@ -94,11 +94,9 @@ export const LM_URL = BASE_URL;
 export const CHAT_ENDPOINT = BASE_URL ? joinUrl(BASE_URL, CHAT_PATH) : "";
 export const EMBEDDING_MODEL =
   pick(typeof BEE_EMBEDDING_MODEL !== "undefined" ? BEE_EMBEDDING_MODEL : undefined, "CB_EMBEDDING_MODEL") ||
-  "Xenova/all-MiniLM-L6-v2";
+  "default";
 const EXPLICIT_EMBEDDING_URL = ensureProtocol(
   pick(typeof BEE_EMBEDDING_URL !== "undefined" ? BEE_EMBEDDING_URL : undefined, "CB_EMBEDDING_URL"),
 );
 export const EMBEDDING_URL = EXPLICIT_EMBEDDING_URL ||
-  (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && BASE_URL
-    ? joinUrl(BASE_URL, EMBEDDING_PATH)
-    : "");
+  (BASE_URL ? joinUrl(BASE_URL, EMBEDDING_PATH) : "");

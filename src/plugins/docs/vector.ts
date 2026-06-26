@@ -1,35 +1,18 @@
 /**
  * Pre-built neural embeddings — loaded from src/generated/embeddings.ts.
  *
- * At query time, embed() lazily loads @xenova/transformers + MiniLM model
- * for neural query embedding. The model files are bundled in the binary
- * via src/generated/embedding-model.ts and extracted to a temp directory
- * at startup — no download needed, works fully offline in a single binary.
- *
- * If @xenova/transformers is not available (dev who didn't bun install),
- * getEmbedFn() returns null and vector search is skipped — BM25 handles
+ * At query time, embed() calls the configured API embedding endpoint.
+ * When no endpoint is configured, vector search is skipped and BM25 handles
  * retrieval alone (96.8% Recall@3).
  *
  * The corpus vectors are quantized Int16 × SCALE for compact storage.
  * Cosine similarity uses dequantized floats.
  */
 
-import { join, dirname } from "node:path";
-import { statSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
-// Directory of the running binary/script — model files go right next to it.
-function beeDir(): string {
-  // Compiled binary: process.execPath → /path/to/bee
-  // Dev mode: import.meta.url → /path/to/src/plugins/docs/vector.ts
-  const p = "execPath" in process ? process.execPath : fileURLToPath(import.meta.url);
-  return dirname(p);
-}
 import type { DocItem } from "./corpus";
 import { EMBEDDING_MODEL, EMBEDDING_URL, LM_API_KEY, LM_URL, EMBEDDING_PATH, LM_CLIENT_ID, LM_CLIENT_SECRET } from "./config";
 import { DatabricksOAuthProvider, isDatabricksHost } from "./providers/databricks";
-import { DIM, SCALE, VEC_IDS, VEC_B64, EMB_MODEL } from "../../generated/embeddings";
-import { MODEL_FILES } from "../../generated/embedding-model";
+import { DIM, SCALE, VEC_IDS, VEC_B64 } from "../../generated/embeddings";
 
 export interface VectorDb {
   ids: string[];
@@ -38,7 +21,7 @@ export interface VectorDb {
 }
 
 let _db: VectorDb | null = null;
-let _embedFn: ((text: string) => Promise<number[]>) | null | false = null;
+let _embedFn: ((text: string) => Promise<number[] | null>) | null | false = null;
 
 export function getVectorDb(): VectorDb {
   if (_db) return _db;
@@ -73,24 +56,16 @@ export function clearVectorDb(): void { _db = null; _embedFn = null; }
  * generate-embeddings.ts to rebuild the corpus for a new model.
  */
 export async function embed(text: string): Promise<number[] | null> {
-  if (EMBEDDING_MODEL !== EMB_MODEL) {
-    if (!_warnedModel) {
-      process.stderr.write(
-        `[bee ask] embedding model "${EMBEDDING_MODEL}" != baked "${EMB_MODEL}" — vector search disabled (BM25 only). Re-run generate-embeddings.ts.\n`,
-      );
-      _warnedModel = true;
-    }
-    return null;
-  }
   const fn = await getEmbedFn();
   if (!fn) {
     return null;
   }
   const vec = await fn(text);
+  if (!vec) return null;
   if (vec.length !== DIM) {
     if (!_warnedDim) {
       process.stderr.write(
-        `[bee ask] embedding dim ${vec.length} != baked ${DIM} — vector search disabled (BM25 only).\n`,
+        `[bee ask] embedding dim ${vec.length} != baked ${DIM} — vector search disabled (BM25 only). Re-run generate-embeddings.ts.\n`,
       );
       _warnedDim = true;
     }
@@ -99,10 +74,9 @@ export async function embed(text: string): Promise<number[] | null> {
   return vec;
 }
 
-let _warnedModel = false;
 let _warnedDim = false;
 
-async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | null> {
+async function getEmbedFn(): Promise<((text: string) => Promise<number[] | null>) | null> {
   if (_embedFn === false) return null;
   if (_embedFn) return _embedFn;
   try {
@@ -153,45 +127,13 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[]>) | nul
             throw new Error(`Embedding API returned ${r.status} at ${url}`);
           }
         }
-        throw new Error("Embedding API returned 404 for all candidates");
+        // All candidates 404 — embedding endpoint absent, skip vector search.
+        return null;
       };
       return _embedFn;
     }
-
-    // Local model (@xenova/transformers, bundled in binary)
-    const { pipeline, env } = await import("@xenova/transformers");
-    const beeRoot = beeDir();
-    // Check repo models/ first (dev mode), fall back to .bee-models
-    const repoModels = join(beeRoot, "models", EMBEDDING_MODEL);
-    env.cacheDir = statSync(repoModels, { throwIfNoEntry: false }) ? beeRoot : join(beeRoot, ".bee-models");
-    env.localModelPath = env.cacheDir;
-
-    // Override file reads: intercept model files and serve from the
-    // base64 constants embedded in the binary — no disk access needed.
-    const modelRoot = EMBEDDING_MODEL;
-    const origFs = (env as any).fs;
-    (env as any).fs = {
-      ...origFs,
-      readFile(path: string, encoding?: string) {
-        const idx = path.indexOf(modelRoot);
-        const rel = idx >= 0 ? path.slice(idx) : null;
-        const b64 = rel ? MODEL_FILES[rel] : null;
-        if (b64) {
-          const buf = Buffer.from(b64, "base64");
-          return encoding === "utf8" ? buf.toString() : buf;
-        }
-        return origFs?.readFile?.(path, encoding);
-      },
-    } as any;
-
-    const extract = await pipeline("feature-extraction", modelRoot, {
-      quantized: true,
-    });
-    _embedFn = async (t: string) => {
-      const result = await extract(t.slice(0, 512), { pooling: "mean", normalize: true });
-      return Array.from(result.data) as number[];
-    };
-    return _embedFn;
+    _embedFn = false;
+    return null;
 } catch (e) {
     _embedFn = false; // permanent fail — don't retry
     return null;
