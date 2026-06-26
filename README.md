@@ -598,7 +598,7 @@ The generated file is committed and baked into the binary.
 
 ### BM25 + LLM benchmark
 
-`scripts/benchmark.ts` is a comprehensive quality harness with **498 ground-truth queries** (121 hand-curated + 377 auto-generated from the corpus, quality-filtered to remove template artifacts) that covers every query type: exact command name, natural-language paraphrase, concept/definition, troubleshooting, flag-specific, and cross-plugin. It has two phases:
+`scripts/benchmark.ts` is a comprehensive quality harness. The ground-truth set is split into a **frozen 123-query test-set** (the production metric — tuning must never optimize against it) and an auto-generated dev-set (~376 queries from the corpus, for tuning only). It covers every query type: exact command name, natural-language paraphrase, concept/definition, troubleshooting, flag-specific, and cross-plugin. It has two phases:
 
 **Phase A — BM25 retrieval** (fast, no LLM): scores each query against the real corpus using Recall@1 / Recall@3 / Recall@5 / MRR, with a breakdown by query type and a miss table showing the top competing hit.
 
@@ -619,20 +619,19 @@ bun run scripts/benchmark.ts --llm-limit 73               # Phase B on first N q
 
 Results are printed to the console and written to `benchmark-report.md` (gitignored).
 
-**Latest results** (73 LLM queries judged, 1 API call, everything else local):
+**Latest results** — Phase A on the **frozen 123-query test-set** (the production metric; the auto-generated dev-set is for tuning only and excluded here):
 
 | Metric | Score |
 |---|---|
-| BM25 Recall@1 | **76.1%** (379/498) |
-| BM25 Recall@3 | **97.4%** (485/498) |
-| BM25 Recall@5 | **99.2%** (494/498) |
-| BM25 MRR | **0.865** |
-| BM25 misses (top-10) | **1** |
+| BM25 Recall@1 | **80.5%** (99/123) |
+| BM25 Recall@3 | **96.7%** (119/123) |
+| BM25 Recall@5 | **97.6%** (120/123) |
+| BM25 MRR | **0.887** |
 | Reranker | MiniLM bi-encoder (local, free, bundled) |
-| Vector search | all-MiniLM-L6-v2 384-dim (local, bundled) |
+| Vector search | MiniLM 384-dim bundled, or API embedding (model + dimension auto-detected, guarded) |
 | Graph expansion | CRUD neighbors auto-derived from command tree |
-| Synonym expansion | 100+ hand-maintained + 111 build-time LLM-generated (filtered, priority-guarded) |
-| API calls | **1** (generator only) |
+| Synonym expansion | 100+ hand-maintained + build-time LLM-generated (filtered, priority-guarded) |
+| API calls | **1** with bundled MiniLM (generator only); **2** with API embedding |
 | LLM correct command | **100.0%** (73/73) |
 | LLM hallucination rate | **0.0%** (0/73) |
 | LLM has required flag | **100.0%** (12/12) |
@@ -664,7 +663,7 @@ Pipeline refinements:
 - BM25 retrieval: Recall@1 **+7.3%**, MRR **+0.054** (promotion layer for flag/cross-plugin/expert routing, synonym map expansion, corpus caching)
 - LM latency: streaming output via SSE, timeout increased 15s → 60s
 - Output hardening: XML-formatted context, stricter flag anti-hallucination in system prompt, `stripInventedCommands` post-processor (backtick + plain-text), off-domain guard (skip LM if gate rejects query)
-- Benchmark: expanded from **69 → 498 queries** (121 curated + 377 quality-filtered auto-generated), **1 miss** in top-10
+- Benchmark: split into a **frozen 123-query test-set** (production metric) + auto-generated dev-set (~376, tuning only) so tuning can't overfit the reported score
 - LLM correct command: improved from 87.5% → **100.0%** (system prompt hardening, scorer fixes, ground-truth corrections, corpus promotion patterns, synonym generation)
 - `bee ask` disabled when no LM provider configured — prints actionable error message pointing to `bee.lm.json` or env vars
 - Benchmark script: API key, model name, and limit flags (`--api-key`, `--model`, `--llm-limit`); `stream: false` support for non-streaming endpoints
