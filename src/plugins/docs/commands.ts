@@ -76,22 +76,23 @@ export function registerDocsCommands(ctx: PluginContext): void {
           { includeDocChunks: process.env["BEE_ASK_INCLUDE_DOC_CHUNKS"] === "1" },
         );
 
+        // Spinner runs until first token arrives (answer() returns fast for
+        // streaming — actual LM latency is inside streamOutput).
         const stopSpinner = startSpinner("Thinking…");
         const result = await answer(query, corpus, limit);
-        stopSpinner();
 
         if (result.source === "raw" && result.hits.length === 0) {
+          stopSpinner();
           printInfo(`INFO No results matched '${query}'. Try 'bee --help' for commands.`);
           return;
         }
 
         if (jsonFlag) {
-          // When streaming, collect the full text first.
           let fullText = result.text;
           if (result.source === "lm" && result.stream && result.streamOutput) {
             const chunks: string[] = [];
-            fullText = await result.streamOutput((chunk) => chunks.push(chunk));
-          }
+            fullText = await result.streamOutput((chunk) => { stopSpinner(); chunks.push(chunk); });
+          } else { stopSpinner(); }
           const presented = result.source === "lm"
             ? fullText
             : presentAnswer(query, result.hits).text;
@@ -116,15 +117,22 @@ export function registerDocsCommands(ctx: PluginContext): void {
             const renderer = new StreamingMarkdownRenderer(
               (s) => process.stdout.write(s),
             );
-            await result.streamOutput((chunk) => renderer.push(chunk));
+            let stopped = false;
+            await result.streamOutput((chunk) => {
+              if (!stopped) { stopSpinner(); stopped = true; }
+              renderer.push(chunk);
+            });
+            if (!stopped) stopSpinner(); // no tokens arrived
             renderer.flush();
             process.stdout.write("\n");
             return;
           }
+          stopSpinner();
           printMessage(renderMarkdown(result.text));
           return;
         }
 
+        stopSpinner();
         printMessage(presentAnswer(query, result.hits).text);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
