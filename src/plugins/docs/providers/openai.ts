@@ -57,9 +57,9 @@ export class OpenAICompatProvider {
     const raw = await response.text();
     let json: { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> };
     try {
-      json = JSON.parse(raw) as typeof json;
+      json = JSON.parse(raw.trim()) as typeof json;
     } catch {
-      throw new Error(`LM returned non-JSON response: ${raw.slice(0, 300)}`);
+      throw new Error(`LM returned non-JSON response: ${raw.trim().slice(0, 300)}`);
     }
     const msg = json.choices?.[0]?.message;
     // Reasoning models (DeepSeek, QwQ, etc.) put the answer in
