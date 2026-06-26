@@ -8,6 +8,16 @@ import { printSuccess, printError, printInfo, printWarning, printMessage, tableF
 import { confirm } from "../../core/cli/utils";
 import { NotFoundError } from "../../core/api/errors";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
+import { colorForLine } from "../../core/tui/data/log-buffer";
+import chalk from "chalk";
+
+/** Apply color to each line of build log output. */
+function colorizeLog(text: string): string {
+  return text.split("\n").map((line) => {
+    const color = colorForLine(line);
+    return color ? chalk.hex(color)(line) : line;
+  }).join("\n");
+}
 import { getActiveProfileName } from "../../core/session/index";
 import {
   listJobs,
@@ -665,7 +675,7 @@ export function registerJobCommands(ctx: PluginContext): void {
           try {
             if (!opts.follow) {
               const log = await getBuildLog(client, name, buildNumber);
-              printMessage(log);
+              printMessage(colorizeLog(log));
               return;
             }
 
@@ -676,7 +686,7 @@ export function registerJobCommands(ctx: PluginContext): void {
             while (true) {
               const [text, newOffset, hasMore] = await streamBuildLog(client, name, buildNumber, offset);
               if (text) {
-                process.stdout.write(text);
+                process.stdout.write(colorizeLog(text));
                 offset = newOffset;
               }
               if (!hasMore) {
