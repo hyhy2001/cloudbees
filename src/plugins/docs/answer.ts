@@ -216,6 +216,10 @@ export async function answer(
   const reRanked = await rerank(query, fused.slice(0, 15));
   const contextHits = reRanked.slice(0, limit);
 
+  if (process.env.BEE_DEBUG_TRACEBACK) {
+    process.stderr.write(`[bee ask] context hits: ${contextHits.map(h => h.id).join(", ")}\n`);
+  }
+
   const prompt = buildUserPrompt(query, contextHits);
 
   // Streaming path — caller (CLI) writes chunks as they arrive.
