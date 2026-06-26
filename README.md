@@ -4,7 +4,7 @@
 
 - CLI for scripting and automation
 - Interactive TUI (`bee --ui`) for day-to-day operation
-- Local SQLite for session, cache, and tracked-resource state
+- Local SQLite for session, cache, and tracked-resource state (per-OS-user, isolated under `data/<username>/`)
 - Single self-contained binary (~93 MB) — no runtime required on the target host
 - Targets RHEL 8 / glibc ≥ 2.28 (built with `bun-linux-x64-baseline`)
 
@@ -56,14 +56,14 @@ Bun is installed **locally into `./.bun`** (repo-contained, not system-wide). `m
 
 ## Where Data Lives
 
-`bee` keeps all local state in a SQLite database. **The DB sits next to the binary**: when you run `dist/bee`, the database is created at `<directory containing the binary>/data/cb.db`. The `data/` directory is created lazily on first run (the first command that needs the DB), so a freshly-built binary has no `data/` until you run it.
+`bee` keeps all local state in a SQLite database. **Each OS user gets their own isolated subdirectory**: when you run `dist/bee`, the database is created at `<directory containing the binary>/data/<username>/cb.db`. The directory is created lazily on first run and chmod `0700` so other users on the same host cannot read it.
 
-- **Binary**: `<bin dir>/data/cb.db` — wherever you copied `dist/bee`, the DB lives beside it. Move the binary, and its data does not follow unless you move `data/` too.
-- **From source** (`make dev`): the project root is used, so the DB is `./data/cb.db`. This is the *same* database as `dist/bee` when in the build tree (shares login state).
+- **Binary (multi-user)**: `<bin dir>/data/<username>/cb.db` — multiple users can share the same binary; each gets a fully isolated DB, session, and `.bee_secret` under their own `data/<username>/` directory.
+- **From source** (`make dev`): the project root is used, so the DB is `./data/<username>/cb.db`.
 - **Override**: set `CB_DB_PATH` to pin an exact DB file regardless of how `bee` is launched, or `BEE_DIR` to override just the root directory.
-- **Backup**: `make clean` auto-backups `dist/data/cb.db` to `backups/cb.db` before cleaning.
+- **Backup**: `make clean` auto-backups `dist/data/<username>/cb.db` to `backups/cb.db` before cleaning.
 
-Because the DB lives next to the binary, the directory you place `dist/bee` in must be **writable** — `data/` and the `.bee_secret` file (see [Security](#security)) are created there.
+Because the DB lives next to the binary, the directory you place `dist/bee` in must be **writable** — `data/<username>/` and the `.bee_secret` file (see [Security](#security)) are created there.
 
 ## Quick Start
 
@@ -220,6 +220,7 @@ Pipeline notes:
 - Parameters declared in the script's `parameters {}` block are auto-detected and configured as `ParametersDefinitionProperty`. Use `--param-def` to add extra or override defaults.
 - `--node` overrides the `agent` directive in the script (injects `agent { label '...' }`).
 - The script is validated against the Jenkins Pipeline Validation API before creation.
+- Creating a job with a name that already exists on the controller fails with an error before any API write.
 - To use inline script: `--script 'pipeline { agent any; stages { stage("Build") { steps { echo "ok" } } } }'`
 
 Update jobs (partial — only the flags you pass change):
@@ -735,7 +736,7 @@ The TUI is **keyboard-only** — mouse support was removed because Ink's `useInp
 
 ### Session crypto (`core/session/crypto.ts`)
 
-Tokens are sealed with **AES-256-GCM**. Layout (base64): `[ iv(12) | authTag(16) | ciphertext ]`. The key is `scrypt(secretFile, "bee:" + uid)` — the random 32-byte secret lives in `.bee_secret` (mode `0600`, beside the DB), and the derived key is cached per-process since scrypt is deliberately slow. GCM's auth tag gives integrity, not just confidentiality. See [Security](#security) for the threat model.
+Tokens are sealed with **AES-256-GCM**. Layout (base64): `[ iv(12) | authTag(16) | ciphertext ]`. The key is `scrypt(secretFile, "bee:" + uid)` — the random 32-byte secret lives in `.bee_secret` (mode `0600`, inside `data/<username>/` which is itself `0700`), and the derived key is cached per-process since scrypt is deliberately slow. GCM's auth tag gives integrity, not just confidentiality. See [Security](#security) for the threat model.
 
 ### Cache & TTL policy (`core/cache/`)
 
@@ -795,20 +796,22 @@ Embedding is always API-based — no local model is bundled. `generate-embedding
 
 ## Security
 
-Session tokens are encrypted with **AES-256-GCM**. The key is derived via `scrypt(secret || uid)`, where `secret` is a random 32-byte value stored in `.bee_secret` (next to the DB, `chmod 600`). A leaked DB file alone cannot recover a token — the secret file must also be accessible, and it is readable only by its owner. Mixing the uid into the key means a copied secret file derives a different key under another account. Deleting `.bee_secret` forces re-login.
+Session tokens are encrypted with **AES-256-GCM**. The key is derived via `scrypt(secret || uid)`, where `secret` is a random 32-byte value stored in `.bee_secret` (inside `data/<username>/`, `chmod 600`). A leaked DB file alone cannot recover a token — the secret file must also be accessible, and it is readable only by its owner. Mixing the uid into the key means a copied secret file derives a different key under another account. Deleting `.bee_secret` forces re-login.
+
+Each OS user's data lives in `data/<username>/` (chmod `0700`), so other users on the same host cannot read another user's DB or secret file even if the binary is shared.
 
 - API requests use `Authorization: Basic <base64(user:token)>`.
 - A CSRF crumb is auto-fetched and attached for all write operations.
 - `bee auth logout` clears the active profile's session token.
 
-This is a developer-tool threat model: the OS file permission on `.bee_secret` is the real boundary against other users on the same host.
+This is a developer-tool threat model: the OS directory permission on `data/<username>/` and file permission on `.bee_secret` are the real boundaries against other users on the same host.
 
 ## Environment Variables
 
 | Variable | Description |
 |---|---|
-| `CB_DB_PATH` | Override the SQLite DB path (default: `data/cb.db` next to the binary, or the project root when run from source) |
-| `BEE_DIR` | Override the root directory used to locate the DB |
+| `CB_DB_PATH` | Override the SQLite DB path (default: `data/<username>/cb.db` next to the binary, or the project root when run from source) |
+| `BEE_DIR` | Override the root directory used to locate the DB (per-user subdirectory is still appended) |
 | `BEE_DEBUG_TRACEBACK` | Set to `1` to enable debug logging and full stack traces (same as `--debug`) |
 | `BEE_ASCII` | Set to `1` to force ASCII symbols/borders in the TUI instead of Unicode |
 | `CB_SKIP_CODEGEN` | Set to `1` to skip all build-time codegen steps (what `make quick` does) |

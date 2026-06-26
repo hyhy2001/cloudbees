@@ -9,7 +9,7 @@
  */
 import type { CloudBeesClient } from "../../core/api/types";
 import { CredentialDTO, credentialFromDict } from "../../core/dtos/index";
-import { NotFoundError } from "../../core/api/errors";
+import { NotFoundError, ValidationError } from "../../core/api/errors";
 import { buildUsernamePasswordCredXml, buildSecretTextCredXml } from "./xml-builder";
 import { XMLParser } from "fast-xml-parser";
 
@@ -102,6 +102,12 @@ export async function createSecretText(
   username = "",
   store = "system",
 ): Promise<void> {
+  try {
+    await getCredential(client, credId, username, store);
+    throw new ValidationError(`Credential "${credId}" already exists.`);
+  } catch (e) {
+    if (!(e instanceof NotFoundError)) throw e;
+  }
   const userSeg = getUserSeg(username, store);
   const xml = buildSecretTextCredXml(credId, secret, desc, scope);
   await client.postXml(`${userSeg}/createCredentials`, xml, { invalidate: "credentials." });
@@ -120,6 +126,12 @@ export async function createUsernamePassword(
   username = "",
   store = "system",
 ): Promise<void> {
+  try {
+    await getCredential(client, credId, username, store);
+    throw new ValidationError(`Credential "${credId}" already exists.`);
+  } catch (e) {
+    if (!(e instanceof NotFoundError)) throw e;
+  }
   const userSeg = getUserSeg(username, store);
   const xml = buildUsernamePasswordCredXml(credId, usernameCred, password, desc, scope);
   await client.postXml(`${userSeg}/createCredentials`, xml, { invalidate: "credentials." });
