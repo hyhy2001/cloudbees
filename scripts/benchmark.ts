@@ -278,6 +278,62 @@ function phaseAStats(results: BM25Result[]) {
 }
 
 
+/**
+ * User-set: 39 queries written from the perspective of a new user who has
+ * never used bee before — no knowledge of command names or CLI conventions.
+ * These are NOT used for tuning (not in GROUND_TRUTH) but tracked separately
+ * to measure generalization to real-world novice phrasing.
+ */
+export const USER_SET: GroundTruth[] = [
+  // Getting started
+  { query: "what is bee",                                  expectedId: "concept.overview",              label: "bee overview",              queryType: "concept" },
+  { query: "what can I do with bee",                       expectedId: "concept.overview",              label: "bee overview",              queryType: "concept" },
+  { query: "bee tool overview",                            expectedId: "concept.overview",              label: "bee overview",              queryType: "concept" },
+  { query: "how do I get started with bee",                expectedId: "concept.getting-started",       label: "getting started",           queryType: "concept" },
+  { query: "how to install bee",                           expectedId: "concept.login",                 label: "install/login",             queryType: "concept" },
+  // Login
+  { query: "how do I log in",                              expectedId: "concept.login",                 label: "login concept",             queryType: "concept" },
+  { query: "connect to my jenkins server",                 expectedId: "auth.login",                    label: "bee auth login",            queryType: "natural" },
+  { query: "I can't log in",                               expectedId: "troubleshooting.login",         label: "login trouble",             queryType: "troubleshoot" },
+  { query: "wrong password error",                         expectedId: "troubleshooting.login",         label: "login trouble",             queryType: "troubleshoot" },
+  // Server navigation
+  { query: "which server am I connected to",               expectedId: "controller.current",            label: "bee controller current",    queryType: "natural" },
+  { query: "how do I change server",                       expectedId: "controller.select",             label: "bee controller select",     queryType: "natural" },
+  { query: "see all my servers",                           expectedId: "controller.list",               label: "bee controller list",       queryType: "natural" },
+  // Jobs
+  { query: "what is a job",                                expectedId: "concept.what-is-job",          label: "job concept",               queryType: "concept" },
+  { query: "see all my builds",                            expectedId: "job.list",                      label: "bee job list",              queryType: "natural" },
+  { query: "how do I run a build",                         expectedId: "job.run",                       label: "bee job run",               queryType: "natural" },
+  { query: "build failed how do I see the error",          expectedId: "job.log",                       label: "bee job log",               queryType: "troubleshoot" },
+  { query: "stop a running build",                         expectedId: "job.stop",                      label: "bee job stop",              queryType: "natural" },
+  { query: "check if my build is done",                    expectedId: "job.status",                    label: "bee job status",            queryType: "natural" },
+  // Create jobs
+  { query: "how do I create a new job",                    expectedId: "job.create",                    label: "bee job create",            queryType: "natural" },
+  { query: "make a new pipeline",                          expectedId: "job.create.pipeline",           label: "bee job create pipeline",   queryType: "natural" },
+  { query: "what is the difference between freestyle and pipeline", expectedId: "concept.pipeline",     label: "pipeline concept",          queryType: "concept" },
+  { query: "copy an existing job",                         expectedId: "job.copy",                      label: "bee job copy",              queryType: "natural" },
+  // Agents / nodes
+  { query: "what is an agent",                             expectedId: "concept.what-is-node",         label: "node concept",              queryType: "concept" },
+  { query: "see all agents",                               expectedId: "node.list",                     label: "bee node list",             queryType: "natural" },
+  { query: "my agent is offline",                          expectedId: "concept.node-offline",         label: "node offline concept",      queryType: "troubleshoot" },
+  { query: "agent won't connect",                          expectedId: "troubleshooting.node-connect", label: "node connect trouble",      queryType: "troubleshoot" },
+  { query: "add a new build machine",                      expectedId: "node.create",                   label: "bee node create",           queryType: "natural" },
+  // Credentials
+  { query: "what is a credential",                         expectedId: "concept.what-is-credential",  label: "credential concept",        queryType: "concept" },
+  { query: "see my saved passwords",                       expectedId: "cred.list",                     label: "bee cred list",             queryType: "natural" },
+  { query: "add a new api key",                            expectedId: "cred.create",                   label: "bee cred create",           queryType: "natural" },
+  { query: "delete an old credential",                     expectedId: "cred.delete",                   label: "bee cred delete",           queryType: "natural" },
+  { query: "what types of credentials can I store",        expectedId: "concept.credential-types",     label: "credential types",          queryType: "concept" },
+  // Advanced
+  { query: "run a job with custom parameters",             expectedId: "concept.build-params",         label: "build params concept",      queryType: "concept" },
+  { query: "see build logs",                               expectedId: "job.log",                       label: "bee job log",               queryType: "natural" },
+  { query: "only show jobs I care about",                  expectedId: "concept.mine-vs-all",          label: "mine vs all concept",       queryType: "concept" },
+  { query: "how do I organize jobs into folders",          expectedId: "concept.folders",               label: "folders concept",           queryType: "concept" },
+  { query: "set a job to run on a specific machine",       expectedId: "concept.node-labels",          label: "node labels concept",       queryType: "concept" },
+  { query: "I got a 403 error",                            expectedId: "troubleshooting.403",           label: "403 trouble",               queryType: "troubleshoot" },
+  { query: "pipeline script is invalid",                   expectedId: "troubleshooting.pipeline-validate", label: "pipeline validate",    queryType: "troubleshoot" },
+];
+
 // ─── Phase B: LLM answer quality — rule-based scoring ────────────────────────
 //
 // NO self-judge. Scoring is purely rule-based on the answer text:
@@ -506,6 +562,7 @@ function buildReport(
   corpus: DocItem[],
   bm25: BM25Result[],
   devBm25: BM25Result[],
+  userBm25: BM25Result[],
   llm: LLMResult[],
   lmUp: boolean,
 ): string {
@@ -517,6 +574,7 @@ function buildReport(
   L.push(`Corpus: ${corpus.length} items (${corpus.filter((d) => d.type === "command").length} commands, ${corpus.filter((d) => d.type === "doc").length} doc chunks)`);
   L.push(`Test-set (frozen): ${bm25.length} queries — **the production metric**. Tuning must NOT optimize against these.`);
   L.push(`Dev-set (auto-generated): ${devBm25.length} queries — for synonym/heuristic tuning only.`);
+  L.push(`User-set (novice phrasing): ${userBm25.length} queries — real-world beginner queries, tracked separately.`);
   L.push("");
 
   // ── Phase A summary ──────────────────────────────────────────────────────
@@ -592,6 +650,20 @@ function buildReport(
     L.push(`| Recall@3   | ${pct(d.r3, d.n)} (${d.r3}/${d.n}) |`);
     L.push(`| Recall@5   | ${pct(d.r5, d.n)} (${d.r5}/${d.n}) |`);
     L.push(`| MRR        | ${d.mrr.toFixed(3)} |`);
+    L.push("");
+  }
+
+  // ── User-set section ─────────────────────────────────────────────────────
+  if (userBm25.length > 0) {
+    const u = phaseAStats(userBm25).overall;
+    L.push("## Phase A — BM25 Retrieval (user-set, novice phrasing)");
+    L.push("");
+    L.push(`| Metric     | Score |`);
+    L.push(`|------------|-------|`);
+    L.push(`| Recall@1   | ${pct(u.r1, u.n)} (${u.r1}/${u.n}) |`);
+    L.push(`| Recall@3   | ${pct(u.r3, u.n)} (${u.r3}/${u.n}) |`);
+    L.push(`| Recall@5   | ${pct(u.r5, u.n)} (${u.r5}/${u.n}) |`);
+    L.push(`| MRR        | ${u.mrr.toFixed(3)} |`);
     L.push("");
   }
 
@@ -694,6 +766,7 @@ function printConsoleSummary(
   bm25: BM25Result[],
   llm: LLMResult[],
   lmUp: boolean,
+  userBm25?: BM25Result[],
 ): void {
   const { overall } = phaseAStats(bm25);
   console.log("");
@@ -712,6 +785,14 @@ function printConsoleSummary(
   }
 
   if (!lmUp) {
+    if (userBm25 && userBm25.length > 0) {
+      const { overall: u } = phaseAStats(userBm25);
+      console.log("");
+      console.log("━━━ User-set (novice phrasing) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log(`  Recall@1  ${pct(u.r1, u.n).padStart(6)}   (${u.r1}/${u.n})`);
+      console.log(`  Recall@3  ${pct(u.r3, u.n).padStart(6)}   (${u.r3}/${u.n})`);
+      console.log(`  MRR       ${u.mrr.toFixed(3).padStart(6)}`);
+    }
     console.log("");
     console.log("━━━ Phase B — LLM  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log(`  Skipped (LM unreachable at ${LM_URL})`);
@@ -954,12 +1035,14 @@ async function main(): Promise<void> {
     seen.add(key);
     return true;
   });
-  console.log(`Test-set (frozen): ${testSet.length} | Dev-set (auto): ${devSet.length}`);
+  const userSet = USER_SET.filter((q) => !testKeys.has(`${q.query}|${q.expectedId}`));
+  console.log(`Test-set (frozen): ${testSet.length} | Dev-set (auto): ${devSet.length} | User-set: ${userSet.length}`);
 
-  // Phase A — run on both sets
+  // Phase A — run on all sets
   console.log("\nRunning Phase A — BM25 retrieval…");
   const bm25Results = runPhaseA(corpus, testSet);
   const devBm25Results = runPhaseA(corpus, devSet);
+  const userBm25Results = runPhaseA(corpus, userSet);
 
   // Phase B — test-set ONLY (the trustworthy LLM metric; dev-set would inflate it)
   let llmResults: LLMResult[] = [];
@@ -976,10 +1059,10 @@ async function main(): Promise<void> {
   }
 
   // Console summary
-  printConsoleSummary(bm25Results, llmResults, lmUp);
+  printConsoleSummary(bm25Results, llmResults, lmUp, userBm25Results);
 
   // Markdown report
-  const report = buildReport(corpus, bm25Results, devBm25Results, llmResults, lmUp);
+  const report = buildReport(corpus, bm25Results, devBm25Results, userBm25Results, llmResults, lmUp);
   writeFileSync(REPORT_PATH, report);
   console.log(`\nReport written: ${REPORT_PATH}`);
 }
