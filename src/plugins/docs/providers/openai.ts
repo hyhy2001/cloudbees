@@ -50,12 +50,17 @@ export class OpenAICompatProvider {
     });
 
     if (!response.ok) {
-      throw new Error(`LM HTTP ${response.status}`);
+      const body = await response.text().catch(() => "");
+      throw new Error(`LM HTTP ${response.status}${body ? `: ${body.slice(0, 300)}` : ""}`);
     }
 
-    const json = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
-    };
+    const raw = await response.text();
+    let json: { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> };
+    try {
+      json = JSON.parse(raw) as typeof json;
+    } catch {
+      throw new Error(`LM returned non-JSON response: ${raw.slice(0, 300)}`);
+    }
     const msg = json.choices?.[0]?.message;
     // Reasoning models (DeepSeek, QwQ, etc.) put the answer in
     // reasoning_content and leave content empty. Fall back gracefully.
