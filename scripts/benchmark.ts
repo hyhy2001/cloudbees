@@ -519,7 +519,11 @@ async function runPhaseB(corpus: DocItem[], queries: GroundTruth[], limit = 0): 
   process.stdout.write(`  Running ${sample.length} LLM queries`);
 
   for (const gt of sample) {
-    const hits = searchDocs(gt.query, corpus, 5);
+    // Use gate:true + softGate:false to match production answer.ts behavior.
+    // gate=false (old default) let noise hits like `bee job track` pollute the
+    // 403 context and made scoring hallucinate when LM correctly cited only the
+    // gated result. softGate=false keeps an empty context empty (correct refusal).
+    const hits = searchDocs(gt.query, corpus, 5, { gate: true, softGate: false });
     const userPrompt = buildUserPrompt(gt.query, hits);
 
     try {
