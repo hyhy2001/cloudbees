@@ -77,12 +77,15 @@ function walkCommands(cmd: Command, path: string[], out: DocItem[]): void {
     if (desc || sub.options.length > 0) {
       const sig = argsSig(sub);
       const usage = ["bee", ...subPath, sig].filter(Boolean).join(" ");
+      // Prepend "flags options parameters" so relevance gate passes for queries
+      // like "all options of node create" — the body only has --flag-name lines.
+      const body = flagBody ? `flags options parameters\n${flagBody}` : flagBody;
       out.push({
         id: subPath.join("."),
         type: "command",
         title: usage,
         description: desc,
-        body: flagBody,
+        body,
         source: "command",
       });
     }
@@ -196,6 +199,9 @@ const SYNONYMS: Record<string, string> = {
   destroy:     "delete",
   expire:      "delete",   // "expire a credential" → cred delete
   rid:         "delete",   // "get rid of" → delete
+  options:     "flags",    // "all options of create node" → flag table
+  parameters:  "flags",    // "what parameters does X take" → flag table
+  arguments:   "flags",    // "what arguments does X accept" → flag table
   make:        "create",
   add:         "create",
   new:         "create",
