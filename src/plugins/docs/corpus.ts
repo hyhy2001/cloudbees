@@ -1094,5 +1094,18 @@ export function searchDocs(
         const fb = corpus.find((c) => c.id === "concept.credential-types"); if (fb) result.unshift(fb);
       } else { const ci = result.findIndex((it) => it.id === "concept.credential-types"); if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); } }
     }
+    // "how to run job with parameters" → concept.build-params (not job.run)
+    // Guard: only for "how to/how do i" phrasing — imperative "run job with param values" stays at job.run
+    if (/\bhow\s+(to|do\s+i)\s+run\s+(a\s+)?job\s+with\s+param/i.test(qNorm)) {
+      if (!result.some((it) => it.id === "concept.build-params")) {
+        const fb = corpus.find((c) => c.id === "concept.build-params"); if (fb) result.unshift(fb);
+      } else { const ci = result.findIndex((it) => it.id === "concept.build-params"); if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); } }
+    }
+    // "node unreachable cannot connect" → troubleshooting.node-connect (not troubleshooting.login)
+    if (/\b(unreachable|cannot\s+connect|can'?t\s+connect)\b/i.test(qNorm) && /\bnode\b/i.test(qNorm)) {
+      if (!result.some((it) => it.id === "troubleshooting.node-connect")) {
+        const fb = corpus.find((c) => c.id === "troubleshooting.node-connect"); if (fb) result.unshift(fb);
+      } else { const ci = result.findIndex((it) => it.id === "troubleshooting.node-connect"); if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); } }
+    }
     return result.slice(0, limit);
 }
