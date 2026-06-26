@@ -65,6 +65,14 @@ function renderTable(rows: string[][]): string {
 
 /** Render a single line (no block/table context needed). */
 function renderLine(line: string): string {
+  // Headings
+  const h2 = line.match(/^## (.+)$/);
+  if (h2) return chalk.bold.cyan(h2[1]!);
+  const h1 = line.match(/^# (.+)$/);
+  if (h1) return chalk.bold.cyan(h1[1]!);
+  const h3 = line.match(/^### (.+)$/);
+  if (h3) return chalk.bold(h3[1]!);
+
   const bulletMatch = line.match(/^(\s*)[*-] (.+)$/);
   if (bulletMatch) {
     return `${bulletMatch[1]}${chalk.dim("•")} ${renderInline(bulletMatch[2]!)}`;
