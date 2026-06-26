@@ -123,7 +123,7 @@ Examples:
 async function rewriteQuery(query: string, provider: LMProvider): Promise<string> {
   try {
     const prompt = `${REWRITE_PROMPT}\n\n  "${query}" →`;
-    const raw = await provider.generate(prompt, 64);
+    const raw = await provider.generate(prompt, 32);
     const keywords = raw.trim().split(/\s+/).slice(0, 8).join(" ");
     if (keywords.length > 0) return keywords;
   } catch {

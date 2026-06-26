@@ -30,7 +30,7 @@ export class OpenAICompatProvider {
    * instruction — the system prompt is attached here so every call is grounded
    * the same way regardless of caller.
    */
-  async generate(prompt: string, maxTokens = 2048): Promise<string> {
+  async generate(prompt: string, maxTokens = 8192): Promise<string> {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
 
@@ -87,7 +87,7 @@ export class OpenAICompatProvider {
           { role: "user", content: prompt },
         ],
         temperature: 0,
-        max_tokens: 2048,
+        max_tokens: 8192,
         stream: true,
       }),
       signal: AbortSignal.timeout(60000),
