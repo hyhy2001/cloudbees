@@ -27,7 +27,7 @@ const APP_ID = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
  * (the gateway routes by it), unlike the legacy /serving-endpoints/{model}/
  * invocations form where the model was in the path.
  */
-async function chatCall(model: string, token: string, prompt: string, maxTokens = 2048): Promise<string> {
+async function chatCall(model: string, token: string, prompt: string, maxTokens = 8192): Promise<string> {
   const response = await fetch(CHAT_ENDPOINT, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
@@ -75,7 +75,7 @@ export class DatabricksOAuthProvider {
     this.model = model;
   }
 
-  async generate(prompt: string, maxTokens = 2048): Promise<string> {
+  async generate(prompt: string, maxTokens = 8192): Promise<string> {
     const token = await this.getToken();
     return chatCall(this.model, token, prompt, maxTokens);
   }
@@ -95,7 +95,7 @@ export class DatabricksOAuthProvider {
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: prompt },
         ],
-        max_tokens: 2048,
+        max_tokens: 8192,
         temperature: 0,
         stream: true,
       }),
