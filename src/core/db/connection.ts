@@ -4,8 +4,9 @@
  */
 
 import { Database } from "bun:sqlite";
-import { mkdirSync, existsSync } from "fs";
+import { mkdirSync, existsSync, chmodSync } from "fs";
 import { join, dirname } from "path";
+import { userInfo } from "os";
 // Embed schema.sql into the bundle/binary at build time. Reading it at
 // runtime via import.meta.dir breaks in the compiled binary, where the path
 // resolves into Bun's virtual "/$bunfs" filesystem (file not on disk).
@@ -137,9 +138,11 @@ export function getDbPath(): string {
         "Cannot determine bee database location. Set BEE_DIR or CB_DB_PATH explicitly."
       );
     }
-    const dataDir = join(beeRoot, "data");
-    mkdirSync(dataDir, { recursive: true });
-    _DB_PATH = join(dataDir, "cb.db");
+    const username = userInfo().username;
+    const userDataDir = join(beeRoot, "data", username);
+    mkdirSync(userDataDir, { recursive: true });
+    chmodSync(userDataDir, 0o700);
+    _DB_PATH = join(userDataDir, "cb.db");
   }
 
   return _DB_PATH;

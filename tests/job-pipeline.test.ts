@@ -19,6 +19,7 @@ import {
   getPipelineScript,
 } from "../src/plugins/job/service";
 import type { CloudBeesClient } from "../src/core/api/types";
+import { NotFoundError } from "../src/core/api/errors";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,8 @@ class FakePipelineClient {
   }
 
   async get<T>(path: string, _opts?: unknown): Promise<T> {
+    // job detail endpoint → not found so duplicate-check passes
+    if (path.includes("/api/json")) throw new NotFoundError("not found");
     return {} as T;
   }
 
@@ -530,6 +533,15 @@ describe("createPipelineJob", () => {
     await expect(
       createPipelineJob(asClient(client), "bad", { script: "bad script" }),
     ).rejects.toThrow("Pipeline script validation failed");
+  });
+
+  test("rejects duplicate job name", async () => {
+    const client = new FakePipelineClient();
+    // Override get to return a job (simulates existing job)
+    client.get = async <T>(_path: string, _opts?: unknown): Promise<T> => ({} as T);
+    await expect(
+      createPipelineJob(asClient(client), "existing", { script: MIN_SCRIPT }),
+    ).rejects.toThrow(`Job "existing" already exists.`);
   });
 });
 

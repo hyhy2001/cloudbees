@@ -412,6 +412,8 @@ export async function createFreestyleJob(
   opts: CreateFreestyleOpts = {},
   folder: string | null = null,
 ): Promise<void> {
+  if (await getJob(client, name) !== null)
+    throw new ValidationError(`Job "${name}" already exists.`);
   const {
     desc = "",
     shellCmd = "echo hello",
@@ -494,6 +496,8 @@ export async function createPipelineJob(
   opts: CreatePipelineOpts = {},
   folder: string | null = null,
 ): Promise<void> {
+  if (await getJob(client, name) !== null)
+    throw new ValidationError(`Job "${name}" already exists.`);
   const {
     desc = "",
     script = "",

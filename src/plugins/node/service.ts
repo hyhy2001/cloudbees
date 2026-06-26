@@ -5,7 +5,7 @@
 import { xmlParser, xmlParserTagValues } from "../../domain/xml";
 import type { CloudBeesClient } from "../../core/api/types";
 import { NodeDTO, NodeDetailDTO, nodeFromDict, nodeDetailFromDict } from "../../core/dtos/index";
-import { NotFoundError } from "../../core/api/errors";
+import { NotFoundError, ValidationError } from "../../core/api/errors";
 import {
   buildLauncherXml,
   buildRetentionXml,
@@ -82,6 +82,12 @@ export async function createPermanentNode(
   client: CloudBeesClient,
   opts: CreateNodeOptions,
 ): Promise<void> {
+  try {
+    await getNode(client, opts.name);
+    throw new ValidationError(`Node "${opts.name}" already exists.`);
+  } catch (e) {
+    if (!(e instanceof NotFoundError)) throw e;
+  }
   const {
     name,
     remoteDir,
