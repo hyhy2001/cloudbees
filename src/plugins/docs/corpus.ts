@@ -346,7 +346,7 @@ const SYNONYMS: Record<string, string> = {
   parameter:     "param",      // "pass parameter" → job run --param / --param-def
   params:        "param",      // "with params" → job run/create/update
   creds:         "cred",       // "list all creds" → cred list
-  store:         "create",     // "store a secret" → cred create
+  store:         "store",      // kept literal — "system store" needs --store flag match; "store a secret" → cred create still matches via body
   choose:        "select",     // "choose controller" → controller.select
   pick:          "select",     // "pick a controller" → controller.select
   directory:     "dir",        // "working directory" → --chdir / --remote-dir
@@ -689,19 +689,25 @@ export function searchDocs(
     //    Maps natural phrases → flag name → commands whose body mentions it.
     //    Uses word-boundary regex so "label" doesn't match "labels".
     const flagPhrases: Record<string, { flags: string[]; prefer?: string }> = {
-      "not just mine": { flags: ["--all"] },
+      "not just mine": { flags: ["--all"], prefer: "job.list" },
       everything: { flags: ["--all"] },
       "all jobs": { flags: ["--all"] },
       "all nodes": { flags: ["--all"] },
-      "restrict to agent": { flags: ["--node"] },
-      "restrict job": { flags: ["--node"] },
-      "specific agent": { flags: ["--node"] },
-      "specific profile": { flags: ["--profile"], prefer: "auth.login" },
+      "restrict to agent": { flags: ["--node"], prefer: "job.create.freestyle" },
+      "restrict job": { flags: ["--node"], prefer: "job.create.freestyle" },
+      "specific agent": { flags: ["--node"], prefer: "job.create.freestyle" },
+      "specific profile": { flags: ["--profile"], prefer: "auth.use" },
+      "switch profile": { flags: ["--profile"], prefer: "auth.use" },
+      "switch.*profile": { flags: ["--profile"], prefer: "auth.use" },
       "wait for": { flags: ["--wait"] },
       timeout: { flags: ["--timeout"] },
       "specific node": { flags: ["--node"] },
       label: { flags: ["--labels"] },
       "remote dir": { flags: ["--remote-dir"] },
+      "pipeline script": { flags: ["--script"], prefer: "job.create.pipeline" },
+      "specify script": { flags: ["--script"], prefer: "job.create.pipeline" },
+      "system store": { flags: ["--store"], prefer: "cred.list" },
+      "store system": { flags: ["--store"], prefer: "cred.list" },
     };
     // Merge in LLM-generated flag synonyms (build-time). Hand-maintained wins.
     for (const [phrase, spec] of Object.entries(GENERATED_FLAG_SYNONYMS)) {
@@ -765,7 +771,8 @@ export function searchDocs(
         if (spec.prefer) {
           fi = items.findIndex((it) => it.id === spec.prefer);
         }
-        if (fi <= (promoted ? 1 : 0)) {
+        // Only fallback to flag-body search when prefer wasn't found at all (fi=-1)
+        if (fi < 0) {
           fi = items.findIndex(
             (it) => it.type === "command" && it.body?.includes(spec.flags[0]!),
           );
@@ -807,6 +814,8 @@ export function searchDocs(
       [/\blog\s+out\b/i, "auth.logout"],
       [/\btell\s+me\s+about\b/i, "concept."],
       [/\bswitch\s+(server|controller)\b/i, "controller.select"],
+      [/\bswitch\s+.*\bprofile\b/i, "auth.use"],
+      [/\bspecific\s+profile\b/i, "auth.use"],
     ];
     for (const [re, targetPrefix] of intentPatterns) {
       if (re.test(qNorm)) {
