@@ -20,7 +20,9 @@ function renderInline(text: string): string {
   return text
     .replace(/`([^`]+)`/g, (_, code: string) => chalk.green(code))
     .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, (_, a: string, b: string) => chalk.bold(a ?? b))
-    .replace(/\*([^*]+)\*|_([^_]+)_/g, (_, a: string, b: string) => chalk.italic(a ?? b));
+    // Italic: require content starts and ends with non-whitespace to avoid
+    // matching cron asterisks like "H 0 * * *" → use \S at boundaries.
+    .replace(/\*(\S[^*]*\S|\S)\*|_(\S[^_]*\S|\S)_/g, (_, a: string, b: string) => chalk.italic(a ?? b));
 }
 
 /** Parse a markdown table row into cells. */
