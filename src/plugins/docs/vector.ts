@@ -151,7 +151,11 @@ export function searchVector(queryEmb: number[], db: VectorDb, corpus: DocItem[]
     scores.push({ idx: i, score: cosineSimilarity(queryEmb, db.matrix[i]!) });
   }
   scores.sort((a, b) => b.score - a.score);
-  return scores.slice(0, topK).map((s) => corpus.find((c) => c.id === db.ids[s.idx])!).filter(Boolean);
+  return scores
+    .slice(0, topK * 3) // oversample to account for filtered items
+    .map((s) => corpus.find((c) => c.id === db.ids[s.idx])!)
+    .filter((c): c is DocItem => Boolean(c) && Boolean(c.body?.trim()))
+    .slice(0, topK);
 }
 
 /**
