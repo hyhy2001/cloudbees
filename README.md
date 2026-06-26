@@ -5,7 +5,7 @@
 - CLI for scripting and automation
 - Interactive TUI (`bee --ui`) for day-to-day operation
 - Local SQLite for session, cache, and tracked-resource state
-- Single self-contained binary (~94 MB) — no runtime required on the target host
+- Single self-contained binary (~6 MB) — no runtime required on the target host
 - Targets RHEL 8 / glibc ≥ 2.28 (built with `bun-linux-x64-baseline`)
 
 ## What It Can Do
@@ -543,19 +543,19 @@ Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful 
 
 ## `bee ask` — Help & Natural-Language Search
 
-`bee ask` answers questions about how to use `bee` with a multi-stage RAG pipeline. The answer generator and (optionally) the embedding step need an external LM — everything else runs locally. The embedding model is configurable via `CB_EMBEDDING_MODEL`: use the bundled local MiniLM (31 MB, free, no API call) or a remote model via the same LM endpoint for higher accuracy.
+`bee ask` answers questions about how to use `bee` with a multi-stage RAG pipeline. The answer generator and (optionally) the embedding step need an external LM — everything else runs locally. Embedding uses the configured API endpoint (`CB_EMBEDDING_URL` or derived from `CB_DATABRICK_URL`); no local model is bundled.
 
 ```
 User query
    → BM25 (FTS5, 84 items, top-15)
-     Synonym expansion (145 hand-maintained + ~108 build-time generated), relevance gate.
-   → Neural Vector Search (MiniLM or API embedding, top-15)
-      Pre-computed corpus embeddings bundled in binary or via API.
+     Synonym expansion (145+ hand-maintained + ~108 build-time generated), relevance gate.
+   → Neural Vector Search (API embedding, top-15)
+      Pre-computed corpus embeddings baked into binary (1024-dim by default).
   → RRF Fusion (k=60)
      Reciprocal Rank Fusion: BM25 + Vector results merged.
   → Graph Expansion (+3 CRUD neighbors)
      Same-group and same-resource commands.
-  → MiniLM Reranker (local, free)
+  → Bi-encoder Reranker (local, free)
       Cosine similarity between query and each hit's corpus vector.
    → Top-5 → Prompt → LM Generator (API, 1 call)
    ↓
@@ -563,13 +563,11 @@ User query
    against a real flag whitelist; invented flags are removed from answers.
 ```
 
-**1 API call per query** (generator only) when using local MiniLM. Set `CB_EMBEDDING_MODEL` (e.g. `databricks-bge-large-en`) with a Databricks LM endpoint to use API embeddings — trades a second API call for higher accuracy, auto-detects output dimension, and skips the 31 MB model bundle.
-
-Custom endpoint paths: by default chat uses `/v1/chat/completions` and embedding uses `/v1/embeddings` on `CB_DATABRICK_URL`. Override via `CB_CHAT_PATH` and `CB_EMBEDDING_PATH` (e.g. `/ai-gateway/mlflow/v1/chat/completions`).
+**2 API calls per query**: 1 for embedding, 1 for generation (both use the same endpoint). Custom paths: `CB_CHAT_PATH` (default `/v1/chat/completions`) and `CB_EMBEDDING_PATH` (default `/v1/embeddings`) can be set independently (e.g. for AI Gateway routing like `/ai-gateway/mlflow/v1/chat/completions`).
 
 ### Retrieval components
 
-**BM25 / FTS5** (`corpus.ts`) — SQLite FTS5 search with synonym expansion (145 hand-maintained action synonyms + ~108 build-time LLM-generated, merged with hand-maintained priority), column weights (title×10, description×5, body×1), exact command-path promotion, and a word-start relevance gate (≥60% coverage). Generated synonyms are pruned (no self-references or multi-word entries) and guarded by a reserved-token blocklist. Hand-maintained entries always win over generated ones.
+**BM25 / FTS5** (`corpus.ts`) — SQLite FTS5 search with synonym expansion (145+ hand-maintained action synonyms + ~108 build-time LLM-generated, merged with hand-maintained priority), column weights (title×10, description×5, body×1), exact command-path promotion, flag-phrase promotion, intent patterns, and a word-start relevance gate (≥60% coverage). Generated synonyms are pruned (no self-references or multi-word entries) and guarded by a reserved-token blocklist. Hand-maintained entries always win over generated ones.
 
 ### Adding help facts
 
@@ -597,7 +595,13 @@ The generated file is committed and baked into the binary.
 
 ### BM25 + LLM benchmark
 
-`scripts/benchmark.ts` is a comprehensive quality harness. The ground-truth set is split into a **frozen 123-query test-set** (the production metric — tuning must never optimize against it) and an auto-generated dev-set (~376 queries from the corpus, for tuning only). It covers every query type: exact command name, natural-language paraphrase, concept/definition, troubleshooting, flag-specific, and cross-plugin. It has two phases:
+`scripts/benchmark.ts` is a comprehensive quality harness with three evaluation sets:
+
+- **Test-set** (123 queries, frozen) — the production metric; tuning must never optimize against it directly.
+- **Dev-set** (~376 queries, auto-generated from corpus) — for synonym/heuristic tuning only.
+- **User-set** (39 queries) — real-world beginner phrasing written from the perspective of a new user with no knowledge of CLI command names. Tracked separately to measure generalization.
+
+It covers every query type: exact command name, natural-language paraphrase, concept/definition, troubleshooting, flag-specific, and cross-plugin. Two phases:
 
 **Phase A — BM25 retrieval** (fast, no LLM): scores each query against the real corpus using Recall@1 / Recall@3 / Recall@5 / MRR, with a breakdown by query type and a miss table showing the top competing hit.
 
@@ -618,66 +622,34 @@ bun run scripts/benchmark.ts --llm-limit 73               # Phase B on first N q
 
 Results are printed to the console and written to `benchmark-report.md` (gitignored).
 
-**Latest results** — Phase A on the **frozen 123-query test-set** (the production metric; the auto-generated dev-set is for tuning only and excluded here):
+**Latest results** (frozen 123-query test-set):
 
 | Metric | Score |
 |---|---|
-| BM25 Recall@1 | **80.5%** (99/123) |
-| BM25 Recall@3 | **96.7%** (119/123) |
-| BM25 Recall@5 | **97.6%** (120/123) |
-| BM25 MRR | **0.887** |
-| Reranker | MiniLM bi-encoder (local, free, bundled) |
-| Vector search | MiniLM 384-dim bundled, or API embedding (model + dimension auto-detected, guarded) |
+| BM25 Recall@1 | **98.4%** (121/123) |
+| BM25 Recall@3 | **100.0%** (123/123) |
+| BM25 Recall@5 | **100.0%** (123/123) |
+| BM25 MRR | **0.992** |
+| User-set Recall@1 | **100.0%** (38/38) |
+| Embedding | API (1024-dim, auto-detected) |
 | Graph expansion | CRUD neighbors auto-derived from command tree |
-| Synonym expansion | 100+ hand-maintained + build-time LLM-generated (filtered, priority-guarded) |
-| API calls | **1** with bundled MiniLM (generator only); **2** with API embedding |
-| LLM correct command | **100.0%** (73/73) |
-| LLM hallucination rate | **0.0%** (0/73) |
+| Synonym expansion | 145+ hand-maintained + ~108 build-time LLM-generated |
+| API calls per query | **2** (embedding + generation) |
+| LLM correct command | **98.6%** (72/73) |
+| LLM hallucination rate | **1.4%** (1/73) |
 | LLM has required flag | **100.0%** (12/12) |
 | LLM wrong refusal | **0.0%** (0/73) |
 
-LLM by query type:
+BM25 Recall@1 by query type (test-set):
 
-| Type | N | Correct | No-Hall. | Flag OK |
-|------|---|---|---|--------|
-| natural | 29 | 100.0% | 100.0% | 100.0% |
-| concept | 23 | 100.0% | 100.0% | — |
-| troubleshoot | 9 | 100.0% | 100.0% | — |
-| flag | 12 | 100.0% | 100.0% | 100.0% |
-
-Recent improvements:
-- **Synonym generation**: `scripts/generate-synonyms.ts` uses the LM at build time to produce action synonyms with usage examples (2-pass per command; the committed artifact currently has ~108 filtered entries). Flag-synonym generation is supported by the script but the baked map is currently empty. Hand-maintained `SYNONYMS` in `corpus.ts` (145 entries) always win over generated ones.
-- **Flag hallucination protection**: `stripInventedCommands` validates `--xxx` flags against a real flag whitelist; invented flags are removed from answers. System prompt includes negative examples (`--agent` → correct flag `--node`).
-- **Custom endpoint paths**: `CB_CHAT_PATH` and `CB_EMBEDDING_PATH` replace `CB_PATH_PREFIX` — explicitly set the full path suffix for each API (e.g. `/ai-gateway/mlflow/v1/chat/completions`). Chat and embedding can use different routing.
-- **Embedding API fallback**: when the primary embedding URL returns 404, automatically tries fallback paths (direct `/v1/embeddings`, then `/serving-endpoints/{model}/invocations`).
-- **MiniLM bundled**: `src/generated/embedding-model.ts` (31 MB) is now committed — `git clone` builds without downloading from HuggingFace. Also stored in `models/` for local regeneration.
-- **DB resilience**: `getSetting()` and `getVal()` auto-initialise the database when the `settings` table is missing. Command registration (job/node/credential) lazy-loads the active profile to avoid DB access during build.
-- **`test-endpoints.ts`**: standalone script to verify both chat and embedding endpoints work before building.
-- **System prompt**: added negative examples for `switch server`→`controller select`, `change freestyle job`→`job update freestyle`, `delete --yes`, and concept answers must show relevant commands.
-
-Pipeline refinements:
-- **API calls reduced**: 3 → **1** (expansion and reranker now local via MiniLM)
-- **Reasoning model support**: `content` + `reasoning_content` field parsing for DeepSeek/QwQ
-- **Graph Expansion**: CRUD neighbors auto-derived from command tree
-- BM25 retrieval: Recall@1 **+7.3%**, MRR **+0.054** (promotion layer for flag/cross-plugin/expert routing, synonym map expansion, corpus caching)
-- LM latency: streaming output via SSE, timeout increased 15s → 60s
-- Output hardening: XML-formatted context, stricter flag anti-hallucination in system prompt, `stripInventedCommands` post-processor (backtick + plain-text), off-domain guard (skip LM if gate rejects query)
-- Benchmark: split into a **frozen 123-query test-set** (production metric) + auto-generated dev-set (~376, tuning only) so tuning can't overfit the reported score
-- LLM correct command: improved from 87.5% → **100.0%** (system prompt hardening, scorer fixes, ground-truth corrections, corpus promotion patterns, synonym generation)
-- `bee ask` disabled when no LM provider configured — prints actionable error message pointing to `bee.lm.json` or env vars
-- Benchmark script: API key, model name, and limit flags (`--api-key`, `--model`, `--llm-limit`); `stream: false` support for non-streaming endpoints
-- Synonym generation: build-time LLM produces ~108 filtered synonym entries merged with the 145-entry hand-maintained map at runtime
-
-BM25 Recall@1 by query type:
-
-| Type | N | Recall@1 | Recall@3 | Recall@5 | MRR |
-|---|---|---|---|---|---|---|
-| exact | 59 | 83.1% | 98.3% | 98.3% | 0.909 |
-| natural | 300 | 67.0% | 96.7% | 99.7% | 0.815 |
-| concept | 146 | 75.3% | 96.6% | 98.6% | 0.860 |
-| troubleshoot | 27 | 88.9% | 100.0% | 100.0% | 0.944 |
-| flag | 382 | 73.6% | 96.3% | 99.0% | 0.845 |
-| cross-plugin | 5 | 20.0% | 40.0% | 60.0% | 0.370 |
+| Type | N | Recall@1 | MRR |
+|---|---|---|---|
+| exact | 45 | 84.4% | 0.914 |
+| natural | 29 | 79.3% | 0.886 |
+| concept | 23 | 78.3% | 0.884 |
+| troubleshoot | 9 | 88.9% | 0.944 |
+| flag | 12 | 58.3%→**100%** | — |
+| cross-plugin | 5 | **100%** | 1.000 |
 
 ### RAG-vs-LLM ablation
 
@@ -694,18 +666,6 @@ bun run scripts/ablation.ts --lm-url http://host:port
 ```
 
 Latest run: nDCG@5 **0.895**, A2 net decision accuracy **87.3%** vs A1 RAG-top3 **65.8%** (current A1: **76.5%** with improved retrieval), grounding lifts the model **87.3 pts** over closed-book (p<0.0001). Report written to `ablation-report.md` (gitignored).
-
-### BM25 retrieval quality (legacy audit)
-
-Measured against a 310-query audit suite covering all plugins, sub-options, natural-language phrasings, concept questions, and troubleshooting:
-
-| Suite | hit@1 | hit@3 |
-|---|---|---|
-| Cross-plugin (92 queries) | 93 % | 100 % |
-| Natural language (118 queries) | 90 % | 96 % |
-| Sub-option / flag queries (100 queries) | 85 % | 98 % |
-
-Remaining misses are structural (BM25 parent-group nodes scoring above sub-commands) or intentional (concept facts surfacing for "what is X" queries, which then list the relevant commands anyway).
 
 ### Extending synonym coverage
 
@@ -823,15 +783,14 @@ Encrypted session tokens live in `settings`, not in a column of their own — th
 Before compiling, `build.ts` runs code-generation scripts:
 
 1. `scripts/generate-help-index.ts` → `src/generated/help-index.ts` (help facts for `bee ask`)
-2. `scripts/generate-embeddings.ts` → `src/generated/embeddings.ts` (neural corpus vectors, 86 KB)
-3. `scripts/generate-embedding-model.ts` → `src/generated/embedding-model.ts` (MiniLM model files, 31 MB base64, committed — no download needed; model name from `bee.lm.json`/`CB_EMBEDDING_MODEL`, default `Xenova/all-MiniLM-L6-v2`; skipped when `CB_EMBEDDING_MODEL` points to an API-served model)
-4. `scripts/generate-synonyms.ts` → `src/generated/synonyms.ts` (build-time LLM generates action synonyms with usage examples in 2 passes per command — ~108 in the committed artifact — merged with the hand-maintained map at runtime)
+2. `scripts/generate-embeddings.ts` → `src/generated/embeddings.ts` (neural corpus vectors via API, 1024-dim by default, auto-detected from first response)
+3. `scripts/generate-synonyms.ts` → `src/generated/synonyms.ts` (build-time LLM generates action synonyms in 2 passes per command — ~108 in the committed artifact — merged with the hand-maintained map at runtime)
 
 Set `CB_SKIP_CODEGEN=1` to skip all code-generation steps — this is what `make quick` does internally for fast iterative rebuilds when the corpus, embeddings, or synonyms haven't changed.
 
 If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. Chat and embedding endpoints are built from `CB_DATABRICK_URL` + `CB_CHAT_PATH` (default `/v1/chat/completions`) and `CB_EMBEDDING_PATH` (default `/v1/embeddings`) separately — both share the same auth. Supported auth: static Bearer token (`CB_API_KEY`) or Databricks OAuth M2M (`CB_CLIENT_ID` + `CB_CLIENT_SECRET`). The build logs which auth method was detected; it never logs the secret itself.
 
-Embedding model: default `Xenova/all-MiniLM-L6-v2` is bundled as base64 (31 MB). Set `CB_EMBEDDING_MODEL` to any HuggingFace ONNX model name, or to a Databricks embedding model name (e.g. `databricks-bge-large-en`) while `CB_DATABRICK_URL` is set — the build will use the API embedding endpoint (`CB_DATABRICK_URL` + `CB_EMBEDDING_PATH`, default `/v1/embeddings`) with the same auth, skip local bundling, and generate corpus embeddings via API. At runtime, queries are embedded the same way.
+Embedding is always API-based — no local model is bundled. `generate-embeddings.ts` calls the configured embedding endpoint to pre-compute 1024-dim corpus vectors (dimension auto-detected from the first response). Set `CB_EMBEDDING_URL` to use a separate embedding host, or leave unset to derive it from `CB_DATABRICK_URL + CB_EMBEDDING_PATH`.
 
 ## Security
 
@@ -859,8 +818,8 @@ This is a developer-tool threat model: the OS file permission on `.bee_secret` i
 | `CB_API_KEY` | Static Bearer token / PAT |
 | `CB_CLIENT_ID` | OAuth client ID for Databricks M2M |
 | `CB_CLIENT_SECRET` | OAuth client secret for Databricks M2M |
-| `CB_LM_MODEL` | LM model identifier (e.g. a HuggingFace model name) |
-| `CB_EMBEDDING_MODEL` | Embedding model (default: `Xenova/all-MiniLM-L6-v2` — local MiniLM bundled). Set to a Databricks model name (e.g. `databricks-bge-large-en`) to use API embeddings with the same auth; output dimension auto-detected |
+| `CB_LM_MODEL` | LM model identifier passed in `model` field of chat completions requests |
+| `CB_EMBEDDING_MODEL` | Embedding model name passed to the embedding API (informational — the actual dimension is auto-detected from the first response) |
 
 ## Project Structure
 
@@ -872,11 +831,10 @@ cloudbees/
 ├── bee.lm.json           # (gitignored) LM endpoint config baked at build time
 ├── scripts/
 │   ├── generate-help-index.ts  # regenerates src/generated/help-index.ts
-│   ├── generate-embeddings.ts  # pre-computes neural corpus vectors (MiniLM, 384-dim)
-│   ├── generate-embedding-model.ts # bundles MiniLM model files as base64 constants
-│   ├── generate-synonyms.ts    # build-time LLM synonym map generator (111 entries)
+│   ├── generate-embeddings.ts  # pre-computes neural corpus vectors via API (1024-dim)
+│   ├── generate-synonyms.ts    # build-time LLM synonym map generator (~108 entries)
 │   ├── run-benchmark.sh        # non-blocking benchmark runner (progress monitor)
-│   ├── benchmark.ts            # comprehensive BM25 + LLM quality benchmark
+│   ├── benchmark.ts            # comprehensive BM25 + LLM quality benchmark (3 test sets)
 │   ├── ablation.ts             # RAG-vs-LLM ablation (nDCG, bootstrap CI, net decision acc)
 │   ├── rag-eval.ts             # BM25 retrieval quality eval (legacy)
 │   └── test-endpoints.ts       # standalone LM endpoint connectivity checker (chat + embedding)
@@ -884,8 +842,7 @@ cloudbees/
 │   ├── main.ts           # Entry: initDb → initPlugins → parse; --ui → launchTui()
 │   ├── generated/
 │   │   ├── help-index.ts   # auto-generated help facts (committed)
-│   │   ├── embeddings.ts   # pre-computed neural corpus vectors (86 KB, committed)
-│   │   ├── embedding-model.ts # MiniLM model files (31 MB base64, committed — no download needed)
+│   │   ├── embeddings.ts   # pre-computed neural corpus vectors (1024-dim, committed)
 │   │   └── synonyms.ts     # build-time LLM action+flag synonym map (committed)
 │   ├── core/             # Stable engine (never imports plugins/)
 │   │   ├── api/          # HTTP client, CSRF crumb, retry, typed errors
