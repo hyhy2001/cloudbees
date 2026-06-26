@@ -17,12 +17,28 @@ export function registerDocsCommands(ctx: PluginContext): void {
   ctx.program
     .command("ask")
     .description("Ask how to use bee — requires LM endpoint configured in bee.lm.json or env")
-    .argument("<query...>", "What you want to do (e.g. 'create job', 'what is a profile')")
+    .argument("<query...>", "What you want to do (e.g. 'create node --host', 'what is a profile')")
     .option("--limit <n>", "Max context items to retrieve", "5")
     .option("--json", "Output machine-readable JSON", false)
+    .allowUnknownOption()
     .action(async (queryParts: string[], opts: { limit: string; json: boolean }) => {
       try {
-        const query = queryParts.join(" ").trim();
+        // passThroughOptions passes unknown --flags into queryParts so users can
+        // query "create node --host" without commander treating --host as an error.
+        // But it also passes our own --json/--limit through when they appear after
+        // the query — re-extract them here so both usages work:
+        //   bee ask "create node --host"          → query includes --host
+        //   bee ask create node --json            → --json is a flag, not query text
+        const cleanParts: string[] = [];
+        let jsonFlag = opts.json;
+        let limitFlag = opts.limit;
+        for (let i = 0; i < queryParts.length; i++) {
+          const part = queryParts[i]!;
+          if (part === "--json") { jsonFlag = true; continue; }
+          if (part === "--limit" && i + 1 < queryParts.length) { limitFlag = queryParts[++i]!; continue; }
+          cleanParts.push(part);
+        }
+        const query = cleanParts.join(" ").trim();
         if (!query) {
           printError("Empty query. Try: bee ask create job");
           process.exit(1);
@@ -33,7 +49,7 @@ export function registerDocsCommands(ctx: PluginContext): void {
           process.exit(1);
         }
 
-        const parsedLimit = parseInt(opts.limit, 10);
+        const parsedLimit = parseInt(limitFlag, 10);
         const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 5;
 
         const corpus = buildCorpus(
@@ -47,7 +63,7 @@ export function registerDocsCommands(ctx: PluginContext): void {
           return;
         }
 
-        if (opts.json) {
+        if (jsonFlag) {
           // When streaming, collect the full text first.
           let fullText = result.text;
           if (result.source === "lm" && result.stream && result.streamOutput) {
