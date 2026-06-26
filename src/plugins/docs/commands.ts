@@ -12,7 +12,7 @@ import { printMessage, printInfo, printError } from "../../core/cli/output";
 import { buildCorpus } from "./corpus";
 import { answer, getProvider } from "./answer";
 import { presentAnswer } from "./presenter";
-import { renderMarkdown } from "./render";
+import { renderMarkdown, StreamingMarkdownRenderer } from "./render";
 
 export function registerDocsCommands(ctx: PluginContext): void {
   ctx.program
@@ -92,9 +92,11 @@ export function registerDocsCommands(ctx: PluginContext): void {
 
         if (result.source === "lm") {
           if (result.stream && result.streamOutput) {
-            // Collect full streamed text then render markdown before printing.
-            const fullText = await result.streamOutput(() => {});
-            process.stdout.write(renderMarkdown(fullText));
+            const renderer = new StreamingMarkdownRenderer(
+              (s) => process.stdout.write(s),
+            );
+            await result.streamOutput((chunk) => renderer.push(chunk));
+            renderer.flush();
             process.stdout.write("\n");
             return;
           }
