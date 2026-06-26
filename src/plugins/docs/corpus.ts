@@ -77,9 +77,9 @@ function walkCommands(cmd: Command, path: string[], out: DocItem[]): void {
     if (desc || sub.options.length > 0) {
       const sig = argsSig(sub);
       const usage = ["bee", ...subPath, sig].filter(Boolean).join(" ");
-      // Prepend "flags options parameters" so relevance gate passes for queries
-      // like "all options of node create" — the body only has --flag-name lines.
-      const body = flagBody ? `flags options parameters\n${flagBody}` : flagBody;
+      // Prepend "flags options parameters cloudbees jenkins" so the relevance gate
+      // passes for queries like "all options of node create" or "xxx on cloudbees".
+      const body = flagBody ? `flags options parameters cloudbees jenkins\n${flagBody}` : flagBody;
       out.push({
         id: subPath.join("."),
         type: "command",
