@@ -12,7 +12,9 @@ import { buildUserPrompt } from "./context";
 import { searchDocs, type DocItem } from "./corpus";
 // import { rerank } from "./rerank"; // disabled — see answer() comment
 import { buildGraphFromCorpus, expandGraph, type CommandGraph } from "./graph";
-// import { getVectorDb, searchVector, rrfFusion, embed } from "./vector"; // disabled with reranker
+import { getVectorDb, searchVector, rrfFusion, embed } from "./vector";
+import { CORPUS_MODEL } from "../../generated/embeddings";
+import { EMBEDDING_MODEL } from "./config";
 
 // --- Output hardening --------------------------------------------------------
 
@@ -232,15 +234,28 @@ export async function answer(
   }
 
   // ── Multi-stage retrieval pipeline ──────────────────────────────────────
-  // BM25 (sparse) + Vector (dense) → RRF fusion → Graph expansion
+  // BM25 (sparse) + Vector (dense, RRF fusion) → Graph expansion
   const bm25Candidates = directHits.length > 0
     ? directHits
     : searchDocs(searchQuery, corpus, limit * 3, { gate: true, softGate: true });
 
-  // Vector search disabled — reranker is off so vector fusion doesn't improve
-  // BM25 order, and the embed() API call costs an extra round-trip for no gain.
-  // ponytail: re-enable together with reranker when embedding endpoint is stable.
-  const fused_base = bm25Candidates;
+  // Vector search for RRF fusion — only when runtime model matches corpus model
+  // so cosine scores are meaningful. No reranking — BM25+RRF order is preserved.
+  let fused_base = bm25Candidates;
+  const runtimeModel = EMBEDDING_MODEL ?? "";
+  const modelsMatch = !runtimeModel || runtimeModel === "default" || runtimeModel === CORPUS_MODEL;
+  if (modelsMatch) {
+    try {
+      const vdb = getVectorDb();
+      const queryEmb = await embed(searchQuery);
+      if (queryEmb && queryEmb.length === vdb.matrix[0]?.length) {
+        const vectorCandidates = searchVector(queryEmb, vdb, corpus, limit * 3);
+        fused_base = rrfFusion(bm25Candidates, vectorCandidates);
+      }
+    } catch {
+      // Vector search unavailable — fall back to BM25-only.
+    }
+  }
 
   // Graph expansion: append related commands from the same group/CRUD family.
   const graph = getGraph(corpus);
