@@ -19,9 +19,10 @@ jobs:
       - name: Run tests
         run: bun test
 
-      - name: Build binary (with codegen)
-        # Runs on the VPS — credentials are available via the local environment.
+      - name: Build binary
         run: bun run build.ts
+        env:
+          CB_SKIP_CODEGEN: "1"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
