@@ -249,6 +249,9 @@ export async function answer(
 
   try {
     const raw = await provider.generate(prompt);
+    if (process.env.BEE_DEBUG_TRACEBACK) {
+      process.stderr.write(`[bee ask] LM raw response: ${raw.slice(0, 500)}\n`);
+    }
     const text = stripInventedCommands(raw, corpus);
     return { source: "lm", text, hits, provider: provider.name };
   } catch (err) {
