@@ -13,7 +13,6 @@ import { buildCorpus } from "./corpus";
 import { answer, getProvider } from "./answer";
 import { presentAnswer } from "./presenter";
 import { renderMarkdown, StreamingMarkdownRenderer } from "./render";
-import { saveAskHistory, getAskHistory, clearAskHistory } from "../../core/db/repositories/ask-history-repo";
 import chalk from "chalk";
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
@@ -42,31 +41,9 @@ export function registerDocsCommands(ctx: PluginContext): void {
     .option("--limit <n>", "Max context items to retrieve", "5")
     .option("--json", "Output machine-readable JSON", false)
     .option("--no-stream", "Disable streaming — collect full response before printing", false)
-    .option("--history", "Show recent ask history", false)
-    .option("--clear-history", "Clear ask history", false)
     .allowUnknownOption()
-    .action(async (queryParts: string[], opts: { limit: string; json: boolean; stream: boolean; history: boolean; clearHistory: boolean }) => {
+    .action(async (queryParts: string[], opts: { limit: string; json: boolean; stream: boolean }) => {
       try {
-        const dbPath = process.env["CB_DB_PATH"];
-
-        // History commands — no query needed
-        if (opts.clearHistory) {
-          clearAskHistory(dbPath);
-          printInfo("Ask history cleared.");
-          return;
-        }
-        if (opts.history) {
-          const entries = getAskHistory(parseInt(opts.limit, 10) || 20, dbPath);
-          if (entries.length === 0) { printInfo("No ask history yet."); return; }
-          for (const e of entries) {
-            const date = new Date(e.created_at).toLocaleString();
-            printMessage(`${chalk.dim(`[${date}]`)} ${chalk.cyan(e.query)}`);
-            printMessage(renderMarkdown(e.answer));
-            printMessage(chalk.dim("─".repeat(60)));
-          }
-          return;
-        }
-
         const cleanParts: string[] = [];
         let jsonFlag = opts.json;
         let limitFlag = opts.limit;
@@ -75,8 +52,6 @@ export function registerDocsCommands(ctx: PluginContext): void {
           const part = queryParts[i]!;
           if (part === "--json") { jsonFlag = true; continue; }
           if (part === "--no-stream") { streamFlag = false; continue; }
-          if (part === "--history") continue;
-          if (part === "--clear-history") continue;
           if (part === "--limit" && i + 1 < queryParts.length) { limitFlag = queryParts[++i]!; continue; }
           cleanParts.push(part);
         }
@@ -141,28 +116,24 @@ export function registerDocsCommands(ctx: PluginContext): void {
               (s) => process.stdout.write(s),
             );
             let stopped = false;
-            const fullText = await result.streamOutput((chunk) => {
+            await result.streamOutput((chunk) => {
               if (!stopped) { stopSpinner(); stopped = true; }
               renderer.push(chunk);
             });
             if (!stopped) stopSpinner();
             renderer.flush();
             process.stdout.write("\n");
-            saveAskHistory(query, fullText, dbPath);
             return;
           }
           // --no-stream or no stream method: collect full response then render.
           const text = result.text || (result.streamOutput ? await result.streamOutput(() => {}) : "");
           stopSpinner();
           printMessage(renderMarkdown(text));
-          saveAskHistory(query, text, dbPath);
           return;
         }
 
         stopSpinner();
-        const presented = presentAnswer(query, result.hits).text;
-        printMessage(presented);
-        saveAskHistory(query, presented, dbPath);
+        printMessage(presentAnswer(query, result.hits).text);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);

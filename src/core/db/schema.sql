@@ -33,10 +33,3 @@ CREATE TABLE IF NOT EXISTS user_resources (
     created_at      INTEGER NOT NULL,
     PRIMARY KEY (resource_type, name, profile_name, controller_name)
 );
-
-CREATE TABLE IF NOT EXISTS ask_history (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    query      TEXT    NOT NULL,
-    answer     TEXT    NOT NULL,
-    created_at INTEGER NOT NULL
-);
