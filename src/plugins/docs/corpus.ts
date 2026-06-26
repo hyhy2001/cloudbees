@@ -312,6 +312,9 @@ const SYNONYMS: Record<string, string> = {
   master:      "controller",
   instance:    "controller",
   jenkins:     "controller",  // "switch jenkins server" → controller.select
+  cloudbees:   "controller",  // "cloudbees server" → controller context
+  // "what is bee" / "bee overview"
+  bee:         "overview",    // "what is bee" → concept.overview
   // NOTE: "use" not mapped to "select". It is an extremely common English verb
   // ("how do I use the --all flag") that injected controller.select into any
   // natural query containing it. The command path "auth use" already contains
@@ -338,6 +341,13 @@ const SYNONYMS: Record<string, string> = {
   interactive:   "ui",
   help:          "ask",
   search:        "ask",
+  logs:          "log",    // "see build logs" → job.log
+  done:          "status", // "build done" → job.status
+  finished:      "status",
+  organize:      "folder", // "organize into folders" → concept.folders
+  group:         "folder",
+  passwords:     "credential", // "saved passwords" → cred.list
+  secrets:       "credential",
   whitelist:     "approve",    // "whitelist agent for folder" → job approve-agent
   grant:         "approve",    // "grant agent access" → job approve-agent
   docs:          "ask",
@@ -818,56 +828,71 @@ export function searchDocs(
       [/\bswitch\s+.*\bprofile\b/i, "auth.use"],
       [/\bspecific\s+profile\b/i, "auth.use"],
       [/\bswitch\s+(user|account)\b/i, "auth.use"],
-      // login + profile → auth.login (overrides auth.use patterns above)
       [/\blogin\s+.*\bprofile\b/i, "auth.login"],
       [/\bprofile\s+.*\blogin\b/i, "auth.login"],
-      // "auth login --profile" explicit command path → auth.login not auth.use
       [/\bauth\s+login\b/i, "auth.login"],
-      // pipeline command vs concept: imperative → command, how-to → concept
+      [/\bcan'?t\s+log\s+in\b/i, "troubleshooting.login"],
+      [/\bwrong\s+password\b/i, "troubleshooting.login"],
+      [/\bhow\s+(do\s+i|to)\s+log\s+in\b/i, "concept.login"],
+      [/\bhow\s+(do\s+i|to)\s+login\b/i, "concept.login"],
+      [/\bget\s+started\b/i, "concept.getting-started"],  // "how to get started" → not concept.overview
+      [/\bwhich\s+(server|controller)\b/i, "controller.current"],
+      [/\bam\s+i\s+(connected|on)\b/i, "controller.current"],
+      [/\bchange\s+(server|controller)\b/i, "controller.select"],
+      [/\b(see|list|show)\s+all\s+servers?\b/i, "controller.list"],
+      [/\ball\s+(my\s+)?servers?\b/i, "controller.list"],
       [/\bhow\s+(do\s+i|to|can\s+i)\s+(create|make)\s+(a\s+)?pipeline\b/i, "concept.create-pipeline"],
       [/\b(create|make|add)\s+(a\s+)?pipeline\b/i, "job.create.pipeline"],
+      [/\bnew\s+pipeline\b/i, "job.create.pipeline"],
       [/\bupdate\s+pipeline\b/i, "job.update.pipeline"],
-      // approve/remove agent → job subcommands
+      [/\bdifference\s+between\b/i, "concept.pipeline"],
+      [/\bfreestyle\s+(vs|and|or)\s+pipeline\b/i, "concept.pipeline"],
       [/\bapprove\s+agent\b/i, "job.approve-agent"],
       [/\bremove\s+agent\b/i, "job.remove-agent"],
-      // "what is a pipeline job" → concept.pipeline
       [/\bpipeline\s+job\b/i, "concept.pipeline"],
-      // "add an agent/node/machine" → node.create
-      [/\badd\s+(a[n]?\s+)?(agent|node|machine)\b/i, "node.create"],
-      // "what is a/the X" concept queries
+      [/\badd\s+(a[n]?\s+)?(new\s+)?(agent|node|machine|build\s+machine)\b/i, "node.create"],
+      [/\bsee\s+all\s+(my\s+)?(agents?|nodes?|machines?)\b/i, "node.list"],
+      [/\b(list|show)\s+all\s+(agents?|nodes?|machines?)\b/i, "node.list"],
+      [/\b(my\s+)?agent\s+is\s+offline\b/i, "concept.node-offline"],
+      [/\bagent\s+(won'?t|cannot|can'?t)\s+connect\b/i, "troubleshooting.node-connect"],
       [/\bwhat\s+is\s+(a\s+)?controller\b/i, "concept.controller"],
       [/\bwhat\s+is\s+(a\s+)?job\b/i, "concept.what-is-job"],
+      [/\bwhat\s+is\s+(a[n]?\s+)?(agent|node|build\s+machine)\b/i, "concept.what-is-node"],
       [/\bcontrolled\s+agent\b/i, "concept.controlled-agent"],
-      // "what is credential store" → concept.credential-store (not concept.what-is-credential)
       [/\bwhat\s+is\s+(a\s+|the\s+)?credential\s+store\b/i, "concept.credential-store"],
-      [/\bcredential\s+store\b.*\b(mean|what|explain|concept)\b/i, "concept.credential-store"],
       [/\b(mean|what|explain)\b.*\bcredential\s+store\b/i, "concept.credential-store"],
-      // "add a build machine" → concept.add-node
-      [/\badd\s+(a\s+)?(build\s+)?machine\b/i, "concept.add-node"],
-      // "how to run job" → job.run (not concept.job-run-stop)
-      [/\bhow\s+(to|do\s+i)\s+run\s+job\b/i, "job.run"],
-      // "how to create/update node" → node.create/node.update (not pipeline or track)
+      [/\btypes?\s+of\s+credentials?\b/i, "concept.credential-types"],
+      [/\bwhat\s+credentials?\s+(can\s+i\s+)?(store|use|create)\b/i, "concept.credential-types"],
+      [/\badd\s+(a\s+)?(build\s+)?machine\b/i, "concept.add-node"],  // concept only; "add a new machine" → node.create via earlier pattern
+      [/\b(see|list|show)\s+(my\s+)?(saved\s+)?(password|credential|secret)s?\b/i, "cred.list"],
+      [/\bhow\s+(to|do\s+i)\s+run\s+(a\s+)?(job|build)\b/i, "job.run"],
+      [/\b(see|view|check|get)\s+(the\s+)?(build\s+)?(error|log|output|failure)\b/i, "job.log"],
+      [/\bsee\s+(build\s+)?logs?\b/i, "job.log"],
+      [/\b(check|is)\s+(my\s+)?(build|job)\s+(done|finished|complete)\b/i, "job.status"],
+      [/\bbuild\s+(done|finished|complete)\b/i, "job.status"],
       [/\bhow\s+(to|do\s+i)\s+create\s+node\b/i, "node.create"],
       [/\bhow\s+(to|do\s+i)\s+update\s+node\b/i, "node.update"],
-      // "run job with parameter values" → job.run (explicit run with values = execution)
       [/\brun\s+.*\bparam.*\bvalue/i, "job.run"],
       [/\brun\s+job\s+.*\bparam/i, "job.run"],
-      // "run job with parameters" / "how to run job with parameters" → concept.build-params
       [/\bjob\s+with\s+param/i, "concept.build-params"],
       [/\bhow\s+(to|do)\s+.*run.*\bparam/i, "concept.build-params"],
-      // "add a build parameter" → job.update.freestyle (adding --param-def to existing job)
+      [/\bcustom\s+param/i, "concept.build-params"],
       [/\badd\s+(a\s+)?(build\s+)?param(eter)?\b/i, "job.update.freestyle"],
-      // "store a secret/credential" → cred.create
+      [/\bjobs?\s+i\s+care\s+about\b/i, "concept.mine-vs-all"],
+      [/\bonly\s+(show|see|my)\s+jobs?\b/i, "concept.mine-vs-all"],
+      [/\bmine\s+vs\b/i, "concept.mine-vs-all"],
+      [/\borganize\b.*\bjobs?\b/i, "concept.folders"],
+      [/\bjobs?\b.*\binto\s+folders?\b/i, "concept.folders"],  // "into folders" = conceptual, not command
+      [/\b(set|assign|restrict)\s+(a\s+)?job\s+(to\s+)?(run\s+on|use)\b/i, "concept.node-labels"],
+      [/\bspecific\s+(machine|agent|node)\b/i, "concept.node-labels"],
       [/\bstore\s+(a\s+)?(secret|credential|token|key|password)/i, "cred.create"],
-      // "credential store vs" / "system store vs user store" → concept.credential-store
       [/\bstore\s+vs\b/i, "concept.credential-store"],
       [/\bcredential\s+.*\bstore\b.*\bvs\b/i, "concept.credential-store"],
       [/\bsystem\s+store\b.*\buser\s+store\b/i, "concept.credential-store"],
-      // "cred list" → cred.list
       [/\bcred\s+list\b/i, "cred.list"],
-      // pipeline script validation failed → troubleshooting doc
       [/\bpipeline\s+.*\bvalidat/i, "troubleshooting.pipeline-validate"],
       [/\bscript\s+.*\bfailed\b/i, "troubleshooting.pipeline-validate"],
+      [/\bpipeline\s+script\s+is\s+invalid\b/i, "troubleshooting.pipeline-validate"],
     ];
     for (const [re, targetPrefix] of intentPatterns) {
       if (re.test(qNorm)) {
@@ -982,6 +1007,31 @@ export function searchDocs(
         const [x] = items.splice(ci, 1); items.unshift(x!);
       }
     }
+    // "build failed" / "see the error" → job.log (pipeline-validate can block this)
+    if (/\bbuild\s+failed\b/i.test(qNorm) || (/\b(see|view|get)\s+(the\s+)?error\b/i.test(qNorm) && /\bbuild\b/i.test(qNorm))) {
+      let ci = items.findIndex((it) => it.id === "job.log");
+      if (ci < 0) { const fb = corpus.find((c) => c.id === "job.log"); if (fb) items.unshift(fb); }
+      else if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
+    }
+    // "check if build is done" → job.status (needs inject if not in pool)
+    if (/\b(check|is)\s+(if\s+)?(my\s+)?(build|job)\s+(is\s+)?(done|finished|complete)\b/i.test(qNorm) ||
+        /\bbuild\s+(done|finished|complete)\b/i.test(qNorm)) {
+      let ci = items.findIndex((it) => it.id === "job.status");
+      if (ci < 0) { const fb = corpus.find((c) => c.id === "job.status"); if (fb) items.unshift(fb); }
+      else if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
+    }
+    // "how do I change server" → controller.select (may be gated out)
+    if (/\bchange\s+(the\s+)?(server|controller)\b/i.test(qNorm) || /\bhow\s+(do\s+i|to)\s+change\s+(server|controller)\b/i.test(qNorm)) {
+      let ci = items.findIndex((it) => it.id === "controller.select");
+      if (ci < 0) { const fb = corpus.find((c) => c.id === "controller.select"); if (fb) items.unshift(fb); }
+      else if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
+    }
+    // "which server am I connected to" → controller.current
+    if (/\bwhich\s+(server|controller)\b/i.test(qNorm) || /\bam\s+i\s+(connected|on)\b/i.test(qNorm)) {
+      let ci = items.findIndex((it) => it.id === "controller.current");
+      if (ci < 0) { const fb = corpus.find((c) => c.id === "controller.current"); if (fb) items.unshift(fb); }
+      else if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
+    }
 
     const gated = opts.gate
       ? items.filter((item) => passesRelevanceGate(query, item))
@@ -1004,6 +1054,45 @@ export function searchDocs(
         const ci = result.findIndex((it) => it.id === "controller.select");
         if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); }
       }
+    }
+    // "types of credentials" → concept.credential-types (gated out)
+    if (/\btypes?\s+of\s+credentials?\b/i.test(qNorm) || /\bwhat\s+credentials?\s+(can\s+i\s+)?(store|use)\b/i.test(qNorm)) {
+      if (!result.some((it) => it.id === "concept.credential-types")) {
+        const fb = corpus.find((c) => c.id === "concept.credential-types");
+        if (fb) result.unshift(fb);
+      } else { const ci = result.findIndex((it) => it.id === "concept.credential-types"); if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); } }
+    }
+    // "only show jobs I care about" / "mine" → concept.mine-vs-all (gated/promoted block)
+    if (/\bjobs?\s+i\s+care\s+about\b/i.test(qNorm) || /\bonly\s+(show|see|my)\s+jobs?\b/i.test(qNorm)) {
+      if (!result.some((it) => it.id === "concept.mine-vs-all")) {
+        const fb = corpus.find((c) => c.id === "concept.mine-vs-all");
+        if (fb) result.unshift(fb);
+      } else { const ci = result.findIndex((it) => it.id === "concept.mine-vs-all"); if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); } }
+    }
+    // "how do I change server" → controller.select (change server may be gated)
+    if (/\bchange\s+(the\s+)?(server|controller)\b/i.test(qNorm)) {
+      if (!result.some((it) => it.id === "controller.select")) {
+        const fb = corpus.find((c) => c.id === "controller.select"); if (fb) result.unshift(fb);
+      } else { const ci = result.findIndex((it) => it.id === "controller.select"); if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); } }
+    }
+    // "build failed see the error" → job.log (pipeline-validate can preempt)
+    if (/\bbuild\s+failed\b/i.test(qNorm) && /\b(see|view|get|show)\b/i.test(qNorm)) {
+      if (!result.some((it) => it.id === "job.log")) {
+        const fb = corpus.find((c) => c.id === "job.log"); if (fb) result.unshift(fb);
+      } else { const ci = result.findIndex((it) => it.id === "job.log"); if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); } }
+    }
+    // "how to add a build machine" → concept.add-node (not node.create command)
+    if (/\bhow\s+(to|do\s+i)\s+(add|create)\s+(a\s+)?(build\s+)?machine\b/i.test(qNorm)) {
+      if (!result.some((it) => it.id === "concept.add-node")) {
+        const fb = corpus.find((c) => c.id === "concept.add-node"); if (fb) result.unshift(fb);
+      } else { const ci = result.findIndex((it) => it.id === "concept.add-node"); if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); } }
+    }
+    // "what credentials does bee support" → concept.credential-types (not concept.overview from bee synonym)
+    if (/\bcredentials?\s+(does\s+bee|supported|available|types?)\b/i.test(qNorm) ||
+        /\bwhat\s+credentials?\s+(does|can|bee)\b/i.test(qNorm)) {
+      if (!result.some((it) => it.id === "concept.credential-types")) {
+        const fb = corpus.find((c) => c.id === "concept.credential-types"); if (fb) result.unshift(fb);
+      } else { const ci = result.findIndex((it) => it.id === "concept.credential-types"); if (ci > 0) { const [x] = result.splice(ci, 1); result.unshift(x!); } }
     }
     return result.slice(0, limit);
 }
