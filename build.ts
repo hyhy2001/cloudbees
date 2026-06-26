@@ -45,10 +45,10 @@ const LM_API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY 
 const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env.CB_LM_MODEL ?? "";
 const LM_CLIENT_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
 const LM_CLIENT_SECRET = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";
-const EMBEDDING_MODEL = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2";
+const EMBEDDING_MODEL = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "default";
 const EMBEDDING_PATH = lmFile.embeddingPath ?? lmFile.CB_EMBEDDING_PATH ?? process.env.CB_EMBEDDING_PATH ?? "/v1/embeddings";
 const EMBEDDING_URL = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ??
-  (EMBEDDING_MODEL !== "Xenova/all-MiniLM-L6-v2" && LM_URL ? `${LM_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}` : "");
+  (LM_URL ? `${LM_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}` : "");
 if (EMBEDDING_URL) process.stderr.write(`  Embedding: ${EMBEDDING_MODEL} @ ${EMBEDDING_URL}\n`);
 
 const SKIP_CODEGEN = process.env["CB_SKIP_CODEGEN"] === "1";
@@ -66,26 +66,10 @@ if (!SKIP_CODEGEN) {
   }
 }
 
-// Bundle the embedding model into the binary (so it's fully self-contained).
-// When a custom EMBEDDING_MODEL is set (non-default) with LM_URL, the model
-// is called via API — no local bundling needed.
-if (!EMBEDDING_URL) {
-  if (!SKIP_CODEGEN) {
-    try {
-      await Bun.$`bun run scripts/generate-embedding-model.ts`;
-    } catch {
-      console.log("  Embedding model: not bundled (will download on first use if available)");
-      await Bun.write("src/generated/embedding-model.ts", `// Fallback — model not bundled at build time.
+// No local model bundling — embedding is always API-based.
+await Bun.write("src/generated/embedding-model.ts", `// API-based embedding — no local model files.
 export const MODEL_FILES: Record<string, string> = {};
 `);
-    }
-  }
-} else {
-  console.log(`  Embedding model: API (${EMBEDDING_MODEL}) — skip local bundling`);
-  await Bun.write("src/generated/embedding-model.ts", `// API-based embedding — no local model files.
-export const MODEL_FILES: Record<string, string> = {};
-`);
-}
 
 // Generate build-time synonym map (LLM alternative verbs for commands).
 // This runs after embeddings so both neural and synonym data are available.
