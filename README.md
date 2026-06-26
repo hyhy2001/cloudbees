@@ -633,10 +633,11 @@ Results are printed to the console and written to `benchmark-report.md` (gitigno
 | User-set Recall@1 | **100.0%** (38/38) |
 | Embedding | API (1024-dim, auto-detected) |
 | Graph expansion | CRUD neighbors auto-derived from command tree |
+| Corpus | 93 items: 53 commands + 40 help facts |
 | Synonym expansion | 145+ hand-maintained + ~108 build-time LLM-generated |
 | API calls per query | **2** (embedding + generation) |
 | LLM correct command | **98.6%** (72/73) |
-| LLM hallucination rate | **1.4%** (1/73) |
+| LLM hallucination rate | **0.0%** (0/73) |
 | LLM has required flag | **100.0%** (12/12) |
 | LLM wrong refusal | **0.0%** (0/73) |
 
