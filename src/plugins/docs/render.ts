@@ -41,19 +41,26 @@ function isSeparatorRow(line: string): boolean {
   return isTableRow(line) && /^\|[\s|:-]+\|$/.test(line.trim());
 }
 
+/** Strip ANSI escape codes to measure visible string width. */
+function visibleLength(s: string): number {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\x1b\[[0-9;]*m/g, "").length;
+}
+
 /** Render a collected markdown table to terminal string. */
 function renderTable(rows: string[][]): string {
   if (rows.length === 0) return "";
   const cols = rows[0]!.length;
-  // Compute column widths
+  // Widths based on plain text (before renderInline adds ANSI codes).
   const widths = Array.from({ length: cols }, (_, i) =>
     Math.max(...rows.map((r) => (r[i] ?? "").length), 4)
   );
   const lines: string[] = [];
   rows.forEach((row, ri) => {
     const cells = row.map((cell, ci) => {
-      const padded = renderInline(cell).padEnd(widths[ci]! + (renderInline(cell).length - cell.length));
-      return ri === 0 ? chalk.bold.cyan(padded) : padded;
+      const rendered = ri === 0 ? chalk.bold.cyan(renderInline(cell)) : renderInline(cell);
+      const pad = widths[ci]! - visibleLength(rendered);
+      return rendered + " ".repeat(Math.max(0, pad));
     });
     lines.push("  " + cells.join("  " + chalk.dim("│") + "  "));
     if (ri === 0) {
@@ -189,6 +196,8 @@ export class StreamingMarkdownRenderer {
       if (!isSeparatorRow(line)) this.tableRows.push(parseTableRow(line));
       return;
     }
+    // Skip blank lines between table rows — don't flush mid-table
+    if (line.trim() === "" && this.tableRows.length > 0) return;
     this.flushTable();
     this.write(renderLine(line));
   }
