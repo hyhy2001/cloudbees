@@ -46,7 +46,13 @@ async function chatCall(model: string, token: string, prompt: string): Promise<s
     const body = await response.text().catch(() => "");
     throw new Error(`Databricks LM error (HTTP ${response.status})${body ? `: ${body.slice(0, 200)}` : ""}`);
   }
-  const json = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  const raw = await response.text();
+  let json: { choices?: Array<{ message?: { content?: string } }> };
+  try {
+    json = JSON.parse(raw) as typeof json;
+  } catch {
+    throw new Error(`Databricks LM returned non-JSON response: ${raw.slice(0, 200)}`);
+  }
   return json.choices?.[0]?.message?.content?.trim() ?? "";
 }
 
