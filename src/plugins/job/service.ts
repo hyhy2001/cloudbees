@@ -714,6 +714,8 @@ export async function createFolder(
   desc = "",
   folder: string | null = null,
 ): Promise<void> {
+  if (await getJob(client, name) !== null)
+    throw new ValidationError(`Job "${name}" already exists.`);
   const xml = buildFolderXml(desc);
   const base = folder ? `/job/${jobSeg(folder)}` : "";
   await client.postXml(`${base}/createItem?name=${encodeURIComponent(name)}`, xml, {
