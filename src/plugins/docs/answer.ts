@@ -220,16 +220,22 @@ export async function answer(
     return { source: "raw", text: "", hits };
   }
 
-  // Rewrite the query into BM25-friendly keywords so colloquial phrasings
-  // ("hello I am a newbie") map to corpus tokens ("getting started login").
-  const searchQuery = await rewriteQuery(query, provider);
-  if (process.env.BEE_DEBUG_TRACEBACK && searchQuery !== query) {
-    process.stderr.write(`[bee ask] rewritten query: ${searchQuery}\n`);
+  // Rewrite the query into BM25-friendly keywords only when the original
+  // query returns no hits — avoids an extra LM call on well-formed queries.
+  let searchQuery = query;
+  const directHits = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
+  if (directHits.length === 0) {
+    searchQuery = await rewriteQuery(query, provider);
+    if (process.env.BEE_DEBUG_TRACEBACK) {
+      process.stderr.write(`[bee ask] rewritten query: ${searchQuery}\n`);
+    }
   }
 
   // ── Multi-stage retrieval pipeline ──────────────────────────────────────
-  // BM25 (sparse) + Vector (dense) → RRF fusion → Graph expansion → Reranker
-  const bm25Candidates = searchDocs(searchQuery, corpus, limit * 3, { gate: true, softGate: true });
+  // BM25 (sparse) + Vector (dense) → RRF fusion → Graph expansion
+  const bm25Candidates = directHits.length > 0
+    ? directHits
+    : searchDocs(searchQuery, corpus, limit * 3, { gate: true, softGate: true });
 
   // Vector search — neural embeddings via @xenova/transformers (optional).
   let fused = bm25Candidates;
