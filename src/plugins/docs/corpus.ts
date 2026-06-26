@@ -818,26 +818,41 @@ export function searchDocs(
       [/\bswitch\s+.*\bprofile\b/i, "auth.use"],
       [/\bspecific\s+profile\b/i, "auth.use"],
       [/\bswitch\s+(user|account)\b/i, "auth.use"],
-      // pipeline command vs concept: when query says "create/update pipeline" prefer actual command
+      // login + profile → auth.login (overrides auth.use patterns above)
+      [/\blogin\s+.*\bprofile\b/i, "auth.login"],
+      [/\bprofile\s+.*\blogin\b/i, "auth.login"],
+      // pipeline command vs concept: imperative → command, how-to → concept
+      [/\bhow\s+(do\s+i|to|can\s+i)\s+(create|make)\s+(a\s+)?pipeline\b/i, "concept.create-pipeline"],
       [/\b(create|make|add)\s+(a\s+)?pipeline\b/i, "job.create.pipeline"],
       [/\bupdate\s+pipeline\b/i, "job.update.pipeline"],
-      // approve/remove agent → job subcommands, not node.delete
+      // approve/remove agent → job subcommands
       [/\bapprove\s+agent\b/i, "job.approve-agent"],
       [/\bremove\s+agent\b/i, "job.remove-agent"],
-      // "what is a pipeline job" → concept.pipeline not concept.what-is-job
+      // "what is a pipeline job" → concept.pipeline
       [/\bpipeline\s+job\b/i, "concept.pipeline"],
-      // "add an agent/node" → node.create not concept.add-node
+      // "add an agent/node" → node.create
       [/\badd\s+(a[n]?\s+)?(agent|node)\b/i, "node.create"],
-      // "what is a controller" → concept.controller not concept.what-is-node
+      // "what is a/the X" concept queries
       [/\bwhat\s+is\s+(a\s+)?controller\b/i, "concept.controller"],
-      // "controlled agent" → concept.controlled-agent not concept.what-is-node
+      [/\bwhat\s+is\s+(a\s+)?job\b/i, "concept.what-is-job"],
       [/\bcontrolled\s+agent\b/i, "concept.controlled-agent"],
-      // "run job with parameters" → concept.build-params not job.run
+      // "run job with parameter values" → job.run (explicit run with values = execution)
+      [/\brun\s+.*\bparam.*\bvalue/i, "job.run"],
+      [/\brun\s+job\s+.*\bparam/i, "job.run"],
+      // "run job with parameters" / "how to run job with parameters" → concept.build-params
       [/\bjob\s+with\s+param/i, "concept.build-params"],
-      [/\brun\s+.*\bparam/i, "concept.build-params"],
-      // "cred list system store" → cred.list, not concept.credential-store
+      [/\bhow\s+(to|do)\s+.*run.*\bparam/i, "concept.build-params"],
+      // "add a build parameter" → job.update.freestyle (adding --param-def to existing job)
+      [/\badd\s+(a\s+)?(build\s+)?param(eter)?\b/i, "job.update.freestyle"],
+      // "store a secret/credential" → cred.create
+      [/\bstore\s+(a\s+)?(secret|credential|token|key|password)/i, "cred.create"],
+      // "credential store vs" / "system store vs user store" → concept.credential-store
+      [/\bstore\s+vs\b/i, "concept.credential-store"],
+      [/\bcredential\s+.*\bstore\b.*\bvs\b/i, "concept.credential-store"],
+      [/\bsystem\s+store\b.*\buser\s+store\b/i, "concept.credential-store"],
+      // "cred list" → cred.list
       [/\bcred\s+list\b/i, "cred.list"],
-      // pipeline script validation failed → troubleshooting doc, not job.create.pipeline
+      // pipeline script validation failed → troubleshooting doc
       [/\bpipeline\s+.*\bvalidat/i, "troubleshooting.pipeline-validate"],
       [/\bscript\s+.*\bfailed\b/i, "troubleshooting.pipeline-validate"],
     ];
@@ -904,6 +919,24 @@ export function searchDocs(
     if (/\bcred\s+list\b/i.test(qNorm)) {
       const ci = items.findIndex((it) => it.id === "cred.list");
       if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
+    }
+    // "how do I create a pipeline" → concept doc (not job.create.pipeline)
+    if (/\bhow\s+(do\s+i|to|can\s+i)\s+(create|make)\s+(a\s+)?pipeline\b/i.test(qNorm)) {
+      let ci = items.findIndex((it) => it.id === "concept.create-pipeline");
+      if (ci < 0) { const fb = corpus.find((c) => c.id === "concept.create-pipeline"); if (fb) { items.unshift(fb); } }
+      else if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
+    }
+    // "run job with param values" → job.run (not concept.build-params)
+    if (/\brun\s+(job\s+)?.*\bparam.*\bvalue/i.test(qNorm) || /\brun\s+job\s+.*\bparam/i.test(qNorm)) {
+      let ci = items.findIndex((it) => it.id === "job.run");
+      if (ci < 0) { const fb = corpus.find((c) => c.id === "job.run"); if (fb) { items.unshift(fb); } }
+      else if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
+    }
+    // "X store vs Y store" / "credential system store vs user store" → concept doc
+    if (/\bstore\b.*\bvs\b/i.test(qNorm) || /\bvs\b.*\bstore\b/i.test(qNorm)) {
+      let ci = items.findIndex((it) => it.id === "concept.credential-store");
+      if (ci < 0) { const fb = corpus.find((c) => c.id === "concept.credential-store"); if (fb) { items.unshift(fb); ci = 0; } }
+      else if (ci > 0) { const [x] = items.splice(ci, 1); items.unshift(x!); }
     }
     // "pipeline validation/failed" → troubleshooting doc takes priority over command
     if (/\bpipeline\b.*\b(validat|failed|error|invalid)\b/i.test(qNorm)) {
