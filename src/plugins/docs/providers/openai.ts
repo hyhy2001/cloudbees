@@ -73,6 +73,9 @@ export class OpenAICompatProvider {
   async *stream(prompt: string): AsyncGenerator<string, void, unknown> {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
+    if (process.env.BEE_DEBUG_TRACEBACK) {
+      process.stderr.write(`[bee ask] stream prompt (first 300): ${prompt.slice(0, 300)}\n`);
+    }
 
     const response = await fetch(this.endpoint, {
       method: "POST",
@@ -84,7 +87,7 @@ export class OpenAICompatProvider {
           { role: "user", content: prompt },
         ],
         temperature: 0,
-        max_tokens: 256,
+        max_tokens: 1024,
         stream: true,
       }),
       signal: AbortSignal.timeout(60000),
