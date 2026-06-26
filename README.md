@@ -5,7 +5,7 @@
 - CLI for scripting and automation
 - Interactive TUI (`bee --ui`) for day-to-day operation
 - Local SQLite for session, cache, and tracked-resource state
-- Single self-contained binary (~6 MB) — no runtime required on the target host
+- Single self-contained binary (~93 MB) — no runtime required on the target host
 - Targets RHEL 8 / glibc ≥ 2.28 (built with `bun-linux-x64-baseline`)
 
 ## What It Can Do
