@@ -5,6 +5,7 @@
  *   - `code` and ```code blocks``` → green
  *   - **bold** → bold
  *   - - bullet / * bullet → indented with •
+ *   - | tables | → formatted columns
  *   - Blank lines → preserved
  *   - Everything else → plain
  *
@@ -22,7 +23,42 @@ function renderInline(text: string): string {
     .replace(/\*([^*]+)\*|_([^_]+)_/g, (_, a: string, b: string) => chalk.italic(a ?? b));
 }
 
-/** Render a single line (no block context needed). */
+/** Parse a markdown table row into cells. */
+function parseTableRow(line: string): string[] {
+  return line.split("|").slice(1, -1).map((c) => c.trim());
+}
+
+function isTableRow(line: string): boolean {
+  return line.trim().startsWith("|") && line.trim().endsWith("|");
+}
+
+function isSeparatorRow(line: string): boolean {
+  return isTableRow(line) && /^\|[\s|:-]+\|$/.test(line.trim());
+}
+
+/** Render a collected markdown table to terminal string. */
+function renderTable(rows: string[][]): string {
+  if (rows.length === 0) return "";
+  const cols = rows[0]!.length;
+  // Compute column widths
+  const widths = Array.from({ length: cols }, (_, i) =>
+    Math.max(...rows.map((r) => (r[i] ?? "").length), 4)
+  );
+  const lines: string[] = [];
+  rows.forEach((row, ri) => {
+    const cells = row.map((cell, ci) => {
+      const padded = renderInline(cell).padEnd(widths[ci]! + (renderInline(cell).length - cell.length));
+      return ri === 0 ? chalk.bold.cyan(padded) : padded;
+    });
+    lines.push("  " + cells.join("  " + chalk.dim("│") + "  "));
+    if (ri === 0) {
+      lines.push("  " + widths.map((w) => chalk.dim("─".repeat(w))).join("  " + chalk.dim("┼") + "  "));
+    }
+  });
+  return lines.join("\n");
+}
+
+/** Render a single line (no block/table context needed). */
 function renderLine(line: string): string {
   const bulletMatch = line.match(/^(\s*)[*-] (.+)$/);
   if (bulletMatch) {
@@ -43,16 +79,29 @@ export function renderMarkdown(text: string): string {
   const out: string[] = [];
   let inFence = false;
   let fenceBuffer: string[] = [];
+  let tableRows: string[][] = [];
+
+  const flushTable = () => {
+    if (tableRows.length > 0) { out.push(renderTable(tableRows)); tableRows = []; }
+  };
 
   for (const line of lines) {
     if (/^```/.test(line)) {
+      flushTable();
       if (!inFence) { inFence = true; fenceBuffer = []; }
       else { out.push(chalk.green(fenceBuffer.join("\n"))); inFence = false; fenceBuffer = []; }
       continue;
     }
     if (inFence) { fenceBuffer.push(line); continue; }
+
+    if (isTableRow(line)) {
+      if (!isSeparatorRow(line)) tableRows.push(parseTableRow(line));
+      continue;
+    }
+    flushTable();
     out.push(renderLine(line));
   }
+  flushTable();
   if (fenceBuffer.length > 0) out.push(chalk.green(fenceBuffer.join("\n")));
   return out.join("\n");
 }
@@ -73,31 +122,29 @@ export function renderMarkdown(text: string): string {
  *   r.flush();
  */
 export class StreamingMarkdownRenderer {
-  private buf = "";          // current incomplete line
+  private buf = "";
   private inFence = false;
   private fenceBuffer: string[] = [];
+  private tableRows: string[][] = [];
 
   constructor(private readonly write: (s: string) => void) {}
 
-  /** Feed a chunk — renders completed lines immediately. */
   push(chunk: string): void {
     this.buf += chunk;
     const lines = this.buf.split("\n");
-    // Last element is the incomplete line — keep it buffered.
     this.buf = lines.pop() ?? "";
     for (const line of lines) {
       this.writeLine(line);
-      this.write("\n");
+      if (!this.inFence && !isTableRow(line)) this.write("\n");
     }
   }
 
-  /** Call after the stream ends to flush the final partial line. */
   flush(): void {
     if (this.buf.length > 0) {
       this.writeLine(this.buf);
       this.buf = "";
     }
-    // Flush unclosed fence block
+    this.flushTable();
     if (this.fenceBuffer.length > 0) {
       this.write(chalk.green(this.fenceBuffer.join("\n")));
       this.fenceBuffer = [];
@@ -105,22 +152,31 @@ export class StreamingMarkdownRenderer {
     }
   }
 
+  private flushTable(): void {
+    if (this.tableRows.length > 0) {
+      this.write(renderTable(this.tableRows) + "\n");
+      this.tableRows = [];
+    }
+  }
+
   private writeLine(line: string): void {
     if (/^```/.test(line)) {
-      if (!this.inFence) {
-        this.inFence = true;
-        this.fenceBuffer = [];
-      } else {
+      this.flushTable();
+      if (!this.inFence) { this.inFence = true; this.fenceBuffer = []; }
+      else {
         this.write(chalk.green(this.fenceBuffer.join("\n")));
         this.fenceBuffer = [];
         this.inFence = false;
       }
       return;
     }
-    if (this.inFence) {
-      this.fenceBuffer.push(line);
+    if (this.inFence) { this.fenceBuffer.push(line); return; }
+
+    if (isTableRow(line)) {
+      if (!isSeparatorRow(line)) this.tableRows.push(parseTableRow(line));
       return;
     }
+    this.flushTable();
     this.write(renderLine(line));
   }
 }
