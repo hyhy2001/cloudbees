@@ -1,17 +1,13 @@
 import { describe, it, expect } from "bun:test";
 import { cosineSimilarity } from "../src/plugins/docs/vector";
-import { DIM, EMB_MODEL, VEC_IDS, VEC_B64 } from "../src/generated/embeddings";
+import { DIM, VEC_IDS, VEC_B64 } from "../src/generated/embeddings";
 
-// The embedding metadata guard (vector.ts embed()) relies on the baked corpus
-// being internally consistent: VEC_B64 must decode to exactly VEC_IDS.length ×
-// DIM Int16 values, and EMB_MODEL/DIM must be present. If these drift, the
-// guard's dim/model comparison is meaningless. This check fails loudly when a
-// regenerate produces a mismatched artifact.
+// The dim-integrity check: VEC_B64 must decode to exactly VEC_IDS.length ×
+// DIM Int16 values. If these drift after a regenerate, vector search silently
+// produces wrong cosine scores.
 
 describe("embedding metadata integrity", () => {
-  it("baked model name and dimension are present", () => {
-    expect(typeof EMB_MODEL).toBe("string");
-    expect(EMB_MODEL.length).toBeGreaterThan(0);
+  it("DIM is present and positive", () => {
     expect(DIM).toBeGreaterThan(0);
   });
 

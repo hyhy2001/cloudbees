@@ -1,22 +1,19 @@
 /**
- * Pre-compute neural embeddings for the entire corpus using a local ONNX
- * embedding model (all-MiniLM-L6-v2 via @xenova/transformers).
+ * Pre-compute neural embeddings for the entire corpus using the configured
+ * API embedding endpoint (CB_EMBEDDING_URL / bee.lm.json).
  *
  * The generated file is committed and baked into the binary — no model
  * needed at runtime.
  *
  * Run: bun run scripts/generate-embeddings.ts
- *
- * First run downloads the model (~80 MB) to the HuggingFace cache.
- * Subsequent runs use the cached model.
  */
 
-import { writeFileSync, statSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Command } from "commander";
 
 const lmFile = (await Bun.file("bee.lm.json").json().catch(() => ({}))) as Record<string, string>;
-const MODEL_NAME = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2";
+const MODEL_NAME = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "default";
 const BASE_URL = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRICK_URL ?? "";
 const API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
 const CLI_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
@@ -24,9 +21,7 @@ const CLI_SEC = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB
 const EMBEDDING_PATH = lmFile.embeddingPath ?? lmFile.CB_EMBEDDING_PATH ?? process.env.CB_EMBEDDING_PATH ?? "/v1/embeddings";
 const EMBEDDING_URL_OVERRIDE = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ?? "";
 const API_URL = EMBEDDING_URL_OVERRIDE ||
-  (MODEL_NAME !== "Xenova/all-MiniLM-L6-v2" && BASE_URL
-    ? `${BASE_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}`
-    : "");
+  (BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}` : "");
 
 // Auth: OAuth → Bearer, else static API_KEY
 let BEARER = API_KEY;
@@ -51,56 +46,40 @@ program.exitOverride();
 await initPlugins(program);
 const corpus = buildCorpus(program);
 
-type EmbedFn = (text: string) => Promise<number[]>;
-let embed: EmbedFn;
-let DIM = 384;
-
-if (API_URL) {
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (BEARER) headers["authorization"] = `Bearer ${BEARER}`;
-  // Try the configured URL first, then fallback paths without AI Gateway prefix
-  const urlCandidates = [API_URL];
-  if (EMBEDDING_PATH.startsWith("/ai-gateway/")) {
-    urlCandidates.push(`${BASE_URL.replace(/\/+$/, "")}/v1/embeddings`);
-    urlCandidates.push(`${BASE_URL.replace(/\/+$/, "")}/serving-endpoints/${encodeURIComponent(MODEL_NAME)}/invocations`);
-  }
-  embed = async (t: string) => {
-    for (const url of urlCandidates) {
-      const r = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ input: t.slice(0, 2048), model: MODEL_NAME }),
-        signal: AbortSignal.timeout(30000),
-      });
-      if (r.ok) {
-        const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };
-        return j.data?.[0]?.embedding ?? [];
-      }
-      if (r.status !== 404) {
-        throw new Error(`Embedding API returned ${r.status} at ${url}`);
-      }
-      process.stderr.write(`  Embedding API 404 at ${url} — trying next candidate\n`);
-    }
-    throw new Error(`Embedding API returned 404 for all candidates`);
-  };
-  console.log("Using API embedding…");
-  // Detect dimension from first response
-  const first = await embed(corpus[0]!.title);
-  DIM = first.length;
-} else {
-  const { pipeline, env } = await import("@xenova/transformers");
-  const repoModels = join(import.meta.dir, "..", "models");
-  if (statSync(repoModels, { throwIfNoEntry: false })) {
-    env.cacheDir = repoModels;
-    env.localModelPath = repoModels;
-  }
-  console.log("Loading embedding model (first run downloads ~80 MB)…");
-  const extract = await pipeline("feature-extraction", MODEL_NAME);
-  embed = async (t: string) => {
-    const result = await extract(t.slice(0, 512), { pooling: "mean", normalize: true });
-    return Array.from(result.data) as number[];
-  };
+if (!API_URL) {
+  console.error("ERROR: No embedding API configured. Set CB_EMBEDDING_URL or CB_DATABRICK_URL in bee.lm.json or env.");
+  process.exit(1);
 }
+
+const headers: Record<string, string> = { "content-type": "application/json" };
+if (BEARER) headers["authorization"] = `Bearer ${BEARER}`;
+const urlCandidates = [API_URL];
+if (EMBEDDING_PATH.startsWith("/ai-gateway/")) {
+  urlCandidates.push(`${BASE_URL.replace(/\/+$/, "")}/v1/embeddings`);
+  urlCandidates.push(`${BASE_URL.replace(/\/+$/, "")}/serving-endpoints/${encodeURIComponent(MODEL_NAME)}/invocations`);
+}
+const embed = async (t: string): Promise<number[]> => {
+  for (const url of urlCandidates) {
+    const r = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ input: t.slice(0, 2048), model: MODEL_NAME }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (r.ok) {
+      const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };
+      return j.data?.[0]?.embedding ?? [];
+    }
+    if (r.status !== 404) {
+      throw new Error(`Embedding API returned ${r.status} at ${url}`);
+    }
+    process.stderr.write(`  Embedding API 404 at ${url} — trying next candidate\n`);
+  }
+  throw new Error(`Embedding API returned 404 for all candidates`);
+};
+console.log("Using API embedding…");
+const first = await embed(corpus[0]!.title);
+const DIM = first.length;
 
 const ids: string[] = [];
 const values: number[] = [];
@@ -134,9 +113,6 @@ const code = [
   "",
   `export const DIM = ${DIM} as const;`,
   `export const SCALE = ${SCALE} as const;`,
-  `// Model these vectors were generated with — runtime guard skips vector search`,
-  `// when the configured embedding model or dimension no longer matches.`,
-  `export const EMB_MODEL = ${JSON.stringify(MODEL_NAME)} as const;`,
   `export const VEC_IDS: readonly string[] = ${JSON.stringify(ids)};`,
   "",
   `// Quantized Int16 flat array (base64).`,

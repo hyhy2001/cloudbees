@@ -43,17 +43,10 @@ export function getVectorDb(): VectorDb {
 export function clearVectorDb(): void { _db = null; _embedFn = null; }
 
 /**
- * Embed a query string in the same neural space as the corpus.
- * Returns null when @xenova/transformers is unavailable (caller should
- * skip vector search and fall back to BM25-only).
- *
- * Metadata guard: the corpus vectors were generated with EMB_MODEL at DIM
- * dimensions. If the configured embedding model differs, or the model returns
- * a vector of a different dimension, the query and corpus vectors live in
- * incompatible spaces — cosine similarity would be meaningless (and a dim
- * mismatch makes it silently wrong). In either case, skip vector search and
- * fall back to BM25 instead of poisoning the ranking. Re-run
- * generate-embeddings.ts to rebuild the corpus for a new model.
+ * Embed a query string into the same vector space as the baked corpus.
+ * Returns null when no endpoint is configured or it returns 404 (falls back to BM25).
+ * Dimension guard: if the API returns a vector with a different DIM than the corpus,
+ * vector search is skipped — re-run generate-embeddings.ts to rebuild.
  */
 export async function embed(text: string): Promise<number[] | null> {
   const fn = await getEmbedFn();

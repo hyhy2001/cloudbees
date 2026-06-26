@@ -52,7 +52,7 @@ beforeAll(() => {
 
       // The AI Gateway embedding path (custom prefix).
       if (url.pathname === "/ai-gateway/mlflow/v1/embeddings") {
-        return new Response(JSON.stringify({ data: [{ embedding: new Array(384).fill(0.01) }] }));
+        return new Response(JSON.stringify({ data: [{ embedding: new Array(1024).fill(0.01) }] }));
       }
 
       // Legacy serving-endpoints path must NOT be hit.
@@ -143,9 +143,6 @@ describe("embedding OAuth reuses the robust Databricks token exchange", () => {
         ...process.env,
         CB_DATABRICK_URL: mockUrl,
         CB_EMBEDDING_PATH: "/ai-gateway/mlflow/v1/embeddings",
-        // Must match the baked EMB_MODEL so the metadata guard (vector.ts)
-        // does not short-circuit embed() before the OAuth path is exercised.
-        CB_EMBEDDING_MODEL: "Xenova/all-MiniLM-L6-v2",
         CB_CLIENT_ID: "id",
         CB_CLIENT_SECRET: "secret",
       },
@@ -154,8 +151,8 @@ describe("embedding OAuth reuses the robust Databricks token exchange", () => {
     const err = await new Response(proc.stderr).text();
     expect(await proc.exited, err).toBe(0);
 
-    // len:384 proves: OAuth token obtained + AI Gateway embedding call succeeded.
-    // (null would mean the guard blocked, the token failed, or the call 404'd.)
-    expect(out).toBe("len:384");
+    // len:1024 proves: OAuth token obtained + AI Gateway embedding call succeeded.
+    // (null would mean the dim guard blocked, the token failed, or the call 404'd.)
+    expect(out).toBe("len:1024");
   });
 });
