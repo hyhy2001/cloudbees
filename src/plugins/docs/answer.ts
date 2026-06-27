@@ -260,11 +260,16 @@ export async function answer(
   const graphExtra = expandGraph(fused_base, corpus, graph, 10);
   const fused = [...fused_base, ...graphExtra];
 
-  // If any top-8 hit is a group command (no dot = top-level like "job", "node"),
-  // expand limit to include all its subcommands in context.
-  const groupHit = fused.slice(0, 8).find(h => !h.id.includes(".") && h.type === "command");
-  const effectiveLimit = groupHit
-    ? Math.max(limit, fused.filter(h => h.id.startsWith(groupHit.id + ".") || h.id === groupHit.id).length)
+  // Group expansion: if 3+ hits share the same top-level group (e.g. "job.*"),
+  // include ALL commands from that group so the LM can list them completely.
+  const groupCounts = new Map<string, number>();
+  for (const h of fused.slice(0, 10)) {
+    const g = h.id.split(".")[0]!;
+    groupCounts.set(g, (groupCounts.get(g) ?? 0) + 1);
+  }
+  const dominantGroup = [...groupCounts.entries()].find(([, n]) => n >= 3)?.[0];
+  const effectiveLimit = dominantGroup
+    ? Math.max(limit, fused.filter(h => h.id === dominantGroup || h.id.startsWith(dominantGroup + ".")).length)
     : limit;
   const contextHits = fused.slice(0, effectiveLimit);
 
