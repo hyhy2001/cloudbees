@@ -19,13 +19,15 @@ jobs:
       - name: Run tests
         run: bun test
 
-      - name: Build binary
-        run: bun run build.ts
+      - name: Build binary and tarball
+        run: make install
         env:
           CB_SKIP_CODEGEN: "1"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/bee
+          files: |
+            dist/bee
+            dist/bee-*-linux-x64.tar.gz
           generate_release_notes: true
