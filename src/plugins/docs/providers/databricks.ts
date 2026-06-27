@@ -90,7 +90,7 @@ export class DatabricksOAuthProvider {
         model: this.model,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: prompt },
+          { role: "user", content: prompt + "\n\nRespond with JSON only." },
         ],
         max_tokens: 2048,
         temperature: 0,

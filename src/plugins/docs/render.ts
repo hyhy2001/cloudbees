@@ -207,7 +207,7 @@ export function renderStructuredAnswer(structured: LmAnswer): void {
       const rows = [["Flag", "Description"], ...c.flags.map(f => [f.name, f.description])];
       process.stdout.write(renderTable(rows) + "\n");
     }
-    if (c.example) {
+    if (c.example && c.example.trim() !== c.cmd.trim()) {
       process.stdout.write("\n" + chalk.green(c.example) + "\n");
     }
     process.stdout.write("\n");

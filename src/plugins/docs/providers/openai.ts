@@ -80,7 +80,8 @@ export class OpenAICompatProvider {
         model: this.model,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: prompt },
+          // Append "json" to satisfy providers that require the word in prompt for json_object mode
+          { role: "user", content: prompt + "\n\nRespond with JSON only." },
         ],
         temperature: 0,
         max_tokens: 2048,
