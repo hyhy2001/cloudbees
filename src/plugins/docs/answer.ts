@@ -262,11 +262,12 @@ export async function answer(
     : searchDocs(searchQuery, corpus, limit * 3, { gate: true, softGate: true });
 
   // Vector search for RRF fusion — only when runtime model matches corpus model
-  // so cosine scores are meaningful. No reranking — BM25+RRF order is preserved.
+  // and BM25 top hit is a command (not a concept/info doc which vector often ranks poorly).
   let fused_base = bm25Candidates;
   const runtimeModel = EMBEDDING_MODEL ?? "";
   const modelsMatch = !runtimeModel || runtimeModel === "default" || runtimeModel === CORPUS_MODEL;
-  if (modelsMatch) {
+  const bm25TopIsCommand = bm25Candidates[0]?.type === "command";
+  if (modelsMatch && bm25TopIsCommand) {
     try {
       const vdb = getVectorDb();
       const queryEmb = await embed(searchQuery);
