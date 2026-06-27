@@ -141,7 +141,7 @@ export const SYSTEM_PROMPT = [
   "  ✗ `bee job run <name>` — bad, abstract",
   "  ✓ `bee job run my-pipeline --wait` — good, concrete",
   "- Formatting rules for terminal output:",
-  "  - Show flags in a markdown table: | Flag | Description | when listing multiple flags.",
+  "  - EVERY bee command MUST be wrapped in a fenced code block (```bash ... ```) or inline backticks. NEVER print a bare bee command without backticks.",
   "  - In table cells, NEVER use bare | (breaks rendering). Use 'or' instead.",
   "  - Always quote cron expressions: `'H 0 * * *'` not plain H 0 * * *.",
   "  - Keep table cells short — move long explanations outside the table as prose.",
