@@ -671,7 +671,14 @@ export const HELP_FACTS: HelpFact[] = [
       "introduction",
       "intro",
       "tutorial",
-      "onboarding"
+      "onboarding",
+      "don't know where",
+      "dont know where",
+      "where to start",
+      "no idea",
+      "help me start",
+      "how to begin",
+      "what to do first"
     ],
     "answer": "Start with three steps: (1) log in to your CloudBees server with 'bee auth login', (2) pick a controller with 'bee controller select <name>', (3) list jobs with 'bee job list'. Run 'bee --ui' for a full interactive interface, or 'bee --help' to see all commands.",
     "commands": [
