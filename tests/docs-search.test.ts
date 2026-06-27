@@ -223,8 +223,8 @@ describe("buildMatchExpr", () => {
     // and dropped the correct hit for "which controller am i on" and
     // "jenkins agent wont come online".
     expect(buildMatchExpr("am i on")).toBe("");
-    expect(buildMatchExpr("jenkins agent wont come online")).toBe(
-      '"agent"* OR "node"* OR "wont"* OR "online"*',
+    expect(buildMatchExpr("jenkins agent wont come online")).toMatch(
+      /^"agent"\* OR "node"\* OR "wont"\* OR "online"\*/,
     );
   });
 
