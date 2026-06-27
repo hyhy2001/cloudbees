@@ -328,8 +328,7 @@ export async function answer(
   if (provider.generateJson) {
     try {
       const structured = await provider.generateJson(prompt);
-      if (structured) {
-        const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
+      if (structured) {        const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
         const seenCmds = new Set<string>();
         const validCmds = structured.commands.filter(c => {
           // Normalize: strip trailing args for dedup ("bee auth login --profile x" → "bee auth login")
