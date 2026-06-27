@@ -172,6 +172,7 @@ export function stripPreamble(text: string): string {
 export interface LMProvider {
   readonly name: string;
   generate(prompt: string, maxTokens?: number): Promise<string>;
+  generateJson?(prompt: string): Promise<LmAnswer | null>;
   stream?(prompt: string): AsyncGenerator<string, void, unknown>;
 }
 
@@ -193,11 +194,24 @@ export function getProvider(): LMProvider | null {
 
 export type AnswerSource = "lm" | "raw";
 
+/** Structured answer from the LM JSON path. */
+export interface LmAnswer {
+  explanation: string;
+  commands: Array<{
+    cmd: string;
+    flags?: Array<{ name: string; description: string }>;
+    example?: string;
+  }>;
+  note?: string;
+}
+
 export interface AnswerResult {
   /** "lm" when a provider answered, "raw" when falling back to ranked hits */
   source: AnswerSource;
   /** Natural-language answer (lm) or empty string (raw — caller renders hits) */
   text: string;
+  /** Structured answer when JSON path succeeded (preferred over text) */
+  structured?: LmAnswer;
   /** Ranked hits for fallback rendering / JSON output */
   hits: DocItem[];
   /** Provider name when source="lm", undefined otherwise */
@@ -309,6 +323,28 @@ export async function answer(
   }
 
   const prompt = buildUserPrompt(query, contextHits);
+
+  // ── Structured JSON path (preferred) ─────────────────────────────────────
+  if (provider.generateJson) {
+    try {
+      const structured = await provider.generateJson(prompt);
+      if (structured) {
+        const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
+        const validCmds = structured.commands.filter(c => {
+          const m = c.cmd.match(/^bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?/i);
+          if (!m) return false;
+          const g = m[1]!.toLowerCase();
+          const s = m[2]?.toLowerCase();
+          return g === "ask" || g === "help" || validIds.has(g) || (s ? validIds.has(`${g}.${s}`) : false);
+        });
+        return { source: "lm", text: structured.explanation, structured: { ...structured, commands: validCmds }, hits, provider: provider.name };
+      }
+    } catch (err) {
+      if (process.env.BEE_DEBUG_TRACEBACK) {
+        process.stderr.write(`[bee ask] JSON path failed, falling back: ${err instanceof Error ? err.message : err}\n`);
+      }
+    }
+  }
 
   // Streaming path — caller (CLI) writes chunks as they arrive.
   const streamFn = provider.stream;

@@ -13,6 +13,7 @@
  * weights most heavily, rather than burying them in one concatenated string.
  */
 import { SYSTEM_PROMPT } from "../context";
+import type { LmAnswer } from "../answer";
 
 export class OpenAICompatProvider {
   public readonly name: string;
@@ -68,11 +69,45 @@ export class OpenAICompatProvider {
     return (msg?.content ?? msg?.reasoning_content ?? "").trim();
   }
 
+  async generateJson(prompt: string): Promise<LmAnswer | null> {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
+
+    const response = await fetch(this.endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0,
+        max_tokens: 2048,
+        enable_thinking: false,
+        response_format: { type: "json_object" },
+      }),
+      signal: AbortSignal.timeout(60000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`LM HTTP ${response.status}${body ? `: ${body.slice(0, 300)}` : ""}`);
+    }
+
+    const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
+    const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string } }> };
+    const content = outer.choices?.[0]?.message?.content?.trim() ?? "";
+    if (!content) return null;
+    const parsed = JSON.parse(content) as LmAnswer;
+    if (typeof parsed.explanation !== "string" || !Array.isArray(parsed.commands)) return null;
+    return parsed;
+  }
+
   /**
    * Streaming variant: returns tokens via SSE as they arrive from the API.
    */
-  async *stream(prompt: string): AsyncGenerator<string, void, unknown> {
-    const headers: Record<string, string> = { "content-type": "application/json" };
+  async *stream(prompt: string): AsyncGenerator<string, void, unknown> {    const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
     if (process.env.BEE_DEBUG_TRACEBACK) {
       process.stderr.write(`[bee ask] stream prompt (first 300): ${prompt.slice(0, 300)}\n`);

@@ -14,6 +14,7 @@
  *   - StreamingMarkdownRenderer    — incremental char-by-char streaming
  */
 import chalk from "chalk";
+import type { LmAnswer } from "./answer";
 
 /** Render inline markdown spans within a line. */
 function renderInline(text: string): string {
@@ -48,7 +49,7 @@ function visibleLength(s: string): number {
 }
 
 /** Render a collected markdown table to terminal string. */
-function renderTable(rows: string[][]): string {
+export function renderTable(rows: string[][]): string {
   if (rows.length === 0) return "";
   const cols = rows[0]!.length;
   // Widths based on visible length after inline rendering (strips ANSI).
@@ -194,5 +195,24 @@ export class StreamingMarkdownRenderer {
     if (line.trim() === "" && this.tableRows.length > 0) return;
     this.flushTable();
     this.write(renderLine(line));
+  }
+}
+
+/** Render a structured LmAnswer to stdout with colors and aligned tables. */
+export function renderStructuredAnswer(structured: LmAnswer): void {
+  process.stdout.write(renderInline(structured.explanation) + "\n\n");
+  for (const c of structured.commands) {
+    process.stdout.write(chalk.bold.cyan(c.cmd) + "\n");
+    if (c.flags && c.flags.length > 0) {
+      const rows = [["Flag", "Description"], ...c.flags.map(f => [f.name, f.description])];
+      process.stdout.write(renderTable(rows) + "\n");
+    }
+    if (c.example) {
+      process.stdout.write("\n" + chalk.green(c.example) + "\n");
+    }
+    process.stdout.write("\n");
+  }
+  if (structured.note) {
+    process.stdout.write(chalk.dim(structured.note) + "\n");
   }
 }
