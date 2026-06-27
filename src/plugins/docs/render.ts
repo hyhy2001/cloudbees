@@ -131,19 +131,11 @@ export function renderMarkdown(text: string): string {
 }
 
 /**
- * Streaming markdown renderer — processes chunks incrementally and writes
- * rendered output as soon as it's safe (i.e., outside an open span/block).
+ * Streaming markdown renderer — line-by-line streaming.
  *
- * Strategy:
- *   - Buffer incoming chunks into a line buffer.
- *   - When a newline arrives, the completed line is safe to render and flush.
- *   - Inside a fenced code block (``` ... ```) accumulate until closing fence.
- *   - The last incomplete line stays buffered until flush() is called at end.
- *
- * Usage:
- *   const r = new StreamingMarkdownRenderer(chunk => process.stdout.write(chunk));
- *   for await (const chunk of stream) r.write(chunk);
- *   r.flush();
+ * Each completed line is rendered and flushed immediately as tokens arrive.
+ * Plain text lines appear word-by-word. Fenced code blocks and tables are
+ * buffered until complete since they need full context to format correctly.
  */
 export class StreamingMarkdownRenderer {
   private buf = "";
@@ -195,12 +187,10 @@ export class StreamingMarkdownRenderer {
       return;
     }
     if (this.inFence) { this.fenceBuffer.push(line); return; }
-
     if (isTableRow(line)) {
       if (!isSeparatorRow(line)) this.tableRows.push(parseTableRow(line));
       return;
     }
-    // Skip blank lines between table rows — don't flush mid-table
     if (line.trim() === "" && this.tableRows.length > 0) return;
     this.flushTable();
     this.write(renderLine(line));
