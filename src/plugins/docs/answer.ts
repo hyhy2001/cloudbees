@@ -260,11 +260,13 @@ export async function answer(
   const graphExtra = expandGraph(fused_base, corpus, graph, 10);
   const fused = [...fused_base, ...graphExtra];
 
-  // If the top hit is a group command (no dot in id = top-level), expand limit
-  // so all subcommands fit in context (e.g. "bee ask job" shows all job subcommands).
-  const topId = fused[0]?.id ?? "";
-  const effectiveLimit = !topId.includes(".") ? Math.max(limit, fused.filter(h => h.id.startsWith(topId + ".") || h.id === topId).length) : limit;
-  const contextHits = fused.slice(0, Math.max(effectiveLimit, limit));
+  // If any top-8 hit is a group command (no dot = top-level like "job", "node"),
+  // expand limit to include all its subcommands in context.
+  const groupHit = fused.slice(0, 8).find(h => !h.id.includes(".") && h.type === "command");
+  const effectiveLimit = groupHit
+    ? Math.max(limit, fused.filter(h => h.id.startsWith(groupHit.id + ".") || h.id === groupHit.id).length)
+    : limit;
+  const contextHits = fused.slice(0, effectiveLimit);
 
   if (process.env.BEE_DEBUG_TRACEBACK) {
     process.stderr.write(`[bee ask] context hits: ${contextHits.map(h => h.id).join(", ")}\n`);
