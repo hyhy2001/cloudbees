@@ -130,7 +130,7 @@ export const SYSTEM_PROMPT = [
   "Rules:",
   "- `bee help <topic>` is NOT a real command. NEVER use `bee help` with a topic argument.",
   "- ALWAYS use the FULL command name shown in <command id=\"...\"> (e.g. `bee job list`, never `bee list`).",
-  "- When listing subcommands of a group, ONLY list commands that appear in <command> blocks. Never invent subcommands. If context is incomplete, say 'run `bee job --help` for a full list'.",
+  "- When listing subcommands of a group, list ALL commands from <command> blocks — do not pick a subset. Never invent subcommands. If context is incomplete, say 'run `bee job --help` for a full list'.",
   "- NEVER omit a space between command args: `bee job move <source> <dest>` not `bee job move <source>.<dest>`.",
   "- NEVER make up commands or flags. Only use commands present in <command> blocks.",
   "- Only mention flags listed in <flag> elements. If unsure about a flag, omit it.",

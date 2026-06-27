@@ -257,13 +257,14 @@ export async function answer(
 
   // Graph expansion: append related commands from the same group/CRUD family.
   const graph = getGraph(corpus);
-  const graphExtra = expandGraph(fused_base, corpus, graph, 3);
+  const graphExtra = expandGraph(fused_base, corpus, graph, 10);
   const fused = [...fused_base, ...graphExtra];
 
-  // LM reranker disabled — BM25+RRF order is already high-quality (98.4%
-  // Recall@1) and reranking with a mismatched embedding endpoint corrupts it.
-  // ponytail: re-enable when corpus and runtime always share the same embedding endpoint.
-  const contextHits = fused.slice(0, limit);
+  // If the top hit is a group command (no dot in id = top-level), expand limit
+  // so all subcommands fit in context (e.g. "bee ask job" shows all job subcommands).
+  const topId = fused[0]?.id ?? "";
+  const effectiveLimit = !topId.includes(".") ? Math.max(limit, fused.filter(h => h.id.startsWith(topId + ".") || h.id === topId).length) : limit;
+  const contextHits = fused.slice(0, Math.max(effectiveLimit, limit));
 
   if (process.env.BEE_DEBUG_TRACEBACK) {
     process.stderr.write(`[bee ask] context hits: ${contextHits.map(h => h.id).join(", ")}\n`);
