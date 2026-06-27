@@ -8,6 +8,7 @@
  */
 import { SYSTEM_PROMPT } from "../context";
 import { CHAT_ENDPOINT } from "../config";
+import type { LmAnswer } from "../answer";
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
@@ -78,6 +79,36 @@ export class DatabricksOAuthProvider {
   async generate(prompt: string, maxTokens = 8192): Promise<string> {
     const token = await this.getToken();
     return chatCall(this.model, token, prompt, maxTokens);
+  }
+
+  async generateJson(prompt: string): Promise<LmAnswer | null> {
+    const token = await this.getToken();
+    const response = await fetch(CHAT_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: prompt },
+        ],
+        max_tokens: 2048,
+        temperature: 0,
+        enable_thinking: false,
+        response_format: { type: "json_object" },
+      }),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!response.ok) {
+      throw new Error(`Databricks LM error (HTTP ${response.status})`);
+    }
+    const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
+    const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string } }> };
+    const content = outer.choices?.[0]?.message?.content?.trim() ?? "";
+    if (!content) return null;
+    const parsed = JSON.parse(content) as LmAnswer;
+    if (typeof parsed.explanation !== "string" || !Array.isArray(parsed.commands)) return null;
+    return parsed;
   }
 
   /**
