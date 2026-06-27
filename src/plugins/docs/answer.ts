@@ -130,6 +130,25 @@ async function rewriteQuery(query: string, provider: LMProvider): Promise<string
   return query;
 }
 
+/**
+ * Strip chain-of-thought preamble emitted by thinking models (Qwen3, DeepSeek-R1).
+ * These models sometimes put reasoning in the content field before the real answer.
+ */
+function stripPreamble(text: string): string {
+  const PREAMBLE_RE = /^(We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|Let me think|The user|First,?\s+[Ii]|Looking at|Based on the|Given that|Okay,?\s+so|Alright,?\s+so)/i;
+  if (!PREAMBLE_RE.test(text.trimStart().slice(0, 80))) return text;
+  const lines = text.split("\n");
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i]!.trim() === "") {
+      const nextNonEmpty = lines.slice(i + 1).find(l => l.trim() !== "");
+      if (nextNonEmpty && !PREAMBLE_RE.test(nextNonEmpty.trimStart().slice(0, 80))) {
+        return lines.slice(i + 1).join("\n").trimStart();
+      }
+    }
+  }
+  return text;
+}
+
 
 /**
  * A configured language-model backend.
@@ -312,7 +331,7 @@ export async function answer(
         if (process.env.BEE_DEBUG_TRACEBACK) {
           process.stderr.write(`[bee ask] LM stream full: ${full.slice(0, 500)}\n`);
         }
-        return stripInventedCommands(full, corpus);
+        return stripInventedCommands(stripPreamble(full), corpus);
       },
     };
   }
@@ -322,7 +341,7 @@ export async function answer(
     if (process.env.BEE_DEBUG_TRACEBACK) {
       process.stderr.write(`[bee ask] LM raw response: ${raw.slice(0, 500)}\n`);
     }
-    const text = stripInventedCommands(raw, corpus);
+    const text = stripInventedCommands(stripPreamble(raw), corpus);
     return { source: "lm", text, hits, provider: provider.name };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
