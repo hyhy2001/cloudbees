@@ -330,14 +330,22 @@ export async function answer(
       const structured = await provider.generateJson(prompt);
       if (structured) {
         const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
+        const seenCmds = new Set<string>();
         const validCmds = structured.commands.filter(c => {
+          if (seenCmds.has(c.cmd)) return false;
+          seenCmds.add(c.cmd);
           const m = c.cmd.match(/^bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?/i);
           if (!m) return false;
           const g = m[1]!.toLowerCase();
           const s = m[2]?.toLowerCase();
           return g === "ask" || g === "help" || validIds.has(g) || (s ? validIds.has(`${g}.${s}`) : false);
         });
-        return { source: "lm", text: structured.explanation, structured: { ...structured, commands: validCmds }, hits, provider: provider.name };
+        // Strip positional args from flags (only keep entries starting with --)
+        const cleanCmds = validCmds.map(c => ({
+          ...c,
+          flags: c.flags?.filter(f => f.name.startsWith("--")) ?? [],
+        }));
+        return { source: "lm", text: structured.explanation, structured: { ...structured, commands: cleanCmds }, hits, provider: provider.name };
       }
     } catch (err) {
       if (process.env.BEE_DEBUG_TRACEBACK) {
