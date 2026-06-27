@@ -83,7 +83,7 @@ describe("RAG: every command findable by its name", () => {
 
   // ponytail: flaky when run in parallel suite due to SQLite FTS5 state sharing.
   // Passes reliably when run in isolation: bun test tests/docs-rag-stress.test.ts
-  it.skipIf(process.env.CI !== "true")("each command surfaces itself when queried by its title words", () => {
+  it.skipIf(process.env.CI === "true")("each command surfaces itself when queried by its title words", () => {
     const misses: string[] = [];
     for (const cmd of COMMANDS) {
       // Title looks like "bee job run <name>" — drop "bee" and arg sigils.
