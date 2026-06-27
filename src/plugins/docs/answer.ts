@@ -261,17 +261,23 @@ export async function answer(
   const fused = [...fused_base, ...graphExtra];
 
   // Group expansion: if 3+ hits share the same top-level group (e.g. "job.*"),
-  // include ALL commands from that group so the LM can list them completely.
+  // include ALL commands from that group — pull from full corpus, not just fused.
   const groupCounts = new Map<string, number>();
   for (const h of fused.slice(0, 10)) {
     const g = h.id.split(".")[0]!;
     groupCounts.set(g, (groupCounts.get(g) ?? 0) + 1);
   }
   const dominantGroup = [...groupCounts.entries()].find(([, n]) => n >= 3)?.[0];
-  const effectiveLimit = dominantGroup
-    ? Math.max(limit, fused.filter(h => h.id === dominantGroup || h.id.startsWith(dominantGroup + ".")).length)
-    : limit;
-  const contextHits = fused.slice(0, effectiveLimit);
+  let contextHits: typeof fused;
+  if (dominantGroup) {
+    // Pull all group members from full corpus (not just fused) to avoid vector gaps
+    const allGroupItems = corpus.filter(h => h.id === dominantGroup || h.id.startsWith(dominantGroup + "."));
+    const seen = new Set(allGroupItems.map(h => h.id));
+    const rest = fused.filter(h => !seen.has(h.id));
+    contextHits = [...fused.filter(h => seen.has(h.id)), ...rest].slice(0, Math.max(limit, allGroupItems.length));
+  } else {
+    contextHits = fused.slice(0, limit);
+  }
 
   if (process.env.BEE_DEBUG_TRACEBACK) {
     process.stderr.write(`[bee ask] context hits: ${contextHits.map(h => h.id).join(", ")}\n`);
