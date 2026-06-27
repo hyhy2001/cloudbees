@@ -544,38 +544,51 @@ Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful 
 
 ## `bee ask` — Help & Natural-Language Search
 
-`bee ask` answers questions about how to use `bee` in natural language. Output is rendered as formatted markdown in the terminal (colors, tables, code blocks). A spinner shows while the model is thinking.
+`bee ask` answers questions about how to use `bee` in natural language. Output is rendered as formatted markdown in the terminal (colors, tables, code blocks). A spinner shows while the model is thinking. Chain-of-thought reasoning is stripped before output is shown.
 
 ```
 User query
    → BM25 hard-gate search (local, FTS5)
        │
-       ├─ hits > 0 ───────────────────────────┐
-       │                                       │
-       └─ hits = 0                             │
-            → LM query rewrite (+1 call, 32 tokens)  │
+       ├─ hits ≥ 3 ─────────────────────────────┐
+       │                                         │
+       └─ hits < 3                               │
+            → LM query rewrite (+1 call, 32 tokens)
               "hello I am newbie" → "getting started login"
             → BM25 soft-gate search with rewritten query
-              └──────────────────────────────┤
-                                             ▼
-                          BM25 + Vector RRF fusion (when embedding model matches corpus)
-                                             │
-                                         Graph expansion (+3 CRUD neighbors)
-                                             │
-                                         Top-5 → LM answer (+1 call, stream)
-                                             │
-                          stripInventedCommands → markdown render → terminal
+              └────────────────────────────────┤
+                                               ▼
+              BM25 + Vector RRF fusion (when BM25 top hit is a command
+                                         and embedding model matches corpus)
+                                               │
+                                    Graph expansion (+10 CRUD neighbors)
+                                    Group expansion (all siblings when dominant)
+                                               │
+                                    Top-N → LM answer (+1 call, stream)
+                                    [CoT in <think> block, stripped before render]
+                                               │
+                         stripInventedCommands + stripPreamble
+                                               │
+                              Streaming markdown render → terminal
 ```
 
-**API calls per query**: 1 (well-formed queries) or 2 (colloquial queries that need rewriting). Vector embedding adds 1 call only when the runtime embedding model matches the baked corpus model. Custom paths: `CB_CHAT_PATH` (default `/v1/chat/completions`) and `CB_EMBEDDING_PATH` (default `/v1/embeddings`) can be set independently.
+**API calls per query**: 1 (well-formed queries) or 2 (colloquial queries that need rewriting). Vector embedding adds 1 call only when BM25 top hit is a command and the runtime embedding model matches the baked corpus model. Custom paths: `CB_CHAT_PATH` (default `/v1/chat/completions`) and `CB_EMBEDDING_PATH` (default `/v1/embeddings`) can be set independently.
 
 ### Output rendering
 
 Responses are rendered as terminal markdown:
 - `` `code` `` and ` ```blocks``` ` → green
-- `**bold**` → bold, `## headings` → cyan bold
-- `- bullets` → `•` indented
-- `| tables |` → aligned columns with headers
+- `**bold**` → bold, `## headings` → cyan bold, `---` → dim rule
+- `- bullets` → `•` indented, `1. numbered` → dim prefix
+- `| tables |` → aligned columns with cyan bold headers
+
+### Flags
+
+| Flag | Description |
+|---|---|
+| `--no-stream` | Collect full response before printing (useful for debugging) |
+| `--limit <n>` | Max context items to retrieve (default 8) |
+| `--json` | Machine-readable JSON output |
 
 ### Adding help facts
 
