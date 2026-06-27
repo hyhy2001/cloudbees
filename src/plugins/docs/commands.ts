@@ -119,7 +119,7 @@ export function registerDocsCommands(ctx: PluginContext): void {
             // Buffer initial chunks to detect and strip thinking preamble.
             // Flush buffer once we see a blank line that ends the preamble,
             // or after 600 chars (short preamble or no preamble).
-            const PREAMBLE_RE = /^(Thinking\.?|We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|The user|First,?\s+[Ii]|Looking at|Based on the|Okay,?\s+so)/i;
+            const PREAMBLE_RE = /^(Thinking\.?|We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|The answer|The user|The question|The request|The context|The instruction|First,?\s+[Ii]|Looking at|Based on the|Okay,?\s+so|Alright,?\s+so|Note:|Step \d|Let's (check|see|verify|think|analyze|consider)|I (should|will|need|must) |We (should|will|need|must) )/i;
             let preBuf = "";
             let preambleDone = false;
             await result.streamOutput((chunk) => {
