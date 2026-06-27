@@ -332,8 +332,10 @@ export async function answer(
         const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
         const seenCmds = new Set<string>();
         const validCmds = structured.commands.filter(c => {
-          if (seenCmds.has(c.cmd)) return false;
-          seenCmds.add(c.cmd);
+          // Normalize: strip trailing args for dedup ("bee auth login --profile x" → "bee auth login")
+          const normalized = c.cmd.replace(/\s+--?\S+.*$/, "").trim();
+          if (seenCmds.has(normalized)) return false;
+          seenCmds.add(normalized);
           const m = c.cmd.match(/^bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?/i);
           if (!m) return false;
           const g = m[1]!.toLowerCase();
