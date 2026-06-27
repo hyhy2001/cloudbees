@@ -12,7 +12,7 @@ import { printMessage, printInfo, printError } from "../../core/cli/output";
 import { buildCorpus } from "./corpus";
 import { answer, getProvider, stripPreamble as stripPreambleStr } from "./answer";
 import { presentAnswer } from "./presenter";
-import { renderMarkdown, StreamingMarkdownRenderer } from "./render";
+import { renderMarkdown, StreamingMarkdownRenderer, renderStructuredAnswer } from "./render";
 import chalk from "chalk";
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
@@ -111,6 +111,12 @@ export function registerDocsCommands(ctx: PluginContext): void {
         }
 
         if (result.source === "lm") {
+          // Structured JSON path (preferred) — deterministic rendering
+          if (result.structured) {
+            stopSpinner();
+            renderStructuredAnswer(result.structured);
+            return;
+          }
           if (streamFlag && result.stream && result.streamOutput) {
             const renderer = new StreamingMarkdownRenderer(
               (s) => process.stdout.write(s),
