@@ -134,8 +134,8 @@ async function rewriteQuery(query: string, provider: LMProvider): Promise<string
  * Strip chain-of-thought preamble emitted by thinking models (Qwen3, DeepSeek-R1).
  * These models sometimes put reasoning in the content field before the real answer.
  */
-function stripPreamble(text: string): string {
-  const PREAMBLE_RE = /^(We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|Let me think|The user|First,?\s+[Ii]|Looking at|Based on the|Given that|Okay,?\s+so|Alright,?\s+so)/i;
+export function stripPreamble(text: string): string {
+  const PREAMBLE_RE = /^(Thinking\.?|We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|Let me think|The user|First,?\s+[Ii]|Looking at|Based on the|Given that|Okay,?\s+so|Alright,?\s+so)/i;
   if (!PREAMBLE_RE.test(text.trimStart().slice(0, 80))) return text;
   const lines = text.split("\n");
   for (let i = 1; i < lines.length; i++) {

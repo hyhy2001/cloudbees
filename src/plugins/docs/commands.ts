@@ -10,7 +10,7 @@
 import type { PluginContext } from "../../registry/types";
 import { printMessage, printInfo, printError } from "../../core/cli/output";
 import { buildCorpus } from "./corpus";
-import { answer, getProvider } from "./answer";
+import { answer, getProvider, stripPreamble as stripPreambleStr } from "./answer";
 import { presentAnswer } from "./presenter";
 import { renderMarkdown, StreamingMarkdownRenderer } from "./render";
 import chalk from "chalk";
@@ -116,10 +116,38 @@ export function registerDocsCommands(ctx: PluginContext): void {
               (s) => process.stdout.write(s),
             );
             let stopped = false;
+            // Buffer initial chunks to detect and strip thinking preamble.
+            // Flush buffer once we see a blank line that ends the preamble,
+            // or after 600 chars (short preamble or no preamble).
+            const PREAMBLE_RE = /^(Thinking\.?|We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|The user|First,?\s+[Ii]|Looking at|Based on the|Okay,?\s+so)/i;
+            let preBuf = "";
+            let preambleDone = false;
             await result.streamOutput((chunk) => {
               if (!stopped) { stopSpinner(); stopped = true; }
-              renderer.push(chunk);
+              if (preambleDone) { renderer.push(chunk); return; }
+              preBuf += chunk;
+              // Check if we've passed a preamble boundary
+              const inPreamble = PREAMBLE_RE.test(preBuf.trimStart().slice(0, 80));
+              if (!inPreamble || preBuf.length > 600) {
+                // No preamble detected — stream immediately
+                preambleDone = true;
+                renderer.push(preBuf);
+                preBuf = "";
+              } else if (preBuf.includes("\n\n")) {
+                // Found blank line — potential end of preamble paragraph
+                const idx = preBuf.lastIndexOf("\n\n");
+                const after = preBuf.slice(idx + 2);
+                if (after.length > 0 && !PREAMBLE_RE.test(after.trimStart().slice(0, 80))) {
+                  // Content after blank line doesn't look like preamble — start rendering
+                  preambleDone = true;
+                  renderer.push(after);
+                  preBuf = "";
+                }
+                // else: still in preamble, keep buffering
+              }
             });
+            // Flush any remaining buffer (short response, or preamble never ended)
+            if (preBuf.length > 0) renderer.push(preambleDone ? preBuf : stripPreambleStr(preBuf));
             if (!stopped) stopSpinner();
             renderer.flush();
             process.stdout.write("\n");
