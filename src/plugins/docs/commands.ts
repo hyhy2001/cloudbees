@@ -116,34 +116,41 @@ export function registerDocsCommands(ctx: PluginContext): void {
               (s) => process.stdout.write(s),
             );
             let stopped = false;
-            // Buffer initial chunks to detect and strip thinking preamble.
-            // Flush buffer once we see a blank line that ends the preamble,
-            // or after 600 chars (short preamble or no preamble).
+            // Buffer initial chunks to detect and strip <think>...</think> CoT block
+            // or implicit reasoning preamble before streaming to terminal.
             const PREAMBLE_RE = /^(Thinking\.?|We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|The answer|The user|The question|The request|The context|The instruction|First,?\s+[Ii]|Looking at|Based on the|Okay,?\s+so|Alright,?\s+so|Note:|Step \d|Let's (check|see|verify|think|analyze|consider)|I (should|will|need|must) |We (should|will|need|must) )/i;
             let preBuf = "";
             let preambleDone = false;
+            let inThinkTag = false;
             await result.streamOutput((chunk) => {
               if (!stopped) { stopSpinner(); stopped = true; }
               if (preambleDone) { renderer.push(chunk); return; }
               preBuf += chunk;
-              // Check if we've passed a preamble boundary
+              // Handle explicit <think>...</think> CoT block
+              if (preBuf.includes("<think>")) inThinkTag = true;
+              if (inThinkTag) {
+                if (preBuf.includes("</think>")) {
+                  const after = preBuf.slice(preBuf.indexOf("</think>") + 8).trimStart();
+                  preambleDone = true;
+                  if (after) renderer.push(after);
+                  preBuf = "";
+                }
+                return; // still inside <think> block
+              }
+              // Handle implicit preamble
               const inPreamble = PREAMBLE_RE.test(preBuf.trimStart().slice(0, 80));
               if (!inPreamble || preBuf.length > 600) {
-                // No preamble detected — stream immediately
                 preambleDone = true;
                 renderer.push(preBuf);
                 preBuf = "";
               } else if (preBuf.includes("\n\n")) {
-                // Found blank line — potential end of preamble paragraph
                 const idx = preBuf.lastIndexOf("\n\n");
                 const after = preBuf.slice(idx + 2);
                 if (after.length > 0 && !PREAMBLE_RE.test(after.trimStart().slice(0, 80))) {
-                  // Content after blank line doesn't look like preamble — start rendering
                   preambleDone = true;
                   renderer.push(after);
                   preBuf = "";
                 }
-                // else: still in preamble, keep buffering
               }
             });
             // Flush any remaining buffer (short response, or preamble never ended)
