@@ -153,11 +153,9 @@ for (const item of corpus) {
         signal: AbortSignal.timeout(30000),
       });
       if (!r.ok) { apiErrors++; continue; }
-      const j = (await r.json()) as {
-        choices: Array<{
-          message: { content?: string; reasoning_content?: string };
-        }>;
-      };
+      const raw1 = (await r.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
+      let j: { choices: Array<{ message: { content?: string; reasoning_content?: string } }> };
+      try { j = JSON.parse(raw1) as typeof j; } catch { apiErrors++; continue; }
       const msg = j.choices?.[0]?.message;
       const text = (msg?.content ?? msg?.reasoning_content ?? "").trim();
 
@@ -243,8 +241,10 @@ for (const [flag, { cmds, desc }] of flagSet) {
       signal: AbortSignal.timeout(30000),
     });
     if (!r.ok) continue;
-    const j = (await r.json()) as { choices: Array<{ message: { content?: string } }> };
-    const text = (j.choices?.[0]?.message?.content ?? "").trim();
+    const raw2 = (await r.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
+    let jf: { choices: Array<{ message: { content?: string } }> };
+    try { jf = JSON.parse(raw2) as typeof jf; } catch { continue; }
+    const text = (jf.choices?.[0]?.message?.content ?? "").trim();
     const parts = text.split("||");
     const phrases = (parts[0] || "").split("|").map((p) => p.trim().toLowerCase()).filter(Boolean);
     const example = (parts[1] || "").trim();
