@@ -149,7 +149,6 @@ for (const item of corpus) {
           messages: [{ role: "user", content: prompt }],
           temperature: 0,
           max_tokens: 200,
-          reasoning_effort: "none",
         }),
         signal: AbortSignal.timeout(30000),
       });
@@ -240,7 +239,6 @@ for (const [flag, { cmds, desc }] of flagSet) {
         messages: [{ role: "user", content: flagPrompt }],
         temperature: 0,
         max_tokens: 150,
-        reasoning_effort: "none",
       }),
       signal: AbortSignal.timeout(30000),
     });
