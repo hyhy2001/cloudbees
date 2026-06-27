@@ -103,17 +103,15 @@ export function stripInventedCommands(text: string, corpus: DocItem[]): string {
 
 // --- Query rewriting ---------------------------------------------------------
 
-const REWRITE_PROMPT = `You are a search query normalizer for the \`bee\` CLI (CloudBees/Jenkins tool).
-Convert the user's natural-language question into 3-6 lowercase keyword tokens that a BM25 index can match.
-Output ONLY the keywords, space-separated, no punctuation, no explanation.
+const REWRITE_PROMPT = `Normalize this bee CLI question to BM25 search keywords (3-6 lowercase tokens). Output ONLY the tokens, space-separated.
 
 Examples:
-  "Hello I am a newbie, how to use this?" → getting started login auth
-  "how do I kick off a pipeline job?" → job run pipeline trigger
-  "rotate my api key" → credential update secret rotate
-  "put agent into maintenance mode" → node offline
-  "I cannot log in, 403 forbidden" → auth error 403 troubleshoot
-  "show me all create node options" → node create flags options`;
+  "Hello I am a newbie, how to use this?" → getting started login
+  "kick off a pipeline" → job run pipeline
+  "rotate my api key" → credential update rotate
+  "put agent in maintenance" → node offline
+  "403 forbidden login error" → auth error 403
+  "all options for create node" → node create flags`;
 
 /**
  * Rewrite a free-form user query into BM25-friendly keywords using the LM.
