@@ -51,9 +51,9 @@ function visibleLength(s: string): number {
 function renderTable(rows: string[][]): string {
   if (rows.length === 0) return "";
   const cols = rows[0]!.length;
-  // Widths based on plain text (before renderInline adds ANSI codes).
+  // Widths based on visible length after inline rendering (strips ANSI).
   const widths = Array.from({ length: cols }, (_, i) =>
-    Math.max(...rows.map((r) => (r[i] ?? "").length), 4)
+    Math.max(...rows.map((r) => visibleLength(renderInline(r[i] ?? ""))), 4)
   );
   const lines: string[] = [];
   rows.forEach((row, ri) => {
@@ -72,6 +72,10 @@ function renderTable(rows: string[][]): string {
 
 /** Render a single line (no block/table context needed). */
 function renderLine(line: string): string {
+  // Horizontal rule
+  if (/^---+$/.test(line.trim()) || /^\*\*\*+$/.test(line.trim())) {
+    return chalk.dim("─".repeat(40));
+  }
   // Headings
   const h2 = line.match(/^## (.+)$/);
   if (h2) return chalk.bold.cyan(h2[1]!);
