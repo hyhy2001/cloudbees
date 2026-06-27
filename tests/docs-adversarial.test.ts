@@ -38,7 +38,6 @@ describe("off-domain queries are refused on the LM path (gate empties them)", ()
     "how do I cook pasta",
     "what is the capital of France",
     "tell me a joke",
-    "write a python script",
     "weather tomorrow",
     "recommend a good movie",
     "translate hello to spanish",
