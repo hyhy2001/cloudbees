@@ -148,7 +148,7 @@ for (const item of corpus) {
           model: LM_MODEL,
           messages: [{ role: "user", content: prompt }],
           temperature: 0,
-          max_tokens: 200,
+          max_tokens: 512,
         }),
         signal: AbortSignal.timeout(30000),
       });
@@ -236,7 +236,7 @@ for (const [flag, { cmds, desc }] of flagSet) {
         model: LM_MODEL,
         messages: [{ role: "user", content: flagPrompt }],
         temperature: 0,
-        max_tokens: 150,
+        max_tokens: 256,
       }),
       signal: AbortSignal.timeout(30000),
     });
