@@ -220,11 +220,11 @@ export async function answer(
     return { source: "raw", text: "", hits };
   }
 
-  // Rewrite the query into BM25-friendly keywords only when the original
-  // query returns no hits — avoids an extra LM call on well-formed queries.
+  // Rewrite the query into BM25-friendly keywords when the original query
+  // returns few hits (< 3) — avoids extra LM call on well-formed queries.
   let searchQuery = query;
   const directHits = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
-  if (directHits.length === 0) {
+  if (directHits.length < 3) {
     searchQuery = await rewriteQuery(query, provider);
     if (process.env.BEE_DEBUG_TRACEBACK) {
       process.stderr.write(`[bee ask] rewritten query: ${searchQuery}\n`);
