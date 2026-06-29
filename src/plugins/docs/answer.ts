@@ -361,33 +361,55 @@ export async function answer(
   // Streaming path — caller (CLI) writes chunks as they arrive.
   const streamFn = provider.stream;
   if (streamFn) {
-    return {
+    const result: AnswerResult = {
       source: "lm",
       text: "",
       hits,
       provider: provider.name,
       stream: true,
-      streamOutput: async (write: (chunk: string) => void): Promise<string> => {
-        const chunks: string[] = [];
-        try {
-          for await (const chunk of streamFn.call(provider, prompt)) {
-            write(chunk);
-            chunks.push(chunk);
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          process.stderr.write(`[bee ask] LM stream error (${provider.name}): ${msg}\n`);
-          write("\n");
-        }
-        // When streaming yielded nothing, fall back to non-streaming
-        // (e.g., endpoint returned plain JSON instead of SSE).
-        const full = chunks.length > 0 ? chunks.join("") : await provider.generate(prompt);
-        if (process.env.BEE_DEBUG_TRACEBACK) {
-          process.stderr.write(`[bee ask] LM stream full: ${full.slice(0, 500)}\n`);
-        }
-        return stripInventedCommands(stripPreamble(full), corpus);
-      },
     };
+    result.streamOutput = async (write: (chunk: string) => void): Promise<string> => {
+      const chunks: string[] = [];
+      try {
+        for await (const chunk of streamFn.call(provider, prompt)) {
+          chunks.push(chunk);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[bee ask] LM stream error (${provider.name}): ${msg}\n`);
+      }
+      const full = chunks.length > 0 ? chunks.join("") : await provider.generate(prompt);
+      if (process.env.BEE_DEBUG_TRACEBACK) {
+        process.stderr.write(`[bee ask] LM stream full: ${full.slice(0, 500)}\n`);
+      }
+      // Model may return JSON even without response_format support.
+      const trimmed = stripPreamble(full).trim();
+      if (trimmed.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(trimmed) as LmAnswer;
+          if (typeof parsed.explanation === "string" && Array.isArray(parsed.commands)) {
+            const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
+            const seenCmds = new Set<string>();
+            const validCmds = parsed.commands.filter(c => {
+              if (c.cmd.includes("--help")) return false;
+              const normalized = c.cmd.replace(/\s+--?\S+.*$/, "").trim();
+              if (seenCmds.has(normalized)) return false;
+              seenCmds.add(normalized);
+              const m = c.cmd.match(/^bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?/i);
+              if (!m) return false;
+              const g = m[1]!.toLowerCase(), s = m[2]?.toLowerCase();
+              return g === "ask" || g === "help" || validIds.has(g) || (s ? validIds.has(`${g}.${s}`) : false);
+            }).map(c => ({ ...c, flags: c.flags?.filter(f => f.name.startsWith("--")) ?? [] }));
+            result.structured = { ...parsed, commands: validCmds };
+            return parsed.explanation;
+          }
+        } catch { /* not JSON, fall through */ }
+      }
+      const cleaned = stripInventedCommands(trimmed, corpus);
+      write(cleaned);
+      return cleaned;
+    };
+    return result;
   }
 
   try {
