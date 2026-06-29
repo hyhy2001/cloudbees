@@ -99,7 +99,7 @@ export class DatabricksOAuthProvider {
         ],
         max_tokens: 2048,
         temperature: 0,
-        enable_thinking: false,
+        enable_thinking: true,  // use native thinking when model supports it; 400 falls back to stream
         response_format: { type: "json_object" },
       }),
       signal: AbortSignal.timeout(60000),
@@ -107,10 +107,45 @@ export class DatabricksOAuthProvider {
     if (!response.ok) {
       process.stderr.write(`[bee ask] generateJson HTTP ${response.status}\n`);
       if (response.status === 400 || response.status === 422) {
-        // Model doesn't support response_format — collect via stream() and parse JSON from text
+        // Model doesn't support response_format — stream with thinking enabled, parse JSON from text
         const chunks: string[] = [];
-        for await (const chunk of this.stream(prompt + "\n\nRespond with JSON only.")) {
-          chunks.push(chunk);
+        const fallbackResp = await fetch(CHAT_ENDPOINT, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            model: this.model,
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: prompt + "\n\nRespond with JSON only." },
+            ],
+            max_tokens: 2048,
+            temperature: 0,
+            enable_thinking: true,
+            stream: true,
+          }),
+          signal: AbortSignal.timeout(60000),
+        });
+        if (fallbackResp.ok) {
+          const reader = fallbackResp.body?.getReader();
+          const decoder = new TextDecoder();
+          let buf = "";
+          while (reader) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split("\n");
+            buf = lines.pop() ?? "";
+            for (const line of lines) {
+              const t = line.trim();
+              if (!t || t === "data: [DONE]" || !t.startsWith("data: ")) continue;
+              try {
+                const j = JSON.parse(t.slice(6)) as { choices?: Array<{ delta?: { content?: string; reasoning_content?: string } }> };
+                const d = j.choices?.[0]?.delta;
+                const c = d?.content ?? d?.reasoning_content;
+                if (c) chunks.push(c);
+              } catch { /* skip */ }
+            }
+          }
         }
         content = chunks.join("");
       } else {
