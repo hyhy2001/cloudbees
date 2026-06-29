@@ -259,8 +259,12 @@ export async function answer(
   // Hard gate: if no hits pass the relevance gate, don't call LM at all.
   const hardHits = searchDocs(query, corpus, limit, { gate: true, softGate: false });
 
-  if (!provider || hardHits.length === 0) {
+  if (!provider) {
     return { source: "raw", text: "", hits };
+  }
+  // Off-topic query — hard gate empty, skip LM call entirely
+  if (hardHits.length === 0) {
+    return { source: "raw", text: "", hits: [] };
   }
 
   // Rewrite the query into BM25-friendly keywords when the original query
