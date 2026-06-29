@@ -133,46 +133,8 @@ export class DatabricksOAuthProvider {
         process.stderr.write(`[bee ask] generateJson HTTP ${response.status}\n`);
       }
       if (response.status === 400 || response.status === 422 || response.status === 500) {
-        // Model doesn't support response_format — stream with thinking enabled, parse JSON from text
-        const chunks: string[] = [];
-        const fallbackResp = await fetch(CHAT_ENDPOINT, {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            model: this.model,
-            messages: [
-              { role: "system", content: SYSTEM_PROMPT },
-              { role: "user", content: prompt + "\n\nRespond with JSON only." },
-            ],
-            max_tokens: 2048,
-            temperature: 0,
-            stream: true,
-          }),
-          signal: AbortSignal.timeout(60000),
-        });
-        if (fallbackResp.ok) {
-          const reader = fallbackResp.body?.getReader();
-          const decoder = new TextDecoder();
-          let buf = "";
-          while (reader) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buf += decoder.decode(value, { stream: true });
-            const lines = buf.split("\n");
-            buf = lines.pop() ?? "";
-            for (const line of lines) {
-              const t = line.trim();
-              if (!t || t === "data: [DONE]" || !t.startsWith("data: ")) continue;
-              try {
-                const j = JSON.parse(t.slice(6)) as { choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown } }> };
-                const d = j.choices?.[0]?.delta;
-                const c = extractContent(d?.content ?? d?.reasoning_content);
-                if (c) chunks.push(c);
-              } catch { /* skip */ }
-            }
-          }
-        }
-        content = chunks.join("");
+        // Model doesn't support response_format — use plain non-streaming call
+        content = await chatCall(this.model, token, prompt + "\n\nRespond with JSON only.", 2048);
       } else {
         throw new Error(`Databricks LM error (HTTP ${response.status})`);
       }
