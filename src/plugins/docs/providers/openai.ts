@@ -93,8 +93,12 @@ export class OpenAICompatProvider {
 
     if (!response.ok) {
       if (response.status === 400 || response.status === 422) {
-        // Model doesn't support response_format — fall back to plain generate()
-        content = await this.generate(prompt + "\n\nRespond with JSON only.", 2048);
+        // Model doesn't support response_format — collect via stream() and parse JSON from text
+        const chunks: string[] = [];
+        for await (const chunk of this.stream(prompt + "\n\nRespond with JSON only.")) {
+          chunks.push(chunk);
+        }
+        content = chunks.join("");
       } else {
         const body = await response.text().catch(() => "");
         throw new Error(`LM HTTP ${response.status}${body ? `: ${body.slice(0, 300)}` : ""}`);
