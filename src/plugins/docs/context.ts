@@ -131,11 +131,13 @@ export const SYSTEM_PROMPT = [
   "- flags array: ONLY entries starting with '--'. Never put positional args (like <name>) in flags.",
   "- commands array: list each command ONCE. Never repeat the same cmd twice.",
   "- When listing subcommands of a group, include ALL commands from context (not just 3).",
+  "- reasoning field: quote the EXACT flag names and command ids from the <command> blocks that answer this query. This grounds your answer in the context.",
   "Reply ONLY with a valid JSON object — no text outside JSON:",
-  '{"explanation":"<1-2 sentence intro>","commands":[{"cmd":"<full bee command>","flags":[{"name":"--flag","description":".."}],"example":"<concrete invocation>"}],"note":"<caveat or null>"}',
+  '{"reasoning":"<quote exact command ids and flag names from context>","explanation":"<1-2 sentence intro>","commands":[{"cmd":"<full bee command>","flags":[{"name":"--flag","description":".."}],"example":"<concrete invocation>"}],"note":"<caveat or null>"}',
   "",
   "Example — 'trigger a job':",
   JSON.stringify({
+    reasoning: "Context has command id='job.run' with flags --wait, --node, --param, --timeout. User wants to trigger a build.",
     explanation: "Use `bee job run` to trigger a new build.",
     commands: [{ cmd: "bee job run", flags: [{ name: "--wait", description: "Block until build completes" }, { name: "--node", description: "Restrict to a specific agent label" }], example: "bee job run my-pipeline --wait" }],
     note: null,
@@ -143,6 +145,7 @@ export const SYSTEM_PROMPT = [
   "",
   "Example — 'list all nodes':",
   JSON.stringify({
+    reasoning: "Context has command id='node.list' with flags --all. User wants to see all agents.",
     explanation: "Use `bee node list` to see all agents on the controller.",
     commands: [{ cmd: "bee node list", flags: [{ name: "--all", description: "Include offline agents" }], example: "bee node list --all" }],
     note: null,
@@ -150,6 +153,7 @@ export const SYSTEM_PROMPT = [
   "",
   "Example — 'what can I do with jobs' (group listing — include ALL subcommands from context):",
   JSON.stringify({
+    reasoning: "Context has job.list, job.run, job.create.freestyle, job.create.pipeline, job.create.folder, job.delete, job.log, job.status, job.stop, job.copy, job.move, job.update.freestyle, job.update.pipeline, job.track, job.untrack, job.get, job.approve-agent, job.list-agents, job.remove-agent. User wants all subcommands.",
     explanation: "The `bee job` group manages CloudBees jobs and builds.",
     commands: [
       { cmd: "bee job list", flags: [{ name: "--all", description: "Show all jobs" }, { name: "--recursive", description: "Descend into folders" }], example: "bee job list --all --recursive" },
