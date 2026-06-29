@@ -376,8 +376,10 @@ export async function answer(
     };
     result.streamOutput = async (write: (chunk: string) => void): Promise<string> => {
       const chunks: string[] = [];
+      // Append JSON instruction so model returns structured output even without response_format
+      const jsonPrompt = prompt + "\n\nRespond with JSON only.";
       try {
-        for await (const chunk of streamFn.call(provider, prompt)) {
+        for await (const chunk of streamFn.call(provider, jsonPrompt)) {
           chunks.push(chunk);
         }
       } catch (err) {
