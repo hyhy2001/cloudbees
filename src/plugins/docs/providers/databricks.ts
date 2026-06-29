@@ -86,8 +86,7 @@ function extractContent(content: unknown): string {
   return "";
 }
 
-
-  public readonly name = "databricks-oauth";
+export class DatabricksOAuthProvider {
 
   private host: string;
   private clientId: string;
