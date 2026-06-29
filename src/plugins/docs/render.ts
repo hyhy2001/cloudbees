@@ -14,7 +14,7 @@
  *   - StreamingMarkdownRenderer    — incremental char-by-char streaming
  */
 import chalk from "chalk";
-import type { LmAnswer } from "./answer";
+import type { LmAnswer, TokenUsage } from "./answer";
 
 /** Render inline markdown spans within a line. */
 function renderInline(text: string): string {
@@ -199,8 +199,7 @@ export class StreamingMarkdownRenderer {
 }
 
 /** Render a structured LmAnswer to stdout with colors and aligned tables. */
-export function renderStructuredAnswer(structured: LmAnswer): void {
-  process.stdout.write(renderInline(structured.explanation) + "\n\n");
+export function renderStructuredAnswer(structured: LmAnswer): void {  process.stdout.write(renderInline(structured.explanation) + "\n\n");
   for (const c of structured.commands) {
     process.stdout.write(chalk.bold.cyan(c.cmd) + "\n");
     if (c.flags && c.flags.length > 0) {
@@ -215,4 +214,12 @@ export function renderStructuredAnswer(structured: LmAnswer): void {
   if (structured.note) {
     process.stdout.write(chalk.dim(structured.note) + "\n");
   }
+}
+
+/** Render footer with disclaimer and token usage. */
+export function renderFooter(usage?: TokenUsage): void {
+  const tokenInfo = usage
+    ? chalk.dim(` (↑${usage.promptTokens} ↓${usage.completionTokens} tokens)`)
+    : "";
+  process.stdout.write(chalk.dim("\nAI có thể tạo ra sai sót, hãy kiểm tra thật kỹ.") + tokenInfo + "\n");
 }

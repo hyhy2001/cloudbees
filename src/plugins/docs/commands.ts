@@ -12,7 +12,7 @@ import { printMessage, printInfo, printError } from "../../core/cli/output";
 import { buildCorpus } from "./corpus";
 import { answer, getProvider, stripPreamble as stripPreambleStr } from "./answer";
 import { presentAnswer } from "./presenter";
-import { renderMarkdown, StreamingMarkdownRenderer, renderStructuredAnswer } from "./render";
+import { renderMarkdown, StreamingMarkdownRenderer, renderStructuredAnswer, renderFooter } from "./render";
 import chalk from "chalk";
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
@@ -116,6 +116,7 @@ export function registerDocsCommands(ctx: PluginContext): void {
           if (result.structured) {
             stopSpinner();
             renderStructuredAnswer(result.structured);
+            renderFooter(result.usage);
             return;
           }
           if (streamFlag && result.stream && result.streamOutput) {

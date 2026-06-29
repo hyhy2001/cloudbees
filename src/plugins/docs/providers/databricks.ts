@@ -8,7 +8,7 @@
  */
 import { SYSTEM_PROMPT } from "../context";
 import { CHAT_ENDPOINT } from "../config";
-import type { LmAnswer } from "../answer";
+import type { LmAnswer, TokenUsage } from "../answer";
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
@@ -81,13 +81,13 @@ export class DatabricksOAuthProvider {
     return chatCall(this.model, token, prompt, maxTokens);
   }
 
-  async generateJson(prompt: string): Promise<LmAnswer | null> {
+  async generateJson(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null> {
     process.stderr.write(`[bee ask] generateJson called, model=${this.model}\n`);
     const token = await this.getToken();
     process.stderr.write(`[bee ask] generateJson got token, fetching...\n`);
 
-    // Try with response_format first; fall back to plain generate() if unsupported (HTTP 400/422).
     let content = "";
+    let usage: TokenUsage | undefined;
     const response = await fetch(CHAT_ENDPOINT, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
@@ -154,10 +154,11 @@ export class DatabricksOAuthProvider {
     } else {
       const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
       process.stderr.write(`[bee ask] databricks raw (200): ${raw.slice(0, 400)}\n`);
-      const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }> };
+      const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
       const msg = outer.choices?.[0]?.message;
       const rawContent = msg?.content ?? msg?.reasoning_content;
       content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent ?? "");
+      usage = outer.usage ? { promptTokens: outer.usage.prompt_tokens ?? 0, completionTokens: outer.usage.completion_tokens ?? 0 } : undefined;
     }
 
     content = content.replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
@@ -167,7 +168,7 @@ export class DatabricksOAuthProvider {
     if (jsonStart === -1) return null;
     const parsed = JSON.parse(content.slice(jsonStart)) as LmAnswer;
     if (typeof parsed.explanation !== "string" || !Array.isArray(parsed.commands)) return null;
-    return parsed;
+    return { answer: parsed, usage };
   }
 
   /**
