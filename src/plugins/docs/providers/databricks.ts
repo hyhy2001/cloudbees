@@ -48,13 +48,15 @@ async function chatCall(model: string, token: string, prompt: string, maxTokens 
     throw new Error(`Databricks LM error (HTTP ${response.status})${body ? `: ${body.slice(0, 200)}` : ""}`);
   }
   const raw = await response.text();
-  let json: { choices?: Array<{ message?: { content?: string } }> };
+  let json: { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }> };
   try {
     json = JSON.parse(raw) as typeof json;
   } catch {
     throw new Error(`Databricks LM returned non-JSON response: ${raw.slice(0, 200)}`);
   }
-  return json.choices?.[0]?.message?.content?.trim() ?? "";
+  const msg = json.choices?.[0]?.message;
+  const content = msg?.content ?? msg?.reasoning_content;
+  return typeof content === "string" ? content.trim() : "";
 }
 
 // ── OAuth M2M provider ─────────────────────────────────────────────────────

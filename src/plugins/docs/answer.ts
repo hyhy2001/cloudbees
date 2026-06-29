@@ -386,7 +386,7 @@ export async function answer(
         const msg = err instanceof Error ? err.message : String(err);
         process.stderr.write(`[bee ask] LM stream error (${provider.name}): ${msg}\n`);
       }
-      const full = chunks.length > 0 ? chunks.join("") : await provider.generate(prompt);
+      const full = chunks.length > 0 ? chunks.join("") : await provider.generate(jsonPrompt);
       if (process.env.BEE_DEBUG_TRACEBACK) {
         process.stderr.write(`[bee ask] LM stream full: ${full.slice(0, 500)}\n`);
       }
