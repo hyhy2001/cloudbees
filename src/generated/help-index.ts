@@ -680,12 +680,14 @@ export const HELP_FACTS: HelpFact[] = [
       "how to begin",
       "what to do first"
     ],
-    "answer": "Start with three steps: (1) log in to your CloudBees server with 'bee auth login', (2) pick a controller with 'bee controller select <name>', (3) list jobs with 'bee job list'. Run 'bee --ui' for a full interactive interface, or 'bee --help' to see all commands.",
+    "answer": "Full setup workflow: (1) Log in: 'bee auth login'. (2) Select a controller: 'bee controller select my-controller'. (3) Create a credential (e.g. SSH key): 'bee cred create --id my-ssh-key --secret-text \"$(cat ~/.ssh/id_rsa)\"'. (4) Create a node and attach the credential: 'bee node create my-agent --host 192.168.1.10 --cred-id my-ssh-key --labels linux'. (5) Create a job assigned to that node: 'bee job create freestyle my-job --shell \"make build\" --node linux'. (6) Run the job: 'bee job run my-job --wait'.",
     "commands": [
       "bee auth login",
       "bee controller select <name>",
-      "bee job list",
-      "bee --ui"
+      "bee cred create --id <id> --secret-text <value>",
+      "bee node create <name> --host <host> --cred-id <id> --labels <labels>",
+      "bee job create freestyle <name> --shell <cmd> --node <label>",
+      "bee job run <name> --wait"
     ],
     "related": [
       "bee --help"
