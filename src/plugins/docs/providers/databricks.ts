@@ -119,6 +119,7 @@ export class DatabricksOAuthProvider {
     }
 
     content = content.replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
+    process.stderr.write(`[bee ask] databricks content after strip: ${content.slice(0, 200)}\n`);
     if (!content) return null;
     const jsonStart = content.indexOf("{");
     if (jsonStart === -1) return null;
