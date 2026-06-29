@@ -92,7 +92,7 @@ export class OpenAICompatProvider {
     });
 
     if (!response.ok) {
-      if (response.status === 400 || response.status === 422) {
+      if (response.status === 400 || response.status === 422 || response.status === 500) {
         // Model doesn't support response_format — collect via stream() and parse JSON from text
         const chunks: string[] = [];
         for await (const chunk of this.stream(prompt + "\n\nRespond with JSON only.")) {

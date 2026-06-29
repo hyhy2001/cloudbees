@@ -82,9 +82,7 @@ export class DatabricksOAuthProvider {
   }
 
   async generateJson(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null> {
-    process.stderr.write(`[bee ask] generateJson called, model=${this.model}\n`);
     const token = await this.getToken();
-    process.stderr.write(`[bee ask] generateJson got token, fetching...\n`);
 
     let content = "";
     let usage: TokenUsage | undefined;
@@ -104,8 +102,10 @@ export class DatabricksOAuthProvider {
       signal: AbortSignal.timeout(60000),
     });
     if (!response.ok) {
-      process.stderr.write(`[bee ask] generateJson HTTP ${response.status}\n`);
-      if (response.status === 400 || response.status === 422) {
+      if (process.env.BEE_DEBUG_TRACEBACK) {
+        process.stderr.write(`[bee ask] generateJson HTTP ${response.status}\n`);
+      }
+      if (response.status === 400 || response.status === 422 || response.status === 500) {
         // Model doesn't support response_format — stream with thinking enabled, parse JSON from text
         const chunks: string[] = [];
         const fallbackResp = await fetch(CHAT_ENDPOINT, {
@@ -152,7 +152,9 @@ export class DatabricksOAuthProvider {
       }
     } else {
       const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
-      process.stderr.write(`[bee ask] databricks raw (200): ${raw.slice(0, 400)}\n`);
+      if (process.env.BEE_DEBUG_TRACEBACK) {
+        process.stderr.write(`[bee ask] databricks raw (200): ${raw.slice(0, 400)}\n`);
+      }
       const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
       const msg = outer.choices?.[0]?.message;
       const rawContent = msg?.content ?? msg?.reasoning_content;
@@ -161,7 +163,9 @@ export class DatabricksOAuthProvider {
     }
 
     content = content.replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
-    process.stderr.write(`[bee ask] databricks content after strip: ${content.slice(0, 200)}\n`);
+    if (process.env.BEE_DEBUG_TRACEBACK) {
+      process.stderr.write(`[bee ask] databricks content after strip: ${content.slice(0, 200)}\n`);
+    }
     if (!content) return null;
     const jsonStart = content.indexOf("{");
     if (jsonStart === -1) return null;

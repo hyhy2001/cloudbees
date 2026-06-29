@@ -358,7 +358,9 @@ export async function answer(
         return { source: "lm", text: structured.explanation, structured: { ...structured, commands: cleanCmds }, usage, hits, provider: provider.name };
       }
     } catch (err) {
-      process.stderr.write(`[bee ask] JSON path failed (${provider.name}): ${err instanceof Error ? err.message : err}\n`);
+      if (process.env.BEE_DEBUG_TRACEBACK) {
+        process.stderr.write(`[bee ask] JSON path failed (${provider.name}): ${err instanceof Error ? err.message : err}\n`);
+      }
     }
   }
 
@@ -389,8 +391,9 @@ export async function answer(
       // Model may return JSON even without response_format support.
       // Strip <think> block then find first { to handle thinking models.
       const trimmed = stripPreamble(full).replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
-      // Always log stream content to help diagnose model compatibility issues
-      process.stderr.write(`[bee ask] stream content (first 200): ${trimmed.slice(0, 200)}\n`);
+      if (process.env.BEE_DEBUG_TRACEBACK) {
+        process.stderr.write(`[bee ask] stream content (first 200): ${trimmed.slice(0, 200)}\n`);
+      }
       const jsonStart = trimmed.indexOf("{");
       if (jsonStart !== -1) {
         try {
