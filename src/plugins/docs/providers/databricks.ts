@@ -84,6 +84,7 @@ export class DatabricksOAuthProvider {
   async generateJson(prompt: string): Promise<LmAnswer | null> {
     process.stderr.write(`[bee ask] generateJson called, model=${this.model}\n`);
     const token = await this.getToken();
+    process.stderr.write(`[bee ask] generateJson got token, fetching...\n`);
 
     // Try with response_format first; fall back to plain generate() if unsupported (HTTP 400/422).
     let content = "";
@@ -104,6 +105,7 @@ export class DatabricksOAuthProvider {
       signal: AbortSignal.timeout(60000),
     });
     if (!response.ok) {
+      process.stderr.write(`[bee ask] generateJson HTTP ${response.status}\n`);
       if (response.status === 400 || response.status === 422) {
         // Model doesn't support response_format — fall back to plain generate()
         content = await this.generate(prompt + "\n\nRespond with JSON only.", 2048);
@@ -112,7 +114,7 @@ export class DatabricksOAuthProvider {
       }
     } else {
       const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
-      process.stderr.write(`[bee ask] databricks raw (200): ${raw.slice(0, 300)}\n`);
+      process.stderr.write(`[bee ask] databricks raw (200): ${raw.slice(0, 400)}\n`);
       const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }> };
       const msg = outer.choices?.[0]?.message;
       const rawContent = msg?.content ?? msg?.reasoning_content;
