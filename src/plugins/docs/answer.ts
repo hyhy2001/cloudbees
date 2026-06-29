@@ -196,6 +196,7 @@ export type AnswerSource = "lm" | "raw";
 
 /** Structured answer from the LM JSON path. */
 export interface LmAnswer {
+  reasoning?: string;   // extraction CoT — grounded in context, stripped before render
   explanation: string;
   commands: Array<{
     cmd: string;
