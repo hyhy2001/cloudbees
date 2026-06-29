@@ -56,12 +56,37 @@ async function chatCall(model: string, token: string, prompt: string, maxTokens 
   }
   const msg = json.choices?.[0]?.message;
   const content = msg?.content ?? msg?.reasoning_content;
-  return typeof content === "string" ? content.trim() : "";
+  return extractContent(content).replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
 }
 
 // ── OAuth M2M provider ─────────────────────────────────────────────────────
 
-export class DatabricksOAuthProvider {
+/** Extract text from a content value that may be a string or a structured array. */
+function extractContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((block: unknown) => {
+      if (typeof block === "string") return block;
+      if (typeof block !== "object" || block === null) return "";
+      const b = block as Record<string, unknown>;
+      // Plain text block
+      if (typeof b["text"] === "string") return b["text"];
+      // Reasoning block with summary array
+      if (Array.isArray(b["summary"])) {
+        return b["summary"].map((s: unknown) => {
+          if (typeof s === "object" && s !== null && typeof (s as Record<string, unknown>)["text"] === "string") {
+            return (s as Record<string, unknown>)["text"] as string;
+          }
+          return "";
+        }).join("");
+      }
+      return "";
+    }).join("");
+  }
+  return "";
+}
+
+
   public readonly name = "databricks-oauth";
 
   private host: string;
@@ -140,9 +165,9 @@ export class DatabricksOAuthProvider {
               const t = line.trim();
               if (!t || t === "data: [DONE]" || !t.startsWith("data: ")) continue;
               try {
-                const j = JSON.parse(t.slice(6)) as { choices?: Array<{ delta?: { content?: string; reasoning_content?: string } }> };
+                const j = JSON.parse(t.slice(6)) as { choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown } }> };
                 const d = j.choices?.[0]?.delta;
-                const c = d?.content ?? d?.reasoning_content;
+                const c = extractContent(d?.content ?? d?.reasoning_content);
                 if (c) chunks.push(c);
               } catch { /* skip */ }
             }
@@ -160,7 +185,7 @@ export class DatabricksOAuthProvider {
       const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
       const msg = outer.choices?.[0]?.message;
       const rawContent = msg?.content ?? msg?.reasoning_content;
-      content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent ?? "");
+      content = extractContent(rawContent);
       usage = outer.usage ? { promptTokens: outer.usage.prompt_tokens ?? 0, completionTokens: outer.usage.completion_tokens ?? 0 } : undefined;
     }
 
@@ -223,11 +248,11 @@ export class DatabricksOAuthProvider {
         if (!trimmed.startsWith("data: ")) continue;
         try {
           const json = JSON.parse(trimmed.slice(6)) as {
-            choices?: Array<{ delta?: { content?: string; reasoning_content?: string } }>;
+            choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown } }>;
           };
           const delta = json.choices?.[0]?.delta;
-          const content = delta?.content ?? delta?.reasoning_content;
-          if (content) yield content;
+          const text = extractContent(delta?.content ?? delta?.reasoning_content);
+          if (text) yield text;
         } catch {
           // skip malformed SSE line
         }
