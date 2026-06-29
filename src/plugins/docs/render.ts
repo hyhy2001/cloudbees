@@ -221,5 +221,5 @@ export function renderFooter(usage?: TokenUsage): void {
   const tokenInfo = usage
     ? chalk.dim(` (↑${usage.promptTokens} ↓${usage.completionTokens} tokens)`)
     : "";
-  process.stdout.write(chalk.dim("\nAI có thể tạo ra sai sót, hãy kiểm tra thật kỹ.") + tokenInfo + "\n");
+  process.stdout.write(chalk.dim("\nAI-generated — verify before use.") + tokenInfo + "\n");
 }
