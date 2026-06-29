@@ -146,7 +146,6 @@ export class DatabricksOAuthProvider {
             ],
             max_tokens: 2048,
             temperature: 0,
-            enable_thinking: true,
             stream: true,
           }),
           signal: AbortSignal.timeout(60000),
