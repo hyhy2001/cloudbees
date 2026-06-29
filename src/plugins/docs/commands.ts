@@ -8,7 +8,7 @@
  */
 
 import type { PluginContext } from "../../registry/types";
-import { printMessage, printInfo, printError } from "../../core/cli/output";
+import { printMessage, printError } from "../../core/cli/output";
 import { buildCorpus } from "./corpus";
 import { answer, getProvider, stripPreamble as stripPreambleStr } from "./answer";
 import { presentAnswer } from "./presenter";
@@ -84,7 +84,7 @@ export function registerDocsCommands(ctx: PluginContext): void {
 
         if (result.source === "raw" && result.hits.length === 0) {
           stopSpinner();
-          printInfo(`INFO No results matched '${query}'. Try 'bee --help' for commands.`);
+          printMessage("I only help with bee usage.");
           return;
         }
 
