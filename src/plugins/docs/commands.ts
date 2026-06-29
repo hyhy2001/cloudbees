@@ -99,6 +99,7 @@ export function registerDocsCommands(ctx: PluginContext): void {
             source: result.source,
             provider: result.provider ?? null,
             answer: presented,
+            structured: result.structured ?? null,
             hits: result.hits.map((h) => ({
               id: h.id,
               type: h.type,
