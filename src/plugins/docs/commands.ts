@@ -37,7 +37,7 @@ export function registerDocsCommands(ctx: PluginContext): void {
   ctx.program
     .command("ask")
     .description("Ask how to use bee — requires LM endpoint configured in bee.lm.json or env")
-    .argument("<query...>", "What you want to do (e.g. 'create node --host', 'what is a profile')")
+    .argument("<query...>", "What you want to do — quote queries with special chars: bee ask \"how to start?\"")
     .option("--limit <n>", "Max context items to retrieve", "8")
     .option("--json", "Output machine-readable JSON", false)
     .option("--no-stream", "Disable streaming — collect full response before printing", false)
