@@ -111,9 +111,11 @@ export class DatabricksOAuthProvider {
       }
     } else {
       const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
-      const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> };
+      process.stderr.write(`[bee ask] databricks raw (200): ${raw.slice(0, 300)}\n`);
+      const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }> };
       const msg = outer.choices?.[0]?.message;
-      content = msg?.content ?? msg?.reasoning_content ?? "";
+      const rawContent = msg?.content ?? msg?.reasoning_content;
+      content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent ?? "");
     }
 
     content = content.replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
