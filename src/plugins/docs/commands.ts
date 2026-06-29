@@ -41,17 +41,20 @@ export function registerDocsCommands(ctx: PluginContext): void {
     .option("--limit <n>", "Max context items to retrieve", "8")
     .option("--json", "Output machine-readable JSON", false)
     .option("--no-stream", "Disable streaming — collect full response before printing", false)
+    .option("--debug", "Show raw LM output for debugging", false)
     .allowUnknownOption()
-    .action(async (queryParts: string[], opts: { limit: string; json: boolean; stream: boolean }) => {
+    .action(async (queryParts: string[], opts: { limit: string; json: boolean; stream: boolean; debug: boolean }) => {
       try {
         const cleanParts: string[] = [];
         let jsonFlag = opts.json;
         let limitFlag = opts.limit;
         let streamFlag = opts.stream;
+        let debugFlag = opts.debug;
         for (let i = 0; i < queryParts.length; i++) {
           const part = queryParts[i]!;
           if (part === "--json") { jsonFlag = true; continue; }
           if (part === "--no-stream") { streamFlag = false; continue; }
+          if (part === "--debug") { debugFlag = true; continue; }
           if (part === "--limit" && i + 1 < queryParts.length) { limitFlag = queryParts[++i]!; continue; }
           cleanParts.push(part);
         }
@@ -124,11 +127,12 @@ export function registerDocsCommands(ctx: PluginContext): void {
               (s) => process.stdout.write(s),
             );
             let stopped = false;
+            let fullStreamText = "";
             const PREAMBLE_RE = /^(Thinking\.?|We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|The answer|The user|The question|The request|The context|The instruction|First,?\s+[Ii]|Looking at|Based on the|Okay,?\s+so|Alright,?\s+so|Note:|Step \d|Let's (check|see|verify|think|analyze|consider)|I (should|will|need|must) |We (should|will|need|must) )/i;
             let preBuf = "";
             let preambleDone = false;
             let inThinkTag = false;
-            await result.streamOutput((chunk) => {
+            fullStreamText = await result.streamOutput((chunk) => {
               if (!stopped) { stopSpinner(); stopped = true; }
               if (preambleDone) { renderer.push(chunk); return; }
               preBuf += chunk;
@@ -162,9 +166,13 @@ export function registerDocsCommands(ctx: PluginContext): void {
             // Flush any remaining buffer (short response, or preamble never ended)
             if (preBuf.length > 0) renderer.push(preambleDone ? preBuf : stripPreambleStr(preBuf));
             if (!stopped) stopSpinner();
-            // Stream path may have parsed JSON and set result.structured (model without response_format)
+            if (debugFlag) {
+              process.stderr.write(`[debug] stream full text (first 500):\n${fullStreamText.slice(0, 500)}\n`);
+              process.stderr.write(`[debug] result.structured: ${result.structured ? "set" : "undefined"}\n`);
+            }
             if (result.structured) {
               renderStructuredAnswer(result.structured);
+              renderFooter(result.usage);
             } else {
               renderer.flush();
               process.stdout.write("\n");
