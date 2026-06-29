@@ -83,6 +83,9 @@ export class DatabricksOAuthProvider {
 
   async generateJson(prompt: string): Promise<LmAnswer | null> {
     const token = await this.getToken();
+
+    // Try with response_format first; fall back to plain generate() if unsupported (HTTP 400/422).
+    let content = "";
     const response = await fetch(CHAT_ENDPOINT, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
@@ -100,13 +103,20 @@ export class DatabricksOAuthProvider {
       signal: AbortSignal.timeout(60000),
     });
     if (!response.ok) {
-      throw new Error(`Databricks LM error (HTTP ${response.status})`);
+      if (response.status === 400 || response.status === 422) {
+        // Model doesn't support response_format — fall back to plain generate()
+        content = await this.generate(prompt + "\n\nRespond with JSON only.", 2048);
+      } else {
+        throw new Error(`Databricks LM error (HTTP ${response.status})`);
+      }
+    } else {
+      const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
+      const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> };
+      const msg = outer.choices?.[0]?.message;
+      content = msg?.content ?? msg?.reasoning_content ?? "";
     }
-    const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
-    const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> };
-    const msg = outer.choices?.[0]?.message;
-    const content = (msg?.content ?? msg?.reasoning_content ?? "")
-      .replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
+
+    content = content.replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
     if (!content) return null;
     const jsonStart = content.indexOf("{");
     if (jsonStart === -1) return null;
