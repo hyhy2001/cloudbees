@@ -97,10 +97,16 @@ export class OpenAICompatProvider {
     }
 
     const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
-    const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string } }> };
-    const content = outer.choices?.[0]?.message?.content?.trim() ?? "";
+    const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> };
+    const msg = outer.choices?.[0]?.message;
+    // Strip <think>...</think> block (Qwen3-Next, DeepSeek-R1 may emit even with enable_thinking: false)
+    const content = (msg?.content ?? msg?.reasoning_content ?? "")
+      .replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
     if (!content) return null;
-    const parsed = JSON.parse(content) as LmAnswer;
+    // Find JSON object — skip any text before first {
+    const jsonStart = content.indexOf("{");
+    if (jsonStart === -1) return null;
+    const parsed = JSON.parse(content.slice(jsonStart)) as LmAnswer;
     if (typeof parsed.explanation !== "string" || !Array.isArray(parsed.commands)) return null;
     return parsed;
   }

@@ -383,10 +383,12 @@ export async function answer(
         process.stderr.write(`[bee ask] LM stream full: ${full.slice(0, 500)}\n`);
       }
       // Model may return JSON even without response_format support.
-      const trimmed = stripPreamble(full).trim();
-      if (trimmed.startsWith("{")) {
+      // Strip <think> block then find first { to handle thinking models.
+      const trimmed = stripPreamble(full).replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
+      const jsonStart = trimmed.indexOf("{");
+      if (jsonStart !== -1) {
         try {
-          const parsed = JSON.parse(trimmed) as LmAnswer;
+          const parsed = JSON.parse(trimmed.slice(jsonStart)) as LmAnswer;
           if (typeof parsed.explanation === "string" && Array.isArray(parsed.commands)) {
             const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
             const seenCmds = new Set<string>();

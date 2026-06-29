@@ -103,10 +103,14 @@ export class DatabricksOAuthProvider {
       throw new Error(`Databricks LM error (HTTP ${response.status})`);
     }
     const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
-    const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string } }> };
-    const content = outer.choices?.[0]?.message?.content?.trim() ?? "";
+    const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> };
+    const msg = outer.choices?.[0]?.message;
+    const content = (msg?.content ?? msg?.reasoning_content ?? "")
+      .replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
     if (!content) return null;
-    const parsed = JSON.parse(content) as LmAnswer;
+    const jsonStart = content.indexOf("{");
+    if (jsonStart === -1) return null;
+    const parsed = JSON.parse(content.slice(jsonStart)) as LmAnswer;
     if (typeof parsed.explanation !== "string" || !Array.isArray(parsed.commands)) return null;
     return parsed;
   }
