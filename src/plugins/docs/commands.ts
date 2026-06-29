@@ -59,7 +59,9 @@ export function registerDocsCommands(ctx: PluginContext): void {
           cleanParts.push(part);
         }
         const query = cleanParts.join(" ").trim();
-        if (!query) {
+        // Strip punctuation-only queries — FTS5 can't search them
+        const queryTokens = query.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
+        if (!query || !queryTokens) {
           printError("Empty query. Try: bee ask create job");
           process.exit(1);
         }
