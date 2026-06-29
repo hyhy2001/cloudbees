@@ -107,8 +107,12 @@ export class DatabricksOAuthProvider {
     if (!response.ok) {
       process.stderr.write(`[bee ask] generateJson HTTP ${response.status}\n`);
       if (response.status === 400 || response.status === 422) {
-        // Model doesn't support response_format — fall back to plain generate()
-        content = await this.generate(prompt + "\n\nRespond with JSON only.", 2048);
+        // Model doesn't support response_format — collect via stream() and parse JSON from text
+        const chunks: string[] = [];
+        for await (const chunk of this.stream(prompt + "\n\nRespond with JSON only.")) {
+          chunks.push(chunk);
+        }
+        content = chunks.join("");
       } else {
         throw new Error(`Databricks LM error (HTTP ${response.status})`);
       }
