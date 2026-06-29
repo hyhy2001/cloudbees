@@ -61,17 +61,19 @@ async function chatCall(model: string, token: string, prompt: string, maxTokens 
 
 // ── OAuth M2M provider ─────────────────────────────────────────────────────
 
-/** Extract text from a content value that may be a string or a structured array. */
+/** Extract text from a content value that may be a string or a structured array.
+ * For arrays, returns only the last text block containing '{' (the JSON block),
+ * skipping reasoning blocks that contain CoT text. */
 function extractContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    return content.map((block: unknown) => {
+    const texts = content.map((block: unknown) => {
       if (typeof block === "string") return block;
       if (typeof block !== "object" || block === null) return "";
       const b = block as Record<string, unknown>;
-      // Plain text block
       if (typeof b["text"] === "string") return b["text"];
-      // Reasoning block with summary array
+      // Skip reasoning blocks — they contain CoT, not JSON
+      if (b["type"] === "reasoning") return "";
       if (Array.isArray(b["summary"])) {
         return b["summary"].map((s: unknown) => {
           if (typeof s === "object" && s !== null && typeof (s as Record<string, unknown>)["text"] === "string") {
@@ -81,7 +83,10 @@ function extractContent(content: unknown): string {
         }).join("");
       }
       return "";
-    }).join("");
+    }).filter(Boolean);
+    // Return the last non-empty text (most likely the JSON response, not the reasoning)
+    const jsonBlock = [...texts].reverse().find(t => t.includes("{"));
+    return jsonBlock ?? texts.join("");
   }
   return "";
 }
