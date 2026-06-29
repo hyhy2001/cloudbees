@@ -123,8 +123,6 @@ export function registerDocsCommands(ctx: PluginContext): void {
               (s) => process.stdout.write(s),
             );
             let stopped = false;
-            // Buffer initial chunks to detect and strip <think>...</think> CoT block
-            // or implicit reasoning preamble before streaming to terminal.
             const PREAMBLE_RE = /^(Thinking\.?|We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|The answer|The user|The question|The request|The context|The instruction|First,?\s+[Ii]|Looking at|Based on the|Okay,?\s+so|Alright,?\s+so|Note:|Step \d|Let's (check|see|verify|think|analyze|consider)|I (should|will|need|must) |We (should|will|need|must) )/i;
             let preBuf = "";
             let preambleDone = false;
@@ -163,8 +161,13 @@ export function registerDocsCommands(ctx: PluginContext): void {
             // Flush any remaining buffer (short response, or preamble never ended)
             if (preBuf.length > 0) renderer.push(preambleDone ? preBuf : stripPreambleStr(preBuf));
             if (!stopped) stopSpinner();
-            renderer.flush();
-            process.stdout.write("\n");
+            // Stream path may have parsed JSON and set result.structured (model without response_format)
+            if (result.structured) {
+              renderStructuredAnswer(result.structured);
+            } else {
+              renderer.flush();
+              process.stdout.write("\n");
+            }
             return;
           }
           // --no-stream or no stream method: collect full response then render.
