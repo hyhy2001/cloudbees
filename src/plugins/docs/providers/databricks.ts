@@ -82,6 +82,7 @@ export class DatabricksOAuthProvider {
   }
 
   async generateJson(prompt: string): Promise<LmAnswer | null> {
+    process.stderr.write(`[bee ask] generateJson called, model=${this.model}\n`);
     const token = await this.getToken();
 
     // Try with response_format first; fall back to plain generate() if unsupported (HTTP 400/422).
