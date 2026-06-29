@@ -205,10 +205,16 @@ export class DatabricksOAuthProvider {
 
     const decoder = new TextDecoder();
     let buffer = "";
+    let firstChunk = true;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      const decoded = decoder.decode(value, { stream: true });
+      if (firstChunk && process.env.BEE_DEBUG_TRACEBACK) {
+        process.stderr.write(`[bee ask] stream raw first chunk: ${decoded.slice(0, 300)}\n`);
+        firstChunk = false;
+      }
+      buffer += decoded;
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
       for (const line of lines) {
