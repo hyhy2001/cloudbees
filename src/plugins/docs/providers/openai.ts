@@ -13,7 +13,7 @@
  * weights most heavily, rather than burying them in one concatenated string.
  */
 import { SYSTEM_PROMPT } from "../context";
-import type { LmAnswer } from "../answer";
+import type { LmAnswer, TokenUsage } from "../answer";
 
 export class OpenAICompatProvider {
   public readonly name: string;
@@ -69,11 +69,12 @@ export class OpenAICompatProvider {
     return (msg?.content ?? msg?.reasoning_content ?? "").trim();
   }
 
-  async generateJson(prompt: string): Promise<LmAnswer | null> {
+  async generateJson(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null> {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
 
     let content = "";
+    let usage: TokenUsage | undefined;
     const response = await fetch(this.endpoint, {
       method: "POST",
       headers,
@@ -105,9 +106,10 @@ export class OpenAICompatProvider {
       }
     } else {
       const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
-      const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> };
+      const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
       const msg = outer.choices?.[0]?.message;
       content = msg?.content ?? msg?.reasoning_content ?? "";
+      usage = outer.usage ? { promptTokens: outer.usage.prompt_tokens ?? 0, completionTokens: outer.usage.completion_tokens ?? 0 } : undefined;
     }
 
     content = content.replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
@@ -116,7 +118,7 @@ export class OpenAICompatProvider {
     if (jsonStart === -1) return null;
     const parsed = JSON.parse(content.slice(jsonStart)) as LmAnswer;
     if (typeof parsed.explanation !== "string" || !Array.isArray(parsed.commands)) return null;
-    return parsed;
+    return { answer: parsed, usage };
   }
 
   /**

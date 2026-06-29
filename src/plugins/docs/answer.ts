@@ -172,7 +172,7 @@ export function stripPreamble(text: string): string {
 export interface LMProvider {
   readonly name: string;
   generate(prompt: string, maxTokens?: number): Promise<string>;
-  generateJson?(prompt: string): Promise<LmAnswer | null>;
+  generateJson?(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null>;
   stream?(prompt: string): AsyncGenerator<string, void, unknown>;
 }
 
@@ -206,6 +206,11 @@ export interface LmAnswer {
   note?: string;
 }
 
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+}
+
 export interface AnswerResult {
   /** "lm" when a provider answered, "raw" when falling back to ranked hits */
   source: AnswerSource;
@@ -213,6 +218,8 @@ export interface AnswerResult {
   text: string;
   /** Structured answer when JSON path succeeded (preferred over text) */
   structured?: LmAnswer;
+  /** Token usage from the LM call */
+  usage?: TokenUsage;
   /** Ranked hits for fallback rendering / JSON output */
   hits: DocItem[];
   /** Provider name when source="lm", undefined otherwise */
@@ -328,13 +335,13 @@ export async function answer(
   // ── Structured JSON path (preferred) ─────────────────────────────────────
   if (provider.generateJson) {
     try {
-      const structured = await provider.generateJson(prompt);
-      if (structured) {        const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
+      const jsonResult = await provider.generateJson(prompt);
+      if (jsonResult) {
+        const { answer: structured, usage } = jsonResult;
+        const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
         const seenCmds = new Set<string>();
         const validCmds = structured.commands.filter(c => {
-          // Drop --help commands — user knows about --help
           if (c.cmd.includes("--help")) return false;
-          // Normalize: strip trailing flags for dedup
           const normalized = c.cmd.replace(/\s+--?\S+.*$/, "").trim();
           if (seenCmds.has(normalized)) return false;
           seenCmds.add(normalized);
@@ -344,15 +351,13 @@ export async function answer(
           const s = m[2]?.toLowerCase();
           return g === "ask" || g === "help" || validIds.has(g) || (s ? validIds.has(`${g}.${s}`) : false);
         });
-        // Strip positional args from flags (only keep entries starting with --)
         const cleanCmds = validCmds.map(c => ({
           ...c,
           flags: c.flags?.filter(f => f.name.startsWith("--")) ?? [],
         }));
-        return { source: "lm", text: structured.explanation, structured: { ...structured, commands: cleanCmds }, hits, provider: provider.name };
+        return { source: "lm", text: structured.explanation, structured: { ...structured, commands: cleanCmds }, usage, hits, provider: provider.name };
       }
     } catch (err) {
-      // Always log JSON path failures to help diagnose model compatibility issues
       process.stderr.write(`[bee ask] JSON path failed (${provider.name}): ${err instanceof Error ? err.message : err}\n`);
     }
   }
