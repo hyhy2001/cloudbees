@@ -85,7 +85,7 @@ export class OpenAICompatProvider {
         ],
         temperature: 0,
         max_tokens: 2048,
-        enable_thinking: false,
+        enable_thinking: true,  // use native thinking when model supports it; 400 falls back to stream
         response_format: { type: "json_object" },
       }),
       signal: AbortSignal.timeout(60000),
