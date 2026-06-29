@@ -331,7 +331,9 @@ export async function answer(
       if (structured) {        const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
         const seenCmds = new Set<string>();
         const validCmds = structured.commands.filter(c => {
-          // Normalize: strip trailing args for dedup ("bee auth login --profile x" → "bee auth login")
+          // Drop --help commands — user knows about --help
+          if (c.cmd.includes("--help")) return false;
+          // Normalize: strip trailing flags for dedup
           const normalized = c.cmd.replace(/\s+--?\S+.*$/, "").trim();
           if (seenCmds.has(normalized)) return false;
           seenCmds.add(normalized);
