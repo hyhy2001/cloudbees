@@ -318,10 +318,12 @@ export async function answer(
   }
 
   // ── Multi-stage retrieval pipeline ──────────────────────────────────────
-  // BM25 (sparse) + Vector (dense, RRF fusion) → Graph expansion
-  const bm25Candidates = directHits.length > 0
-    ? directHits
-    : searchDocs(searchQuery, corpus, limit * 3, { gate: true, softGate: true });
+  // BM25 (sparse) + Vector (dense, RRF fusion) → Graph expansion.
+  // directHits is non-empty here (off-topic queries returned above), so it is
+  // the BM25 candidate set directly. The rewritten searchQuery still feeds the
+  // vector embedding below, where keyword normalization helps dense retrieval
+  // on the hard (<3 hit) queries.
+  const bm25Candidates = directHits;
 
   // Vector search for RRF fusion — only when runtime model matches corpus model
   // and BM25 top hit is a command (not a concept/info doc which vector often ranks poorly).
