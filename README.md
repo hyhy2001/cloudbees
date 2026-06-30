@@ -544,16 +544,19 @@ Set `BEE_ASCII=1` to force ASCII symbols and borders instead of Unicode (useful 
 
 ## `bee ask` — Help & Natural-Language Search
 
-`bee ask` answers questions about how to use `bee` in natural language. Output is rendered as formatted markdown in the terminal (colors, tables, code blocks). A spinner shows while the model is thinking. Chain-of-thought reasoning is stripped before output is shown.
+`bee ask` answers questions about how to use `bee` in natural language. Output is rendered as structured tables and code blocks in the terminal. A spinner shows while the model is thinking.
 
 ```
 User query
+   → Punctuation-only check (reject early, no API call)
    → BM25 hard-gate search (local, FTS5)
+       │
+       ├─ hard gate empty → "I only help with bee usage." (no API call)
        │
        ├─ hits ≥ 3 ─────────────────────────────┐
        │                                         │
        └─ hits < 3                               │
-            → LM query rewrite (+1 call, 32 tokens)
+            → LM query rewrite (+1 call)         │
               "hello I am newbie" → "getting started login"
             → BM25 soft-gate search with rewritten query
               └────────────────────────────────┤
@@ -564,31 +567,45 @@ User query
                                     Graph expansion (+10 CRUD neighbors)
                                     Group expansion (all siblings when dominant)
                                                │
-                                    Top-N → LM answer (+1 call, stream)
-                                    [CoT in <think> block, stripped before render]
+                                    generateJson() — structured JSON output
+                                    { reasoning, explanation, commands, note }
+                                    [reasoning field stripped before render]
                                                │
-                         stripInventedCommands + stripPreamble
+                                    Validate commands against corpus
+                                    Dedup + strip positional args from flags
                                                │
-                              Streaming markdown render → terminal
+                                    renderStructuredAnswer() → terminal
+                                    + footer: disclaimer + token usage
 ```
 
-**API calls per query**: 1 (well-formed queries) or 2 (colloquial queries that need rewriting). Vector embedding adds 1 call only when BM25 top hit is a command and the runtime embedding model matches the baked corpus model. Custom paths: `CB_CHAT_PATH` (default `/v1/chat/completions`) and `CB_EMBEDDING_PATH` (default `/v1/embeddings`) can be set independently.
+**API calls per query**: 0 (off-topic/punctuation), 1 (well-formed queries), or 2 (colloquial queries that need rewriting). When `response_format: json_object` returns HTTP 400/422/500 (model doesn't support it), falls back to plain `generate()` and parses JSON from free text. Vector embedding adds 1 call only when BM25 top hit is a command and the runtime embedding model matches the baked corpus model.
 
-### Output rendering
+### Output format
 
-Responses are rendered as terminal markdown:
-- `` `code` `` and ` ```blocks``` ` → green
-- `**bold**` → bold, `## headings` → cyan bold, `---` → dim rule
-- `- bullets` → `•` indented, `1. numbered` → dim prefix
-- `| tables |` → aligned columns with cyan bold headers
+Structured JSON output — not free-text markdown:
+- Explanation prose line
+- Per-command: name (cyan bold) + flags table + concrete example (green)
+- Footer: `AI-generated — verify before use. (↑N ↓N tokens)`
 
 ### Flags
 
 | Flag | Description |
 |---|---|
-| `--no-stream` | Collect full response before printing (useful for debugging) |
+| `--no-stream` | Collect full response before printing |
 | `--limit <n>` | Max context items to retrieve (default 8) |
-| `--json` | Machine-readable JSON output |
+| `--json` | Machine-readable JSON output (includes `structured` field) |
+| `--debug` | Show raw LM output and parse diagnostics to stderr |
+
+> **Note**: Quote queries containing special shell characters: `bee ask "how to start?"`
+
+### Model compatibility
+
+| Feature | Requirement |
+|---|---|
+| `response_format: json_object` | OpenAI-compatible API — preferred path |
+| Fallback (HTTP 400/422/500) | Any model via plain `generate()` + JSON parse |
+| Native thinking | Models with `reasoning_content` field (DeepSeek-R1 etc.) |
+| Extraction CoT | All models — `reasoning` field in JSON schema grounds output in context |
 
 ### Adding help facts
 
