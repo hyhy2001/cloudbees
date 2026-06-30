@@ -10,7 +10,6 @@
 
 import { buildUserPrompt } from "./context";
 import { searchDocs, type DocItem } from "./corpus";
-// import { rerank } from "./rerank"; // disabled — see answer() comment
 import { buildGraphFromCorpus, expandGraph, type CommandGraph } from "./graph";
 import { getVectorDb, searchVector, rrfFusion, embed } from "./vector";
 import { CORPUS_MODEL } from "../../generated/embeddings";
