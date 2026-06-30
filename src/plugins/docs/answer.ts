@@ -217,6 +217,37 @@ export interface TokenUsage {
   completionTokens: number;
 }
 
+/**
+ * Drop hallucinated/duplicate commands and stray non-flag entries from an LM
+ * answer's command list. Shared by the structured-JSON path and the
+ * stream-then-parse-JSON path, which validated identically.
+ *
+ *   - reject `--help` invocations
+ *   - dedupe on the command minus its flags
+ *   - keep only `bee <group>[ <sub>]` that exist in the corpus (ask/help always ok)
+ *   - keep only flag entries whose name starts with `--`
+ */
+export function validateCommands(
+  commands: LmAnswer["commands"],
+  corpus: DocItem[],
+): LmAnswer["commands"] {
+  const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
+  const seenCmds = new Set<string>();
+  return commands
+    .filter(c => {
+      if (c.cmd.includes("--help")) return false;
+      const normalized = c.cmd.replace(/\s+--?\S+.*$/, "").trim();
+      if (seenCmds.has(normalized)) return false;
+      seenCmds.add(normalized);
+      const m = c.cmd.match(/^bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?/i);
+      if (!m) return false;
+      const g = m[1]!.toLowerCase();
+      const s = m[2]?.toLowerCase();
+      return g === "ask" || g === "help" || validIds.has(g) || (s ? validIds.has(`${g}.${s}`) : false);
+    })
+    .map(c => ({ ...c, flags: c.flags?.filter(f => f.name.startsWith("--")) ?? [] }));
+}
+
 export interface AnswerResult {
   /** "lm" when a provider answered, "raw" when falling back to ranked hits */
   source: AnswerSource;
@@ -347,23 +378,7 @@ export async function answer(
       const jsonResult = await provider.generateJson(prompt);
       if (jsonResult) {
         const { answer: structured, usage } = jsonResult;
-        const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
-        const seenCmds = new Set<string>();
-        const validCmds = structured.commands.filter(c => {
-          if (c.cmd.includes("--help")) return false;
-          const normalized = c.cmd.replace(/\s+--?\S+.*$/, "").trim();
-          if (seenCmds.has(normalized)) return false;
-          seenCmds.add(normalized);
-          const m = c.cmd.match(/^bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?/i);
-          if (!m) return false;
-          const g = m[1]!.toLowerCase();
-          const s = m[2]?.toLowerCase();
-          return g === "ask" || g === "help" || validIds.has(g) || (s ? validIds.has(`${g}.${s}`) : false);
-        });
-        const cleanCmds = validCmds.map(c => ({
-          ...c,
-          flags: c.flags?.filter(f => f.name.startsWith("--")) ?? [],
-        }));
+        const cleanCmds = validateCommands(structured.commands, corpus);
         return { source: "lm", text: structured.explanation, structured: { ...structured, commands: cleanCmds }, usage, hits, provider: provider.name };
       }
     } catch (err) {
@@ -410,19 +425,7 @@ export async function answer(
         try {
           const parsed = JSON.parse(trimmed.slice(jsonStart)) as LmAnswer;
           if (typeof parsed.explanation === "string" && Array.isArray(parsed.commands)) {
-            const validIds = new Set(corpus.filter(c => c.type === "command").map(c => c.id));
-            const seenCmds = new Set<string>();
-            const validCmds = parsed.commands.filter(c => {
-              if (c.cmd.includes("--help")) return false;
-              const normalized = c.cmd.replace(/\s+--?\S+.*$/, "").trim();
-              if (seenCmds.has(normalized)) return false;
-              seenCmds.add(normalized);
-              const m = c.cmd.match(/^bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?/i);
-              if (!m) return false;
-              const g = m[1]!.toLowerCase(), s = m[2]?.toLowerCase();
-              return g === "ask" || g === "help" || validIds.has(g) || (s ? validIds.has(`${g}.${s}`) : false);
-            }).map(c => ({ ...c, flags: c.flags?.filter(f => f.name.startsWith("--")) ?? [] }));
-            result.structured = { ...parsed, commands: validCmds };
+            result.structured = { ...parsed, commands: validateCommands(parsed.commands, corpus) };
             return parsed.explanation;
           }
         } catch { /* not JSON, fall through */ }
