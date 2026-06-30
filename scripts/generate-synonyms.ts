@@ -18,18 +18,26 @@ import { Command } from "commander";
 const { initPlugins } = await import("../src/registry");
 const { buildCorpus } = await import("../src/plugins/docs/corpus");
 
-/** Extract text from content that may be a string or Qwen3.5 structured array. */
+/** Extract text from Databricks chat completion content.
+ * ref: https://learn.microsoft.com/en-us/azure/databricks/machine-learning/model-serving/query-reason-models */
 function extractContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    return content.map((block: unknown) => {
-      if (typeof block === "string") return block;
-      if (typeof block !== "object" || block === null) return "";
-      const b = block as Record<string, unknown>;
-      if (typeof b["text"] === "string") return b["text"];
-      if (b["type"] === "reasoning") return "";
-      return "";
-    }).join(" ");
+    for (let i = content.length - 1; i >= 0; i--) {
+      const block = content[i] as Record<string, unknown>;
+      if (typeof block !== "object" || block === null) continue;
+      if (block["type"] === "text" && typeof block["text"] === "string") return block["text"];
+    }
+    for (const item of content) {
+      if (typeof item !== "object" || item === null) continue;
+      const b = item as Record<string, unknown>;
+      if (b["type"] === "reasoning" && Array.isArray(b["summary"])) {
+        const texts = (b["summary"] as Array<Record<string, unknown>>)
+          .filter(s => s["type"] === "summary_text" && typeof s["text"] === "string")
+          .map(s => s["text"] as string);
+        if (texts.length > 0) return texts.join(" ");
+      }
+    }
   }
   return "";
 }
