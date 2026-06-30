@@ -18,6 +18,22 @@ import { Command } from "commander";
 const { initPlugins } = await import("../src/registry");
 const { buildCorpus } = await import("../src/plugins/docs/corpus");
 
+/** Extract text from content that may be a string or Qwen3.5 structured array. */
+function extractContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((block: unknown) => {
+      if (typeof block === "string") return block;
+      if (typeof block !== "object" || block === null) return "";
+      const b = block as Record<string, unknown>;
+      if (typeof b["text"] === "string") return b["text"];
+      if (b["type"] === "reasoning") return "";
+      return "";
+    }).join(" ");
+  }
+  return "";
+}
+
 // ---- LLM config ------------------------------------------------------------
 
 interface LmConfig {
@@ -154,10 +170,10 @@ for (const item of corpus) {
       });
       if (!r.ok) { apiErrors++; continue; }
       const raw1 = (await r.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
-      let j: { choices: Array<{ message: { content?: string; reasoning_content?: string } }> };
+      let j: { choices: Array<{ message: { content?: unknown; reasoning_content?: unknown } }> };
       try { j = JSON.parse(raw1) as typeof j; } catch { apiErrors++; continue; }
       const msg = j.choices?.[0]?.message;
-      const text = (msg?.content ?? msg?.reasoning_content ?? "").trim();
+      const text = extractContent(msg?.content ?? msg?.reasoning_content).trim();
 
       const words = text
         .split(/[,|\n]+/)
@@ -242,9 +258,10 @@ for (const [flag, { cmds, desc }] of flagSet) {
     });
     if (!r.ok) continue;
     const raw2 = (await r.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
-    let jf: { choices: Array<{ message: { content?: string } }> };
+    let jf: { choices: Array<{ message: { content?: unknown; reasoning_content?: unknown } }> };
     try { jf = JSON.parse(raw2) as typeof jf; } catch { continue; }
-    const text = (jf.choices?.[0]?.message?.content ?? "").trim();
+    const jfMsg = jf.choices?.[0]?.message;
+    const text = extractContent(jfMsg?.content ?? jfMsg?.reasoning_content).trim();
     const parts = text.split("||");
     const phrases = (parts[0] || "").split("|").map((p) => p.trim().toLowerCase()).filter(Boolean);
     const example = (parts[1] || "").trim();
