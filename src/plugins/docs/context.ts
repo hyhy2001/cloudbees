@@ -131,6 +131,7 @@ export const SYSTEM_PROMPT = [
   "- flags array: ONLY entries starting with '--'. Never put positional args (like <name>) in flags.",
   "- commands array: list each command ONCE. Never repeat the same cmd twice.",
   "- When listing subcommands of a group, include ALL commands from context (not just 3).",
+  "- Some commands take a positional name (bee job run my-job), others use flags only (bee cred create --id my-id --username x). Follow the <command> usage exactly — never invent a positional arg.",
   "- reasoning field: quote the EXACT flag names and command ids from the <command> blocks that answer this query. This grounds your answer in the context.",
   "Reply ONLY with a valid JSON object — no text outside JSON:",
   '{"reasoning":"<quote exact command ids and flag names from context>","explanation":"<1-2 sentence intro>","commands":[{"cmd":"<full bee command>","flags":[{"name":"--flag","description":".."}],"example":"<concrete invocation>"}],"note":"<caveat or null>"}',

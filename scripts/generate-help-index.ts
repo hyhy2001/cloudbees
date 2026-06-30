@@ -40,6 +40,19 @@ const FACTS: HelpFact[] = [
     related: ["bee cred get <cred_id>", "bee cred delete <cred_ids...> --store system"],
   },
   {
+    id: "concept.credential-create",
+    kind: "concept",
+    title: "create credential",
+    terms: ["create credential", "add credential", "new credential", "store password", "save secret", "add ssh key", "create secret", "register credential", "username password credential", "api token credential"],
+    answer: "Use `bee cred create` with flags only — there is NO positional argument. The credential ID is set via `--id` (auto-generated if omitted), never as a bare word. Use `--username` + `--password` for Username+Password, or `--secret-text` for a token/API key.",
+    commands: [
+      "bee cred create --username deploy-bot --password s3cr3t --id deploy-creds",
+      "bee cred create --secret-text ghp_xxxxx --id github-token",
+      "bee cred create --username admin --password pass",
+    ],
+    related: ["bee cred update <cred_id>", "bee cred get <cred_id>"],
+  },
+  {
     id: "concept.node-offline",
     kind: "concept",
     title: "node offline",
