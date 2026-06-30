@@ -10,7 +10,7 @@
 import type { PluginContext } from "../../registry/types";
 import { printMessage, printError } from "../../core/cli/output";
 import { buildCorpus } from "./corpus";
-import { answer, getProvider, stripPreamble as stripPreambleStr } from "./answer";
+import { answer, getProvider, stripPreamble as stripPreambleStr, PREAMBLE_RE } from "./answer";
 import { presentAnswer } from "./presenter";
 import { renderMarkdown, StreamingMarkdownRenderer, renderStructuredAnswer, renderFooter } from "./render";
 import chalk from "chalk";
@@ -130,7 +130,6 @@ export function registerDocsCommands(ctx: PluginContext): void {
             );
             let stopped = false;
             let fullStreamText = "";
-            const PREAMBLE_RE = /^(Thinking\.?|We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|The answer|The user|The question|The request|The context|The instruction|First,?\s+[Ii]|Looking at|Based on the|Okay,?\s+so|Alright,?\s+so|Note:|Step \d|Let's (check|see|verify|think|analyze|consider)|I (should|will|need|must) |We (should|will|need|must) )/i;
             let preBuf = "";
             let preambleDone = false;
             let inThinkTag = false;

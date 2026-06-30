@@ -130,6 +130,14 @@ async function rewriteQuery(query: string, provider: LMProvider): Promise<string
 }
 
 /**
+ * Matches the opening of a chain-of-thought preamble emitted by thinking models
+ * (Qwen3, DeepSeek-R1) before the real answer. Shared by the batch path
+ * (stripPreamble) and the streaming path (commands.ts) so both strip the same
+ * set — previously two copies drifted apart.
+ */
+export const PREAMBLE_RE = /^(Thinking\.?|We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|The answer|The user|The question|The request|The context|The instruction|First,?\s+[Ii]|Looking at|Based on the|Given that|Okay,?\s+so|Alright,?\s+so|Note:|Step \d|Action-verb|Let's (check|see|verify|think|analyze|consider|look|make|provide|give|start)|I (should|will|need|must|can) |We (should|will|need|must|can) )/i;
+
+/**
  * Strip chain-of-thought preamble emitted by thinking models (Qwen3, DeepSeek-R1).
  * These models sometimes put reasoning in the content field before the real answer.
  */
@@ -139,7 +147,6 @@ export function stripPreamble(text: string): string {
   if (stripped.length < text.trimStart().length) return stripped;
 
   // Fallback: strip implicit reasoning preamble.
-  const PREAMBLE_RE = /^(Thinking\.?|We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|The answer|The user|The question|The request|The context|The instruction|First,?\s+[Ii]|Looking at|Based on the|Given that|Okay,?\s+so|Alright,?\s+so|Note:|Step \d|Action-verb|Let's (check|see|verify|think|analyze|consider|look|make|provide|give|start)|I (should|will|need|must|can) |We (should|will|need|must|can) )/i;
   if (!PREAMBLE_RE.test(text.trimStart().slice(0, 80))) return text;
   const lines = text.split("\n");
   for (let i = 1; i < lines.length; i++) {
