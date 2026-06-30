@@ -254,11 +254,16 @@ export interface AnswerResult {
 
 // --- Orchestration -----------------------------------------------------------
 
-let _graph: CommandGraph | null = null;
+let _graphCache: { corpus: DocItem[]; graph: CommandGraph } | null = null;
 
 function getGraph(corpus: DocItem[]): CommandGraph {
-  if (!_graph) _graph = buildGraphFromCorpus(corpus);
-  return _graph;
+  // Key by corpus reference (mirrors _corpusCache in corpus.ts): a different
+  // corpus — e.g. a second controller's command tree in the TUI, or a fresh
+  // build per test — must rebuild rather than reuse the first one's graph.
+  if (!_graphCache || _graphCache.corpus !== corpus) {
+    _graphCache = { corpus, graph: buildGraphFromCorpus(corpus) };
+  }
+  return _graphCache.graph;
 }
 
 /**
