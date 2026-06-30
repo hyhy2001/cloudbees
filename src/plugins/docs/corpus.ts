@@ -166,6 +166,13 @@ const STOP_WORDS = new Set([
   // online"). NB: "cloudbees" is deliberately NOT a stopword — dropping it
   // reranked "sign in to cloudbees" so auth.logout outscored auth.login.
   "jenkins",
+  // "name" is the placeholder in nearly every command usage ("bee job run
+  // <name>"), so it carries no discriminating retrieval signal — every command
+  // matches it. Worse, GENERATED_SYNONYMS mapped name→select, so a query like
+  // "job run name" pulled controller.select / getting-started above the actual
+  // command. Dropping it as a stopword fixes both (it never reaches synonym
+  // expansion). See docs-rag-stress self-surface test.
+  "name",
 ]);
 
 /**
