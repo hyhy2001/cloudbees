@@ -262,21 +262,23 @@ export async function answer(
 ): Promise<AnswerResult> {
   const provider = getProvider();
   const hits = searchDocs(query, corpus, limit, { gate: true, softGate: true });
-  // Hard gate: if no hits pass the relevance gate, don't call LM at all.
-  const hardHits = searchDocs(query, corpus, limit, { gate: true, softGate: false });
 
   if (!provider) {
     return { source: "raw", text: "", hits };
   }
-  // Off-topic query — hard gate empty, skip LM call entirely
-  if (hardHits.length === 0) {
+
+  // Hard-gated hits (no soft fallback) drive both the off-topic check and the
+  // retrieval pipeline. With the gate on, emptiness is independent of limit, so
+  // this single over-fetched query also answers "did anything pass the gate?".
+  const directHits = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
+  // Off-topic query — nothing passed the hard gate, skip the LM call entirely.
+  if (directHits.length === 0) {
     return { source: "raw", text: "", hits: [] };
   }
 
   // Rewrite the query into BM25-friendly keywords when the original query
   // returns few hits (< 3) — avoids extra LM call on well-formed queries.
   let searchQuery = query;
-  const directHits = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
   if (directHits.length < 3) {
     searchQuery = await rewriteQuery(query, provider);
     if (process.env.BEE_DEBUG_TRACEBACK) {
