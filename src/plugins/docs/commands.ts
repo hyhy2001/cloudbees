@@ -10,7 +10,7 @@
 import type { PluginContext } from "../../registry/types";
 import { printMessage, printError } from "../../core/cli/output";
 import { buildCorpus } from "./corpus";
-import { answer, getProvider, stripPreamble as stripPreambleStr, PREAMBLE_RE } from "./answer";
+import { answer, getProvider, stripThinkBlock } from "./answer";
 import { presentAnswer } from "./presenter";
 import { renderMarkdown, StreamingMarkdownRenderer, renderStructuredAnswer, renderFooter } from "./render";
 import chalk from "chalk";
@@ -131,41 +131,34 @@ export function registerDocsCommands(ctx: PluginContext): void {
             let stopped = false;
             let fullStreamText = "";
             let preBuf = "";
-            let preambleDone = false;
+            let thinkDone = false;
             let inThinkTag = false;
             fullStreamText = await result.streamOutput((chunk) => {
               if (!stopped) { stopSpinner(); stopped = true; }
-              if (preambleDone) { renderer.push(chunk); return; }
+              if (thinkDone) { renderer.push(chunk); return; }
               preBuf += chunk;
-              // Handle explicit <think>...</think> CoT block
+              // Buffer until an explicit <think>...</think> block closes; once
+              // past it (or once we know there is none), stream straight through.
               if (preBuf.includes("<think>")) inThinkTag = true;
               if (inThinkTag) {
                 if (preBuf.includes("</think>")) {
                   const after = preBuf.slice(preBuf.indexOf("</think>") + 8).trimStart();
-                  preambleDone = true;
+                  thinkDone = true;
                   if (after) renderer.push(after);
                   preBuf = "";
                 }
                 return; // still inside <think> block
               }
-              // Handle implicit preamble
-              const inPreamble = PREAMBLE_RE.test(preBuf.trimStart().slice(0, 80));
-              if (!inPreamble || preBuf.length > 600) {
-                preambleDone = true;
+              // No think tag opened yet. Once enough has arrived that a "<think>"
+              // could not still be forming at the buffer's tail, flush it.
+              if (!"<think>".startsWith(preBuf.trimStart().slice(0, 7)) || preBuf.length > 16) {
+                thinkDone = true;
                 renderer.push(preBuf);
                 preBuf = "";
-              } else if (preBuf.includes("\n\n")) {
-                const idx = preBuf.lastIndexOf("\n\n");
-                const after = preBuf.slice(idx + 2);
-                if (after.length > 0 && !PREAMBLE_RE.test(after.trimStart().slice(0, 80))) {
-                  preambleDone = true;
-                  renderer.push(after);
-                  preBuf = "";
-                }
               }
             });
-            // Flush any remaining buffer (short response, or preamble never ended)
-            if (preBuf.length > 0) renderer.push(preambleDone ? preBuf : stripPreambleStr(preBuf));
+            // Flush any remaining buffer (short response, or think never closed).
+            if (preBuf.length > 0) renderer.push(thinkDone ? preBuf : stripThinkBlock(preBuf));
             if (!stopped) stopSpinner();
             if (debugFlag) {
               process.stderr.write(`[debug] stream full text (first 500):\n${fullStreamText.slice(0, 500)}\n`);

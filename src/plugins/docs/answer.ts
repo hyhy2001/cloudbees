@@ -130,34 +130,19 @@ async function rewriteQuery(query: string, provider: LMProvider): Promise<string
 }
 
 /**
- * Matches the opening of a chain-of-thought preamble emitted by thinking models
- * (Qwen3, DeepSeek-R1) before the real answer. Shared by the batch path
- * (stripPreamble) and the streaming path (commands.ts) so both strip the same
- * set — previously two copies drifted apart.
+ * Strip an explicit <think>...</think> chain-of-thought block emitted inline by
+ * thinking models (Qwen3 via vLLM with no reasoning parser, DeepSeek-R1).
+ *
+ * Models that expose reasoning through structured channels — a separate
+ * `reasoning`/`reasoning_content` field, or Databricks' content-array
+ * `[{type:"reasoning"},{type:"text"}]` — are handled in the providers before
+ * the text reaches here, so the <think> tag is the only inline shape left to
+ * clean. We deliberately do NOT try to guess untagged prose preambles: requests
+ * already send enable_thinking:false + response_format:json_object, and a prose
+ * heuristic mis-fires on legitimate answers that open with "To answer…".
  */
-export const PREAMBLE_RE = /^(Thinking\.?|We need to|Let me|I need to|I'll|I will|Let's|We'll|We will|To answer|The answer|The user|The question|The request|The context|The instruction|First,?\s+[Ii]|Looking at|Based on the|Given that|Okay,?\s+so|Alright,?\s+so|Note:|Step \d|Action-verb|Let's (check|see|verify|think|analyze|consider|look|make|provide|give|start)|I (should|will|need|must|can) |We (should|will|need|must|can) )/i;
-
-/**
- * Strip chain-of-thought preamble emitted by thinking models (Qwen3, DeepSeek-R1).
- * These models sometimes put reasoning in the content field before the real answer.
- */
-export function stripPreamble(text: string): string {
-  // Strip explicit <think>...</think> CoT block first.
-  const stripped = text.replace(/<think>[\s\S]*?<\/think>\s*/i, "").trimStart();
-  if (stripped.length < text.trimStart().length) return stripped;
-
-  // Fallback: strip implicit reasoning preamble.
-  if (!PREAMBLE_RE.test(text.trimStart().slice(0, 80))) return text;
-  const lines = text.split("\n");
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i]!.trim() === "") {
-      const nextNonEmpty = lines.slice(i + 1).find(l => l.trim() !== "");
-      if (nextNonEmpty && !PREAMBLE_RE.test(nextNonEmpty.trimStart().slice(0, 80))) {
-        return lines.slice(i + 1).join("\n").trimStart();
-      }
-    }
-  }
-  return text;
+export function stripThinkBlock(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>\s*/i, "").trimStart();
 }
 
 
@@ -418,7 +403,7 @@ export async function answer(
       }
       // Model may return JSON even without response_format support.
       // Strip <think> block then find first { to handle thinking models.
-      const trimmed = stripPreamble(full).replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
+      const trimmed = stripThinkBlock(full).trim();
       if (process.env.BEE_DEBUG_TRACEBACK) {
         process.stderr.write(`[bee ask] stream content (first 200): ${trimmed.slice(0, 200)}\n`);
       }
@@ -444,7 +429,7 @@ export async function answer(
     if (process.env.BEE_DEBUG_TRACEBACK) {
       process.stderr.write(`[bee ask] LM raw response: ${raw.slice(0, 500)}\n`);
     }
-    const text = stripInventedCommands(stripPreamble(raw), corpus);
+    const text = stripInventedCommands(stripThinkBlock(raw), corpus);
     return { source: "lm", text, hits, provider: provider.name };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
