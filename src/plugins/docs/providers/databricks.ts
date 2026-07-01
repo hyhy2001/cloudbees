@@ -124,44 +124,11 @@ export class DatabricksOAuthProvider {
   async generateJson(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null> {
     const token = await this.getToken();
 
-    let content = "";
-    let usage: TokenUsage | undefined;
-    const response = await fetch(CHAT_ENDPOINT, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        model: this.model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: prompt + "\n\nRespond with JSON only." },
-        ],
-        max_tokens: 2048,
-        temperature: 0,
-        response_format: { type: "json_object" },
-      }),
-      signal: AbortSignal.timeout(60000),
-    });
-    if (!response.ok) {
-      if (process.env.BEE_DEBUG_TRACEBACK) {
-        process.stderr.write(`[bee ask] generateJson HTTP ${response.status}\n`);
-      }
-      if (response.status === 400 || response.status === 422 || response.status === 500) {
-        // Model doesn't support response_format — use plain non-streaming call
-        content = await chatCall(this.model, token, prompt + "\n\nRespond with JSON only.", 2048);
-      } else {
-        throw new Error(`Databricks LM error (HTTP ${response.status})`);
-      }
-    } else {
-      const raw = (await response.text()).trim().replace(/\s*data:\s*\[DONE\]\s*$/, "").trim();
-      if (process.env.BEE_DEBUG_TRACEBACK) {
-        process.stderr.write(`[bee ask] databricks raw (200): ${raw.slice(0, 400)}\n`);
-      }
-      const outer = JSON.parse(raw) as { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
-      const msg = outer.choices?.[0]?.message;
-      const rawContent = msg?.content ?? msg?.reasoning_content;
-      content = extractContent(rawContent);
-      usage = outer.usage ? { promptTokens: outer.usage.prompt_tokens ?? 0, completionTokens: outer.usage.completion_tokens ?? 0 } : undefined;
-    }
+    // Databricks models don't support response_format: json_object — use plain call.
+    // The system prompt + "Respond with JSON only." instruction is sufficient grounding.
+    const raw = await chatCall(this.model, token, prompt + "\n\nRespond with JSON only.", 2048);
+    let content = raw;
+    const usage: TokenUsage | undefined = undefined;
 
     content = content.replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
     if (process.env.BEE_DEBUG_TRACEBACK) {
@@ -171,6 +138,9 @@ export class DatabricksOAuthProvider {
     const jsonStart = content.indexOf("{");
     if (jsonStart === -1) return null;
     const parsed = JSON.parse(content.slice(jsonStart)) as LmAnswer;
+    if (typeof parsed.explanation !== "string" || !Array.isArray(parsed.commands)) return null;
+    return { answer: parsed, usage };
+  }
     if (typeof parsed.explanation !== "string" || !Array.isArray(parsed.commands)) return null;
     return { answer: parsed, usage };
   }
