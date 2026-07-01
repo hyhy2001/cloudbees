@@ -29,8 +29,6 @@ To **build from source**:
 ## Build & Install
 
 ```bash
-git clone https://github.com/hyhy2001/cloudbees.git
-cd cloudbees
 make init          # download bun locally + install deps + compile → dist/bee
 ```
 
