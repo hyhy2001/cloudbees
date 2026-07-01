@@ -226,13 +226,15 @@ export interface TokenUsage {
  *   - keep only `bee <group>[ <sub>]` that exist in the corpus (ask/help always ok)
  *   - keep only flag entries whose name starts with `--`
  */
-/** Parse valid flag names for a command from its corpus body text. */
-function getCorpusFlags(cmdId: string, corpus: DocItem[]): Set<string> | null {
+/** Parse valid flag names + canonical descriptions for a command from its corpus body. */
+function getCorpusFlags(cmdId: string, corpus: DocItem[]): Map<string, string> | null {
   const item = corpus.find(c => c.id === cmdId);
   if (!item?.body) return null;
-  const flags = new Set<string>();
-  for (const match of item.body.matchAll(/--[a-z][-a-z]*/g)) {
-    flags.add(match[0]);
+  const flags = new Map<string, string>();
+  for (const line of item.body.split("\n")) {
+    // Match lines like: --flag-name <arg>    Description text
+    const m = line.match(/^\s*(?:-\w,\s*)?(--[a-z][-a-z]*)\s*(?:<[^>]*>)?\s+(.*)/);
+    if (m) flags.set(m[1]!, m[2]!.trim());
   }
   return flags.size > 0 ? flags : null;
 }
@@ -263,11 +265,16 @@ export function validateCommands(
         const g = m[1]!.toLowerCase();
         const s = m[2]?.toLowerCase();
         const t = m[3]?.toLowerCase();
-        // Try most specific command id first
         const cmdId = t ? `${g}.${s}.${t}` : s ? `${g}.${s}` : g;
         const knownFlags = getCorpusFlags(cmdId, corpus);
         if (knownFlags) {
-          return { ...c, flags: cleanFlags.filter(f => knownFlags.has(f.name)) };
+          return {
+            ...c,
+            flags: cleanFlags
+              .filter(f => knownFlags.has(f.name))
+              // Use canonical description from corpus, fall back to model description
+              .map(f => ({ name: f.name, description: knownFlags.get(f.name) ?? f.description })),
+          };
         }
       }
       return { ...c, flags: cleanFlags };
