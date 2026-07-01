@@ -217,9 +217,13 @@ export function renderStructuredAnswer(structured: LmAnswer): void {  process.st
 }
 
 /** Render footer with disclaimer and token usage. */
-export function renderFooter(usage?: TokenUsage): void {
-  const tokenInfo = usage
-    ? chalk.dim(` (↑${usage.promptTokens} ↓${usage.completionTokens} tokens)`)
-    : "";
+export function renderFooter(usage?: TokenUsage, rewriteUsage?: TokenUsage, debug = false): void {
+  let tokenInfo = "";
+  if (usage) {
+    tokenInfo = chalk.dim(` (↑${usage.promptTokens} ↓${usage.completionTokens} tokens)`);
+  }
+  if (debug && rewriteUsage) {
+    tokenInfo += chalk.dim(` rewrite:(↑${rewriteUsage.promptTokens} ↓${rewriteUsage.completionTokens})`);
+  }
   process.stdout.write(chalk.dim("\nAI-generated — verify before use.") + tokenInfo + "\n");
 }

@@ -28,7 +28,7 @@ const APP_ID = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d";
  * (the gateway routes by it), unlike the legacy /serving-endpoints/{model}/
  * invocations form where the model was in the path.
  */
-async function chatCall(model: string, token: string, prompt: string, maxTokens = 8192): Promise<string> {
+async function chatCall(model: string, token: string, prompt: string, maxTokens = 8192): Promise<{ text: string; usage?: { prompt_tokens?: number; completion_tokens?: number } }> {
   const response = await fetch(CHAT_ENDPOINT, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
@@ -48,7 +48,7 @@ async function chatCall(model: string, token: string, prompt: string, maxTokens 
     throw new Error(`Databricks LM error (HTTP ${response.status})${body ? `: ${body.slice(0, 200)}` : ""}`);
   }
   const raw = await response.text();
-  let json: { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }> };
+  let json: { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
   try {
     json = JSON.parse(raw) as typeof json;
   } catch {
@@ -56,7 +56,10 @@ async function chatCall(model: string, token: string, prompt: string, maxTokens 
   }
   const msg = json.choices?.[0]?.message;
   const content = msg?.content ?? msg?.reasoning_content;
-  return extractContent(content).replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
+  return {
+    text: extractContent(content).replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim(),
+    usage: json.usage,
+  };
 }
 
 // ── OAuth M2M provider ─────────────────────────────────────────────────────
@@ -118,17 +121,18 @@ export class DatabricksOAuthProvider {
 
   async generate(prompt: string, maxTokens = 8192): Promise<string> {
     const token = await this.getToken();
-    return chatCall(this.model, token, prompt, maxTokens);
+    return (await chatCall(this.model, token, prompt, maxTokens)).text;
   }
 
   async generateJson(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null> {
     const token = await this.getToken();
 
     // Databricks models don't support response_format: json_object — use plain call.
-    // The system prompt + "Respond with JSON only." instruction is sufficient grounding.
-    const raw = await chatCall(this.model, token, prompt + "\n\nRespond with JSON only.", 2048);
-    let content = raw;
-    const usage: TokenUsage | undefined = undefined;
+    const result = await chatCall(this.model, token, prompt + "\n\nRespond with JSON only.", 2048);
+    let content = result.text;
+    const usage: TokenUsage | undefined = result.usage
+      ? { promptTokens: result.usage.prompt_tokens ?? 0, completionTokens: result.usage.completion_tokens ?? 0 }
+      : undefined;
 
     content = content.replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
     if (process.env.BEE_DEBUG_TRACEBACK) {

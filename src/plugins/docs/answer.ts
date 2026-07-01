@@ -247,8 +247,10 @@ export interface AnswerResult {
   text: string;
   /** Structured answer when JSON path succeeded (preferred over text) */
   structured?: LmAnswer;
-  /** Token usage from the LM call */
+  /** Token usage from the generateJson call */
   usage?: TokenUsage;
+  /** Token usage from the rewrite call (only when rewrite ran) */
+  rewriteUsage?: TokenUsage;
   /** Ranked hits for fallback rendering / JSON output */
   hits: DocItem[];
   /** Provider name when source="lm", undefined otherwise */
