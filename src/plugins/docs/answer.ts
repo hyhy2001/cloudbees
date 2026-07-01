@@ -117,17 +117,23 @@ Examples:
  * Falls back to the original query on any error — retrieval still works,
  * just without normalization.
  */
-async function rewriteQuery(query: string, provider: LMProvider): Promise<string> {
+async function rewriteQuery(query: string, provider: LMProvider): Promise<{ query: string; usage?: TokenUsage }> {
   try {
     const rp = _rewriteProvider ?? provider;
     const prompt = `${REWRITE_PROMPT}\n\n  "${query}" →`;
-    const raw = await rp.generate(prompt, 32);
-    const keywords = raw.trim().split(/\s+/).slice(0, 8).join(" ");
-    if (keywords.length > 0) return keywords;
+    if (rp.generateWithUsage) {
+      const { text, usage } = await rp.generateWithUsage(prompt, 32);
+      const keywords = text.trim().split(/\s+/).slice(0, 8).join(" ");
+      if (keywords.length > 0) return { query: keywords, usage };
+    } else {
+      const raw = await rp.generate(prompt, 32);
+      const keywords = raw.trim().split(/\s+/).slice(0, 8).join(" ");
+      if (keywords.length > 0) return { query: keywords };
+    }
   } catch {
     // fall through
   }
-  return query;
+  return { query };
 }
 
 /**
@@ -164,6 +170,7 @@ export function stripThinkBlock(text: string): string {
 export interface LMProvider {
   readonly name: string;
   generate(prompt: string, maxTokens?: number): Promise<string>;
+  generateWithUsage?(prompt: string, maxTokens?: number): Promise<{ text: string; usage?: TokenUsage }>;
   generateJson?(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null>;
   stream?(prompt: string): AsyncGenerator<string, void, unknown>;
 }
@@ -309,8 +316,11 @@ export async function answer(
   // Rewrite the query into BM25-friendly keywords when the original query
   // returns few hits (< 3) — avoids extra LM call on well-formed queries.
   let searchQuery = query;
+  let rewriteUsage: TokenUsage | undefined;
   if (directHits.length < 3) {
-    searchQuery = await rewriteQuery(query, provider);
+    const rewritten = await rewriteQuery(query, provider);
+    searchQuery = rewritten.query;
+    rewriteUsage = rewritten.usage;
     if (process.env.BEE_DEBUG_TRACEBACK) {
       process.stderr.write(`[bee ask] rewritten query: ${searchQuery}\n`);
     }
@@ -380,7 +390,7 @@ export async function answer(
       if (jsonResult) {
         const { answer: structured, usage } = jsonResult;
         const cleanCmds = validateCommands(structured.commands, corpus);
-        return { source: "lm", text: structured.explanation, structured: { ...structured, commands: cleanCmds }, usage, hits, provider: provider.name };
+        return { source: "lm", text: structured.explanation, structured: { ...structured, commands: cleanCmds }, usage, rewriteUsage, hits, provider: provider.name };
       }
     } catch (err) {
       if (process.env.BEE_DEBUG_TRACEBACK) {

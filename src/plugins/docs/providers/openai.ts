@@ -14,7 +14,6 @@
  */
 import { SYSTEM_PROMPT } from "../context";
 import type { LmAnswer, TokenUsage } from "../answer";
-
 export class OpenAICompatProvider {
   public readonly name: string;
 
@@ -57,16 +56,32 @@ export class OpenAICompatProvider {
     }
 
     const raw = await response.text();
-    let json: { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> };
+    let json: { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
     try {
       json = JSON.parse(raw.trim()) as typeof json;
     } catch {
       throw new Error(`LM returned non-JSON response: ${raw.trim().slice(0, 300)}`);
     }
     const msg = json.choices?.[0]?.message;
-    // Reasoning models (DeepSeek, QwQ, etc.) put the answer in
-    // reasoning_content and leave content empty. Fall back gracefully.
     return (msg?.content ?? msg?.reasoning_content ?? "").trim();
+  }
+
+  async generateWithUsage(prompt: string, maxTokens = 8192): Promise<{ text: string; usage?: TokenUsage }> {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
+    const response = await fetch(this.endpoint, {
+      method: "POST", headers,
+      body: JSON.stringify({ model: this.model, messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }], temperature: 0, max_tokens: maxTokens, enable_thinking: false }),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!response.ok) throw new Error(`LM HTTP ${response.status}`);
+    const raw = await response.text();
+    const json = JSON.parse(raw.trim()) as { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+    const msg = json.choices?.[0]?.message;
+    return {
+      text: (msg?.content ?? msg?.reasoning_content ?? "").trim(),
+      usage: json.usage ? { promptTokens: json.usage.prompt_tokens ?? 0, completionTokens: json.usage.completion_tokens ?? 0 } : undefined,
+    };
   }
 
   async generateJson(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null> {
