@@ -121,10 +121,7 @@ export function registerDocsCommands(ctx: PluginContext): void {
           if (result.structured) {
             stopSpinner();
             renderStructuredAnswer(result.structured);
-            renderFooter(result.usage);
-            return;
-          }
-          if (streamFlag && result.stream && result.streamOutput) {
+            renderFooter(result.usage, result.rewriteUsage, debugFlag);
             const renderer = new StreamingMarkdownRenderer(
               (s) => process.stdout.write(s),
             );
@@ -166,7 +163,7 @@ export function registerDocsCommands(ctx: PluginContext): void {
             }
             if (result.structured) {
               renderStructuredAnswer(result.structured);
-              renderFooter(result.usage);
+              renderFooter(result.usage, result.rewriteUsage, debugFlag);
             } else {
               renderer.flush();
               process.stdout.write("\n");
