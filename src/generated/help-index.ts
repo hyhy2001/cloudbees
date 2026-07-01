@@ -11,6 +11,34 @@ export interface HelpFact {
 
 export const HELP_FACTS: HelpFact[] = [
   {
+    "id": "concept.logout",
+    "kind": "concept",
+    "title": "logout",
+    "terms": [
+      "logout",
+      "log out",
+      "sign out",
+      "signout",
+      "disconnect",
+      "log off",
+      "logoff",
+      "sign off",
+      "remove credentials",
+      "delete session",
+      "exit session",
+      "revoke token"
+    ],
+    "answer": "Use `bee auth logout` to sign out and remove stored credentials for a profile. The profile entry is deleted; re-run `bee auth login` to reconnect.",
+    "commands": [
+      "bee auth logout",
+      "bee auth logout --profile <profile>"
+    ],
+    "related": [
+      "bee auth login",
+      "bee auth delete"
+    ]
+  },
+  {
     "id": "concept.profile",
     "kind": "concept",
     "title": "profile",
