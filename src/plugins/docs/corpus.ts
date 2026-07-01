@@ -173,6 +173,11 @@ const STOP_WORDS = new Set([
   // command. Dropping it as a stopword fixes both (it never reaches synonym
   // expansion). See docs-rag-stress self-surface test.
   "name",
+  // Courtesy/polite filler words that inflate the gate denominator without
+  // adding retrieval signal ("please guide me", "can you help me", "tell me").
+  "please","guide","tell","show","help","explain","describe","teach",
+  "want","need","trying","try","make","let","give","find","know","understand",
+  "using","use","via",
 ]);
 
 /**
