@@ -141,9 +141,6 @@ export class DatabricksOAuthProvider {
     if (typeof parsed.explanation !== "string" || !Array.isArray(parsed.commands)) return null;
     return { answer: parsed, usage };
   }
-    if (typeof parsed.explanation !== "string" || !Array.isArray(parsed.commands)) return null;
-    return { answer: parsed, usage };
-  }
 
   /**
    * Streaming variant over the OpenAI-compatible SSE shape. AI Gateway supports
