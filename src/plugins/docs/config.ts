@@ -20,6 +20,8 @@
  * `bee ask` runs fully offline.
  */
 
+import { xorDecode } from "../../core/obfuscate";
+
 declare const BEE_LM_URL: string | undefined;
 declare const BEE_LM_API_KEY: string | undefined;
 declare const BEE_LM_MODEL: string | undefined;
@@ -32,7 +34,7 @@ declare const BEE_EMBEDDING_PATH: string | undefined;
 declare const BEE_REWRITE_MODEL: string | undefined;
 
 function pick(baked: string | undefined, envKey: string): string {
-  if (typeof baked !== "undefined" && baked !== "") return baked;
+  if (typeof baked !== "undefined" && baked !== "") return xorDecode(baked);
   return process.env[envKey] ?? "";
 }
 

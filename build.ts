@@ -5,6 +5,15 @@
  * Output: ./dist/bee
  */
 
+import { randomBytes } from "node:crypto";
+import { xorEncode } from "./src/core/obfuscate";
+
+/** Obfuscate a sensitive string so it doesn't appear in `strings ./bee`. */
+function obf(value: string): string {
+  if (!value) return "";
+  return xorEncode(value, randomBytes(16));
+}
+
 const VERSION =
   (await Bun.file("package.json").json().then((p) => p.version).catch(() => "0.0.0")) ?? "0.0.0";
 
@@ -107,16 +116,16 @@ const result = await Bun.build({
   sourcemap: "linked",
   define: {
     BEE_VERSION: `"${VERSION}"`,
-    BEE_LM_URL: JSON.stringify(LM_URL),
-    BEE_LM_API_KEY: JSON.stringify(LM_API_KEY),
-    BEE_LM_MODEL: JSON.stringify(LM_MODEL),
-    BEE_LM_CLIENT_ID: JSON.stringify(LM_CLIENT_ID),
-    BEE_LM_CLIENT_SECRET: JSON.stringify(LM_CLIENT_SECRET),
-    BEE_EMBEDDING_MODEL: JSON.stringify(EMBEDDING_MODEL),
-    BEE_EMBEDDING_URL: JSON.stringify(EMBEDDING_URL),
-    BEE_EMBEDDING_PATH: JSON.stringify(EMBEDDING_PATH),
-    BEE_REWRITE_MODEL: JSON.stringify(REWRITE_MODEL),
-    BEE_CHAT_PATH: JSON.stringify(lmFile.chatPath ?? lmFile.CB_CHAT_PATH ?? process.env.CB_CHAT_PATH ?? "/v1/chat/completions"),
+    BEE_LM_URL: JSON.stringify(obf(LM_URL)),
+    BEE_LM_API_KEY: JSON.stringify(obf(LM_API_KEY)),
+    BEE_LM_MODEL: JSON.stringify(obf(LM_MODEL)),
+    BEE_LM_CLIENT_ID: JSON.stringify(obf(LM_CLIENT_ID)),
+    BEE_LM_CLIENT_SECRET: JSON.stringify(obf(LM_CLIENT_SECRET)),
+    BEE_EMBEDDING_MODEL: JSON.stringify(obf(EMBEDDING_MODEL)),
+    BEE_EMBEDDING_URL: JSON.stringify(obf(EMBEDDING_URL)),
+    BEE_EMBEDDING_PATH: JSON.stringify(obf(EMBEDDING_PATH)),
+    BEE_REWRITE_MODEL: JSON.stringify(obf(REWRITE_MODEL)),
+    BEE_CHAT_PATH: JSON.stringify(obf(lmFile.chatPath ?? lmFile.CB_CHAT_PATH ?? process.env.CB_CHAT_PATH ?? "/v1/chat/completions")),
   },
   jsx: {
     runtime: "automatic",
