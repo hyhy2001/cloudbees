@@ -226,6 +226,17 @@ export interface TokenUsage {
  *   - keep only `bee <group>[ <sub>]` that exist in the corpus (ask/help always ok)
  *   - keep only flag entries whose name starts with `--`
  */
+/** Parse valid flag names for a command from its corpus body text. */
+function getCorpusFlags(cmdId: string, corpus: DocItem[]): Set<string> | null {
+  const item = corpus.find(c => c.id === cmdId);
+  if (!item?.body) return null;
+  const flags = new Set<string>();
+  for (const match of item.body.matchAll(/--[a-z][-a-z]*/g)) {
+    flags.add(match[0]);
+  }
+  return flags.size > 0 ? flags : null;
+}
+
 export function validateCommands(
   commands: LmAnswer["commands"],
   corpus: DocItem[],
@@ -244,7 +255,23 @@ export function validateCommands(
       const s = m[2]?.toLowerCase();
       return g === "ask" || g === "help" || validIds.has(g) || (s ? validIds.has(`${g}.${s}`) : false);
     })
-    .map(c => ({ ...c, flags: c.flags?.filter(f => f.name.startsWith("--")) ?? [] }));
+    .map(c => {
+      // Strip non-flag entries, then cross-check against corpus flags
+      const cleanFlags = (c.flags ?? []).filter(f => f.name.startsWith("--"));
+      const m = c.cmd.match(/^bee\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*)(?:\s+([a-z][-a-z]*))?)?/i);
+      if (m) {
+        const g = m[1]!.toLowerCase();
+        const s = m[2]?.toLowerCase();
+        const t = m[3]?.toLowerCase();
+        // Try most specific command id first
+        const cmdId = t ? `${g}.${s}.${t}` : s ? `${g}.${s}` : g;
+        const knownFlags = getCorpusFlags(cmdId, corpus);
+        if (knownFlags) {
+          return { ...c, flags: cleanFlags.filter(f => knownFlags.has(f.name)) };
+        }
+      }
+      return { ...c, flags: cleanFlags };
+    });
 }
 
 export interface AnswerResult {
