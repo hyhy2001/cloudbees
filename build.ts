@@ -35,6 +35,8 @@ interface LmConfig {
   CB_EMBEDDING_URL?: string;
   CB_EMBEDDING_PATH?: string;
   CB_CHAT_PATH?: string;
+  CB_REWRITE_MODEL?: string;
+  rewriteModel?: string;
 }
 const lmFile = (await Bun.file("bee.lm.json")
   .json()
@@ -49,7 +51,9 @@ const EMBEDDING_MODEL = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? pr
 const EMBEDDING_PATH = lmFile.embeddingPath ?? lmFile.CB_EMBEDDING_PATH ?? process.env.CB_EMBEDDING_PATH ?? "/v1/embeddings";
 const EMBEDDING_URL = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ??
   (LM_URL ? `${LM_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}` : "");
+const REWRITE_MODEL = lmFile.rewriteModel ?? lmFile.CB_REWRITE_MODEL ?? process.env.CB_REWRITE_MODEL ?? LM_MODEL;
 if (EMBEDDING_URL) process.stderr.write(`  Embedding: ${EMBEDDING_MODEL} @ ${EMBEDDING_URL}\n`);
+if (REWRITE_MODEL && REWRITE_MODEL !== LM_MODEL) process.stderr.write(`  Rewrite model: ${REWRITE_MODEL}\n`);
 
 const SKIP_CODEGEN = process.env["CB_SKIP_CODEGEN"] === "1";
 
@@ -111,6 +115,7 @@ const result = await Bun.build({
     BEE_EMBEDDING_MODEL: JSON.stringify(EMBEDDING_MODEL),
     BEE_EMBEDDING_URL: JSON.stringify(EMBEDDING_URL),
     BEE_EMBEDDING_PATH: JSON.stringify(EMBEDDING_PATH),
+    BEE_REWRITE_MODEL: JSON.stringify(REWRITE_MODEL),
     BEE_CHAT_PATH: JSON.stringify(lmFile.chatPath ?? lmFile.CB_CHAT_PATH ?? process.env.CB_CHAT_PATH ?? "/v1/chat/completions"),
   },
   jsx: {

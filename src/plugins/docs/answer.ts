@@ -119,8 +119,9 @@ Examples:
  */
 async function rewriteQuery(query: string, provider: LMProvider): Promise<string> {
   try {
+    const rp = _rewriteProvider ?? provider;
     const prompt = `${REWRITE_PROMPT}\n\n  "${query}" →`;
-    const raw = await provider.generate(prompt, 32);
+    const raw = await rp.generate(prompt, 32);
     const keywords = raw.trim().split(/\s+/).slice(0, 8).join(" ");
     if (keywords.length > 0) return keywords;
   } catch {
@@ -170,10 +171,16 @@ export interface LMProvider {
 // --- Active provider registry ------------------------------------------------
 
 let _provider: LMProvider | null = null;
+let _rewriteProvider: LMProvider | null = null;
 
 /** Register the active LM provider. Call once during plugin/app startup. */
 export function setProvider(p: LMProvider | null): void {
   _provider = p;
+}
+
+/** Register a separate provider for query rewriting (CB_REWRITE_MODEL). Falls back to main provider. */
+export function setRewriteProvider(p: LMProvider | null): void {
+  _rewriteProvider = p;
 }
 
 /** Return the active provider, or null when none is configured. */

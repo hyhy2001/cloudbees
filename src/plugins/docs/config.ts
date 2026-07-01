@@ -29,6 +29,7 @@ declare const BEE_EMBEDDING_MODEL: string | undefined;
 declare const BEE_EMBEDDING_URL: string | undefined;
 declare const BEE_CHAT_PATH: string | undefined;
 declare const BEE_EMBEDDING_PATH: string | undefined;
+declare const BEE_REWRITE_MODEL: string | undefined;
 
 function pick(baked: string | undefined, envKey: string): string {
   if (typeof baked !== "undefined" && baked !== "") return baked;
@@ -65,6 +66,9 @@ export const LM_API_KEY = pick(
 export const LM_MODEL =
   pick(typeof BEE_LM_MODEL !== "undefined" ? BEE_LM_MODEL : undefined, "CB_LM_MODEL") ||
   "default";
+export const REWRITE_MODEL =
+  pick(typeof BEE_REWRITE_MODEL !== "undefined" ? BEE_REWRITE_MODEL : undefined, "CB_REWRITE_MODEL") ||
+  LM_MODEL;
 export const LM_CLIENT_ID = pick(
   typeof BEE_LM_CLIENT_ID !== "undefined" ? BEE_LM_CLIENT_ID : undefined,
   "CB_CLIENT_ID",

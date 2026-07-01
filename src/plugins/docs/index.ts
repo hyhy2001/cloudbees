@@ -1,7 +1,7 @@
 import type { Plugin, PluginContext } from "../../registry/types";
 import { registerDocsCommands } from "./commands";
-import { LM_URL, LM_API_KEY, LM_MODEL, LM_CLIENT_ID, LM_CLIENT_SECRET, CHAT_ENDPOINT } from "./config";
-import { setProvider, getProvider } from "./answer";
+import { LM_URL, LM_API_KEY, LM_MODEL, REWRITE_MODEL, LM_CLIENT_ID, LM_CLIENT_SECRET, CHAT_ENDPOINT } from "./config";
+import { setProvider, setRewriteProvider, getProvider } from "./answer";
 import { OpenAICompatProvider } from "./providers/openai";
 import { DatabricksOAuthProvider, isDatabricksHost } from "./providers/databricks";
 
@@ -30,15 +30,19 @@ export const docsPlugin: Plugin = {
         const prov = new DatabricksOAuthProvider(LM_URL, LM_CLIENT_ID, LM_CLIENT_SECRET, LM_MODEL);
         if (await prov.validate()) {
           setProvider(prov);
+          // Rewrite provider — same OAuth but different model if CB_REWRITE_MODEL set
+          if (REWRITE_MODEL !== LM_MODEL) {
+            setRewriteProvider(new DatabricksOAuthProvider(LM_URL, LM_CLIENT_ID, LM_CLIENT_SECRET, REWRITE_MODEL));
+          }
         } else {
           process.stderr.write("[docs] WARN Databricks OAuth token exchange failed — check client_id and client_secret.\n");
         }
       }
       if (!getProvider()) {
-        // CHAT_ENDPOINT already includes the chat path (config.ts honours
-        // CB_CHAT_PATH); the provider uses it verbatim. It is always non-empty
-        // when LM_URL is set, so no base-URL fallback is needed.
         setProvider(new OpenAICompatProvider(CHAT_ENDPOINT, LM_API_KEY, LM_MODEL));
+        if (REWRITE_MODEL !== LM_MODEL) {
+          setRewriteProvider(new OpenAICompatProvider(CHAT_ENDPOINT, LM_API_KEY, REWRITE_MODEL));
+        }
       }
     }
     registerDocsCommands(ctx);
