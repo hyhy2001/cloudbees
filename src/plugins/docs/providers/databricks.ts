@@ -124,6 +124,15 @@ export class DatabricksOAuthProvider {
     return (await chatCall(this.model, token, prompt, maxTokens)).text;
   }
 
+  async generateWithUsage(prompt: string, maxTokens = 8192): Promise<{ text: string; usage?: import("../answer").TokenUsage }> {
+    const token = await this.getToken();
+    const r = await chatCall(this.model, token, prompt, maxTokens);
+    return {
+      text: r.text,
+      usage: r.usage ? { promptTokens: r.usage.prompt_tokens ?? 0, completionTokens: r.usage.completion_tokens ?? 0 } : undefined,
+    };
+  }
+
   async generateJson(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null> {
     const token = await this.getToken();
 
