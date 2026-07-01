@@ -576,7 +576,15 @@ User query
                                     + footer: disclaimer + token usage
 ```
 
-**API calls per query**: 0 (off-topic/punctuation), 1 (well-formed queries), or 2 (colloquial queries that need rewriting). When `response_format: json_object` returns HTTP 400/422/500 (model doesn't support it), falls back to plain `generate()` and parses JSON from free text. Vector embedding adds 1 call only when BM25 top hit is a command and the runtime embedding model matches the baked corpus model.
+**API calls per query**: 0 (off-topic/punctuation), 1 (well-formed queries), or 2 (colloquial queries that need rewriting). Rewrite uses `CB_REWRITE_MODEL` (falls back to `CB_LM_MODEL`) — set a smaller model there to reduce latency. Vector embedding adds 1 call only when BM25 top hit is a command and the runtime embedding model matches the baked corpus model.
+
+**Three model roles:**
+
+| Variable | Role | Recommended |
+|---|---|---|
+| `CB_LM_MODEL` | Answer generation — structured JSON output | Large reasoning model (Qwen3.5-122B, GPT-4o) |
+| `CB_REWRITE_MODEL` | Query rewrite — 32 tokens only | Small fast model (Qwen2.5-7B, Llama-3.2-3B) |
+| `CB_EMBEDDING_MODEL` | Corpus embedding at build time + query embedding at runtime | Text embedding model (qwen3-embedding-0.6b) |
 
 ### Output format
 
@@ -857,7 +865,8 @@ This is a developer-tool threat model: the OS directory permission on `data/<use
 | `CB_API_KEY` | Static Bearer token / PAT |
 | `CB_CLIENT_ID` | OAuth client ID for Databricks M2M |
 | `CB_CLIENT_SECRET` | OAuth client secret for Databricks M2M |
-| `CB_LM_MODEL` | LM model identifier passed in `model` field of chat completions requests |
+| `CB_LM_MODEL` | Main LM model for answer generation (`generateJson`) |
+| `CB_REWRITE_MODEL` | Model for query rewriting (optional — falls back to `CB_LM_MODEL`). Use a smaller/faster model since rewrite only needs 32 tokens |
 | `CB_EMBEDDING_MODEL` | Embedding model name passed to the embedding API (informational — the actual dimension is auto-detected from the first response) |
 
 ## Project Structure
