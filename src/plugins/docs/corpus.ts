@@ -449,7 +449,23 @@ export function buildMatchExpr(query: string): string {
     .split(/[^a-z0-9]+/)
     .filter((t) => t.length > 0);
 
-  const expanded: string[] = [];
+  // Bigram expansion — catch patterns where one token is a stopword
+  // e.g. "log out" → raw=["log","out"] but "out" is a stopword so "logout" never appears
+  const BIGRAMS: Record<string, string> = {
+    "log out": "logout",
+    "sign out": "logout",
+    "sign in": "login",
+    "log in": "login",
+    "set up": "setup",
+    "sign up": "register",
+  };
+  const joined = raw.join(" ");
+  const bigramExpansions: string[] = [];
+  for (const [bigram, expansion] of Object.entries(BIGRAMS)) {
+    if (joined.includes(bigram)) bigramExpansions.push(expansion);
+  }
+
+  const expanded: string[] = [...bigramExpansions];
   for (const t of raw) {
     if (STOP_WORDS.has(t)) continue;
     expanded.push(t);
