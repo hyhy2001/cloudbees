@@ -122,6 +122,9 @@ export function registerDocsCommands(ctx: PluginContext): void {
             stopSpinner();
             renderStructuredAnswer(result.structured);
             renderFooter(result.usage, result.rewriteUsage, debugFlag);
+            return;
+          }
+          if (streamFlag && result.stream && result.streamOutput) {
             const renderer = new StreamingMarkdownRenderer(
               (s) => process.stdout.write(s),
             );
