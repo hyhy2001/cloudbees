@@ -111,9 +111,14 @@ const result = await Bun.build({
   // Standalone executable for RHEL8 (glibc 2.28+). baseline = no AVX2 requirement.
   compile: { target: "bun-linux-x64-baseline", outfile: "./dist/bee" },
   minify: true,
-  // NOTE: bytecode is intentionally NOT enabled. Ink's flexbox engine
-  // (yoga-layout) fails to compile with bytecode. minify alone is fine.
+  // NOTE: bytecode is intentionally NOT enabled. Ink's TUI engine (yoga-layout
+  // via yoga-wasm-base64-esm.js) uses top-level await to load WebAssembly, which
+  // Bun's bytecode compiler does not support. yoga-layout-prebuilt (the sync
+  // alternative) uses a native addon incompatible with Bun standalone binaries.
+  // Blocked until ink ships a sync WASM init path or yoga-layout publishes an
+  // asm.js build. XOR obfuscation (obf()) covers credentials in the meantime.
   sourcemap: "linked",
+  plugins: [],
   define: {
     BEE_VERSION: `"${VERSION}"`,
     BEE_LM_URL: JSON.stringify(obf(LM_URL)),
