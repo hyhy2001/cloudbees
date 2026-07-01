@@ -109,7 +109,7 @@ describe("bee ask CLI", () => {
   });
 
   test("errors when no LM provider is configured", async () => {
-    const { code, err } = await runCli(["ask", "list", "jobs"], { CB_DATABRICK_URL: "" });
+    const { code, err } = await runCli(["ask", "list", "jobs"], { CB_DATABRICK_URL: "", CB_SKIP_LM_FILE: "1" });
     expect(code).toBe(1);
     expect(err.toLowerCase()).toContain("lm provider");
   });
