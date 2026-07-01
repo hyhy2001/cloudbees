@@ -147,4 +147,8 @@ if (!result.success) {
 
 console.log("\n  ✓ Binary built: ./dist/bee\n");
 
+// Strip debug symbols — reduces binary size slightly and removes function/line info.
+// String literals remain (needed for --help and error messages).
+await Bun.$`strip ./dist/bee`.quiet().catch(() => { /* strip may not be available */ });
+
 export {};
