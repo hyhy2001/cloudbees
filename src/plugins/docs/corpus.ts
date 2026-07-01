@@ -176,7 +176,7 @@ const STOP_WORDS = new Set([
   // Courtesy/polite filler words that inflate the gate denominator without
   // adding retrieval signal ("please guide me", "can you help me", "tell me").
   "please","guide","tell","show","help","explain","describe","teach",
-  "want","need","trying","try","make","let","give","find","know","understand",
+  "want","need","trying","try","let","give","find","know","understand",
   "using","use","via",
 ]);
 
