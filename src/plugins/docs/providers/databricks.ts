@@ -136,14 +136,61 @@ export class DatabricksOAuthProvider {
   async generateJson(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null> {
     const token = await this.getToken();
 
-    // Databricks models don't support response_format: json_object — use plain call.
-    const result = await chatCall(this.model, token, prompt + "\n\nRespond with JSON only.", 2048);
-    let content = result.text;
-    const usage: TokenUsage | undefined = result.usage
-      ? { promptTokens: result.usage.prompt_tokens ?? 0, completionTokens: result.usage.completion_tokens ?? 0 }
-      : undefined;
+    // Stream the response — same wall time but spinner stays animated while
+    // tokens arrive, improving perceived responsiveness vs blocking chatCall.
+    const response = await fetch(CHAT_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: prompt + "\n\nRespond with JSON only." },
+        ],
+        max_tokens: 2048,
+        temperature: 0,
+        stream: true,
+      }),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!response.ok) {
+      throw new Error(`Databricks LM error (HTTP ${response.status})`);
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("LM response body is not readable");
 
-    content = content.replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const chunks: string[] = [];
+    let usage: TokenUsage | undefined;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === "data: [DONE]") continue;
+        if (!trimmed.startsWith("data: ")) continue;
+        try {
+          const json = JSON.parse(trimmed.slice(6)) as {
+            choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown } }>;
+            usage?: { prompt_tokens?: number; completion_tokens?: number };
+          };
+          const delta = json.choices?.[0]?.delta;
+          const text = extractContent(delta?.content ?? delta?.reasoning_content);
+          if (text) chunks.push(text);
+          // Usage arrives in the final chunk on Databricks
+          if (json.usage) {
+            usage = { promptTokens: json.usage.prompt_tokens ?? 0, completionTokens: json.usage.completion_tokens ?? 0 };
+          }
+        } catch { /* skip malformed SSE line */ }
+      }
+    }
+
+    let content = chunks.join("").replace(/<think>[\s\S]*?<\/think>\s*/i, "").trim();
     if (process.env.BEE_DEBUG_TRACEBACK) {
       process.stderr.write(`[bee ask] databricks content after strip: ${content.slice(0, 200)}\n`);
     }
