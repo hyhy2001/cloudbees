@@ -59,7 +59,7 @@ import {
 import type { ControlledAgentGrant } from "./service";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
 import { getScopeShowAll, setScopeShowAll } from "../../core/db/repositories/scope-repo";
-import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
+import { NONE_OPTION } from "../../core/tui/data/use-mine-options";
 import { listNodes, checkNodeApprovalForJob } from "../node/service";
 import { hasPlugin } from "../system/service";
 import { ScheduleBuilder } from "../../core/tui/components/ScheduleBuilder";
@@ -528,19 +528,16 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   }, [baseUrl, ctx.dbPath, ctx.profile, allJobs]);
 
   // Mine nodes → dropdown options for the job's Node/Label field. "(none)" maps
-  // to "run anywhere" (no assignedNode). Fetched in the background once ready.
-  const trackedNodeNames = useMemo(() => {
-    if (!baseUrl) return new Set<string>();
-    return new Set(getTrackedResources("node", ctx.profile, baseUrl, ctx.dbPath));
-  }, [baseUrl, ctx.dbPath, ctx.profile]);
-  const nodeOptions = useMineOptions({
-    enabled: ctx.loggedIn && baseUrl !== null,
-    fetch: async () => {
-      const client = await ctx.getClient({ useController: true });
-      return (await listNodes(client)).map((n) => n.name);
-    },
-    tracked: trackedNodeNames,
-  });
+  // to "run anywhere" (no assignedNode). Awaited on demand inside each create/edit
+  // handler *before* opening the modal: openModal renders fields once and freezes
+  // them, so a value fetched after open would never reach the dropdown.
+  const fetchNodeOptions = useCallback(async (): Promise<string[]> => {
+    if (!baseUrl) return [NONE_OPTION];
+    const tracked = new Set(getTrackedResources("node", ctx.profile, baseUrl, ctx.dbPath));
+    const client = await ctx.getClient({ useController: true });
+    const mine = (await listNodes(client)).map((n) => n.name).filter((n) => tracked.has(n));
+    return [NONE_OPTION, ...mine];
+  }, [baseUrl, ctx]);
 
   // ── View pipeline: Mine/All filter + synthetic deleted rows (client-side) ──
   const scoped = useMemo(() => {
@@ -886,6 +883,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   );
 
   const newJob = useCallback(async () => {
+    const nodeOptions = await fetchNodeOptions();
     const result = await ctx.openModal<Record<string, string>>({
       id: "create-job",
       render: (resolve) => (
@@ -964,11 +962,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
     }
-  }, [ctx, refetch, currentFolder]);
+  }, [ctx, refetch, currentFolder, fetchNodeOptions]);
 
   const editJob = useCallback(
     async (job: JobDTO): Promise<false | void> => {
       const s = summary;
+      const nodeOptions = await fetchNodeOptions();
       if (job.jobType === "PL") {
         // Pipeline edit: script file (optional) + node + description.
         const result = await ctx.openModal<Record<string, string>>({
@@ -1071,7 +1070,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
       }
     },
-    [ctx, refetch, summary, invalidateSummary],
+    [ctx, refetch, summary, invalidateSummary, fetchNodeOptions],
   );
 
   const toggleSelect = useCallback((key: string) => {

@@ -44,7 +44,7 @@ import {
 import { approveFolder } from "../foldersplus/service";
 import { listJobsRecursive } from "../job/service";
 import { listCredentials } from "../credential/service";
-import { useMineOptions, NONE_OPTION } from "../../core/tui/data/use-mine-options";
+import { NONE_OPTION } from "../../core/tui/data/use-mine-options";
 import { useDimensions } from "../../core/tui/data/use-dimensions";
 import { getScopeShowAll, setScopeShowAll } from "../../core/db/repositories/scope-repo";
 import {
@@ -155,22 +155,18 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     return new Set(getTrackedResources("node", ctx.profile, baseUrl, ctx.dbPath));
   }, [baseUrl, ctx.dbPath, ctx.profile, allNodes]);
 
-  // Tracked credential IDs (system store) — for the SSH credential dropdown.
-  const trackedCreds = useMemo(() => {
-    if (!baseUrl) return new Set<string>();
-    return new Set(getTrackedResources("credential", ctx.profile, `${baseUrl}.system`, ctx.dbPath));
-  }, [baseUrl, ctx.dbPath, ctx.profile]);
-
-  // Credential picker options (Mine credentials in the system store), prefetched.
-  const credentialOptions = useMineOptions({
-    enabled: ctx.loggedIn && baseUrl !== null,
-    fetch: async () => {
-      const client = await ctx.getClient({ useController: true });
-      const creds = await listCredentials(client, ctx.username, "system");
-      return creds.map((c) => c.id);
-    },
-    tracked: trackedCreds,
-  });
+  // Mine credentials (system store) → SSH credential dropdown options. Awaited on
+  // demand inside create/edit handlers *before* opening the modal: openModal renders
+  // fields once and freezes them, so a value fetched after open never reaches the
+  // dropdown.
+  const fetchCredentialOptions = useCallback(async (): Promise<string[]> => {
+    if (!baseUrl) return [NONE_OPTION];
+    const tracked = new Set(getTrackedResources("credential", ctx.profile, `${baseUrl}.system`, ctx.dbPath));
+    const client = await ctx.getClient({ useController: true });
+    const creds = await listCredentials(client, ctx.username, "system");
+    const mine = creds.map((c) => c.id).filter((id) => tracked.has(id));
+    return [NONE_OPTION, ...mine];
+  }, [baseUrl, ctx]);
 
   // ── View pipeline: Mine/All filter + synthetic deleted rows (client-side) ──
   const scoped = useMemo(() => {
@@ -233,6 +229,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   const createNode = useCallback(async () => {
+    const credentialOptions = await fetchCredentialOptions();
     const result = await ctx.openModal<Record<string, string>>({
         id: "create-node",
         render: (resolve) => (
@@ -247,7 +244,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               { name: "launcher", label: "Launch method", options: ["ssh", "jnlp"], initial: "ssh" },
               { name: "host", label: "SSH Host", initial: detectLocalHost(), hint: "hostname or IP (auto-detected, editable)", visible: (v) => v["launcher"] !== "jnlp" },
               { name: "port", label: "SSH Port", placeholder: "22", hint: "default 22", visible: (v) => v["launcher"] !== "jnlp" },
-              { name: "credentialsId", label: "SSH Credential", options: credentialOptions.length > 0 ? credentialOptions : [NONE_OPTION], searchable: true, visible: (v) => v["launcher"] !== "jnlp" },
+              { name: "credentialsId", label: "SSH Credential", options: credentialOptions, searchable: true, visible: (v) => v["launcher"] !== "jnlp" },
               { name: "availability", label: "Availability", options: ["always", "demand"], initial: "always" },
               { name: "inDemandDelay", label: "In-demand Delay", initial: "0", hint: "minutes", visible: (v) => v["availability"] === "demand" },
               { name: "idleDelay", label: "Idle Delay", initial: "1", hint: "minutes", visible: (v) => v["availability"] === "demand" },
@@ -300,7 +297,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     } catch (err) {
       ctx.notify(err instanceof Error ? err.message : String(err), "error");
     }
-  }, [ctx, refetch, credentialOptions]);
+  }, [ctx, refetch, fetchCredentialOptions]);
 
   const removeNode = useCallback(
     async (name: string): Promise<false | void> => {
@@ -366,7 +363,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       }
       const cfg = parseNodeConfig(detail.configXml ?? "");
       const credInitial = cfg.credentialsId || NONE_OPTION;
-      const baseCreds = credentialOptions.length > 0 ? credentialOptions : [NONE_OPTION];
+      const baseCreds = await fetchCredentialOptions();
       const credChoices = baseCreds.includes(credInitial)
         ? baseCreds
         : [credInitial, ...baseCreds];
@@ -439,7 +436,7 @@ const NodesScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
       }
     },
-    [ctx, refetch, credentialOptions],
+    [ctx, refetch, fetchCredentialOptions],
   );
 
   // Track = add an existing server node to Mine (for nodes created outside bee).
