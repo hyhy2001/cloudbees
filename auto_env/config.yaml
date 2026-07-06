@@ -1,0 +1,58 @@
+# auto_env - draft automation for bee (multi-account CloudBees)
+# Edit this file, then: provision.csh (build cred+node) -> deploy.csh (create jobs) -> run.csh
+
+# -- STABLE: rarely changes. cred+node reused via complete.yml --
+base_name: RX_AUTO          # change by hand to avoid folder/node/job name clashes (RX_AUTO_v2...)
+controller: ""              # "" = use the active controller; a name = auto `bee controller select`
+rx_auto_root: /design01/.../RX_AUTO   # RX AUTO root on the agent (step 3 cd's into here). Set real path.
+
+accounts:                   # Linux accounts -> 1 cred + 1 node each
+  - { username: user01, password: pass01 }
+  - { username: user02, password: pass02 }
+  - { username: user03, password: pass03 }
+
+node:
+  host_common: 10.0.0.10    # ip_mode=common -> SSH this host
+  host_trunk:  10.0.0.20    # ip_mode=trunk  -> SSH this host  (VLSI common/trunk)
+  port: 22
+  remote_dir_base: /home    # node remote-dir -> <base>/<username>
+  executors: 2
+
+# -- SWITCHES --
+mode: manual                # manual (N jobs, work-stealing rx_run) | auto (1 job with schedule)
+ip_mode: common             # common | trunk -> picks host + default IP_MODE param
+
+# -- manual = STEP 3 rx_run, WORK-STEALING --
+# RX AUTO pre-splits the module list at setup into SUBMIT_LIST/NORMAL|COMMON/.._00,_01,...
+# N accounts = N workers; each claims the next split file (atomic mkdir) until exhausted.
+# accounts > splits -> extra workers idle; accounts < splits -> keep claiming.
+#   trunk : 01_rx_run_ip_unit.bash        SUBMIT_LIST/NORMAL/normal_submit_module_list_XX
+#   common: 02_rx_run_common_ip_unit.bash SUBMIT_LIST/COMMON/common_submit_module_list_XX
+# REQUIRES: SUBMIT_LIST shared across nodes (shared claim dir). host=localhost satisfies this.
+manual:
+  job_prefix: build
+  wait: false               # true = bee job run --wait (job runs multiple files sequentially)
+  command: |
+    cd "$RX_AUTO_ROOT/RX_AUTO"
+    if [ "$IP_MODE" = trunk ]; then
+      RX=./01_rx_run_ip_unit.bash;        DIR=SUBMIT_LIST/NORMAL; PAT=normal_submit_module_list_
+    else
+      RX=./02_rx_run_common_ip_unit.bash; DIR=SUBMIT_LIST/COMMON; PAT=common_submit_module_list_
+    fi
+    CLAIM="$DIR/.claimed"; mkdir -p "$CLAIM"
+    for f in "$DIR"/${PAT}*; do
+      [ -e "$f" ] || continue                       # no split files -> exit loop
+      lock="$CLAIM/$(basename "$f")"
+      mkdir "$lock" 2>/dev/null || continue          # claim failed (another worker holds it) -> skip
+      echo "[worker] claim $f"
+      "$RX" "$f"
+    done
+
+# -- auto = STEP 3 go_rx_auto (orchestrator: detect -> queue -> run all). No index, IP_MODE only. --
+auto:
+  account: { username: user11, password: pass11 }   # 11th account, dedicated node for auto
+  job_name: daily
+  schedule: "H/30 * * * *"  # every 30 min: go_rx_auto detects SVN changes and runs
+  command: |
+    cd "$RX_AUTO_ROOT/RX_AUTO"
+    if [ "$IP_MODE" = trunk ]; then ./01_go_rx_auto.bash; else ./02_go_rx_auto.bash; fi

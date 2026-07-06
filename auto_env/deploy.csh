@@ -1,0 +1,68 @@
+#!/usr/bin/env csh
+# deploy.csh [--dry-run] - create/update JOB (the thing that changes: the run command).
+# cred+node already exist from provision.csh. Run provision first.
+#   manual -> N jobs (work-stealing rx_run)   |  auto -> 1 job with --schedule (go_rx_auto)
+
+set AUTO_DIR = `dirname $0`
+source "$AUTO_DIR/lib.csh"
+if ( "$1" == "--dry-run" ) set DRY = 1
+
+set CREATED = "$AUTO_DIR/.created.jobs.tsv"
+rm -f "$CREATED"
+
+# plan-jobs: FOLDER <base> | JOB <name> <folder> <node> <ip> <sched_b64|-> <shell_b64>
+foreach line ("`$PY plan-jobs $CONFIG`")
+  set f = ($line)
+  set kind = "$f[1]"
+
+  if ( "$kind" == "FOLDER" ) then
+    if ( $?DRY ) then
+      echo "[dry] $BEE job create folder $f[2]"
+    else
+      "$BEE" job create folder "$f[2]"
+    endif
+    continue
+  endif
+
+  if ( "$kind" == "JOB" ) then
+    set jn = "$f[2]" ; set folder = "$f[3]" ; set node = "$f[4]"
+    set ip = "$f[5]" ; set sched = "$f[6]" ; set sh = "$f[7]"
+    # sched is b64 (cron string has spaces) or "-" (no schedule). Decode when used.
+    set sched_real = ""
+    if ( "$sched" != "-" ) set sched_real = "`echo $sched | base64 -d`"
+
+    # already exists? (update in place, keep node/folder)
+    set exists = 0
+    "$BEE" job get "$folder/$jn" >& /dev/null
+    if ( $status == 0 ) set exists = 1
+
+    if ( $?DRY ) then
+      if ( $exists ) then
+        echo "[dry] $BEE job update freestyle $folder/$jn --shell <b64> --param-def IP_MODE=$ip"
+      else if ( "$sched" != "-" ) then
+        echo "[dry] $BEE job create freestyle $jn --folder $folder --node $node --shell <b64> --param-def IP_MODE=$ip --schedule '$sched_real'"
+      else
+        echo "[dry] $BEE job create freestyle $jn --folder $folder --node $node --shell <b64> --param-def IP_MODE=$ip"
+      endif
+    else
+      if ( $exists ) then
+        echo "job $jn: exists -> update"
+        "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "IP_MODE=$ip"
+      else if ( "$sched" != "-" ) then
+        "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
+          --shell "$sh" --param-def "IP_MODE=$ip" --schedule "$sched_real"
+      else
+        "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
+          --shell "$sh" --param-def "IP_MODE=$ip"
+      endif
+      echo "job	$folder/$jn" >> "$CREATED"
+    endif
+  endif
+end
+
+if ( ! $?DRY && -e "$CREATED" ) then
+  # merge jobs into the existing manifest (keep cred/node)
+  $PY merge-jobs $MANIFEST "$CREATED"
+  rm -f "$CREATED"
+endif
+echo "== deploy done. mode=`$PY get $CONFIG mode`. Next: run.csh (manual) or wait for schedule (auto) =="
