@@ -1,0 +1,25 @@
+# RX AUTO STEP 1-2 (guide S13) - EDIT EVERYTHING HERE. Used by setup_all.bash + apply_makefile_mods.py.
+# Rule: empty value "" = leave unchanged / unused; a value = apply it.
+
+# -- S2 Environment Variables - shared by general/auto/server_setup --
+setup_vars:
+  RX_AUTO_ROOT: ""                    # where RX_AUTO was copied (required to run setup)
+  RIDE_ACTIVATE: ""                   # .../ride/templates/ride/activate.csh (S5 my_ride_setup, sourced)
+  TRUNK_IP_RXEWS_RUN_DIR_PATH: ""     # folder my_cmd created (rxews_trunk_ip_vnet_*) - Trunk IP, gets S4
+  COMMON_RXEWS_RUN_DIR_PATH: ""       # folder my_cmd_for_common created (rxews_trunk_vnet_*) - Common, gets S4
+  DEDICATED_SV: ""                    # LSF host group (optional)
+  RIDE_ENV_VER: ""                    # RiDE env version tag (optional)
+  TRUNK_IP_ENV_BASE: ""               # rxews_trunk_ip_*/RxEnv-* (required for server_setup)
+  COMMON_ENV_BASE: ""                 # rxews_trunk_*/RxEnv-*   (required for server_setup)
+  DASHBOARD_DB_LOCATION: ""           # where the Dashboard DB is stored (required for server_setup)
+  LOCAL_PYTHON: ""                    # Python 3.10+ binary (optional)
+  LOCAL_PYTHON_BIN: ""                # Python bin dir (optional)
+  COMMON_RUN_TYPE: Trunk              # fixed - do not change
+
+# -- S4 RXEWS Makefile modifications - COMMON CHANGES ONLY --
+# Applied to BOTH env dirs (TRUNK_IP_RXEWS_RUN_DIR_PATH + COMMON_RXEWS_RUN_DIR_PATH).
+# The per-env (trunk_ip / common_ip) variable tables from S4 are intentionally NOT applied.
+# Each entry: empty new "" -> leave that variable unchanged. old is only for reference/logging.
+makefile_common_changes:
+  - { file: Makefile,      var: OS_TYPE_SETUP,                    new: '"RHEL8"', old: '"RHEL7"' }
+  - { file: makefile.vars, var: RDFS_ALTERNATIVE_CLOCK_GENERATION, new: '1',       old: '0' }
