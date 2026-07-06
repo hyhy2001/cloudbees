@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Brain of auto_example: parse config.yaml, emit action lines for csh,
+"""Brain of auto_env: parse config.yaml, emit action lines for csh,
 and write the complete.yml manifest. csh is just glue calling bee - all text-heavy logic lives here.
 
 Subcommands:

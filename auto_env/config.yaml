@@ -1,4 +1,4 @@
-# auto_example - draft automation for bee (multi-account CloudBees)
+# auto_env - draft automation for bee (multi-account CloudBees)
 # Edit this file, then: provision.csh (build cred+node) -> deploy.csh (create jobs) -> run.csh
 
 # -- STABLE: rarely changes. cred+node reused via complete.yml --

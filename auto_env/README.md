@@ -1,4 +1,4 @@
-# auto_example - CloudBees automation for RX AUTO
+# auto_env - CloudBees automation for RX AUTO
 
 Embeds **CloudBees (`bee`)** as an orchestration layer over **RX AUTO** (another team's verification
 environment, see `../../../guide.html`). A single operator (already `bee auth login` + `bee controller
@@ -12,7 +12,7 @@ RX_AUTO/
 `--- UTLs/
     `--- Cloudbees/
         |--- bee              <- the bee binary
-        `--- auto_example/    <- this package (sits next to bee)
+        `--- auto_env/    <- this package (sits next to bee)
             |--- config.yaml
             |--- parse_config.py
             |--- lib.csh  provision.csh  deploy.csh  run.csh  manage.csh
@@ -21,7 +21,7 @@ RX_AUTO/
             `--- rxews_makefile/{setup.yaml, apply_makefile_mods.py}
 ```
 
-`lib.csh` resolves the binary as `../bee` (relative to auto_example). Override with env `BEE` for testing.
+`lib.csh` resolves the binary as `../bee` (relative to auto_env). Override with env `BEE` for testing.
 
 ## The two run modes
 

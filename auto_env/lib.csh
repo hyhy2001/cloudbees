@@ -1,11 +1,11 @@
 # lib.csh - sourced by the other scripts. Do not run directly.
 # Resolves the bee binary, shared config, and controller selection. csh is glue only.
 
-# auto_example dir (where lib.csh lives); scripts set AUTO_DIR before sourcing.
+# auto_env dir (where lib.csh lives); scripts set AUTO_DIR before sourcing.
 if ( ! $?AUTO_DIR ) set AUTO_DIR = "."
 
-# Layout (guide S3): RX_AUTO/UTLs/Cloudbees/{bee, auto_example/}
-#   -> bee sits next to auto_example, i.e. ../bee. Override with env BEE for dev/testing.
+# Layout (guide S3): RX_AUTO/UTLs/Cloudbees/{bee, auto_env/}
+#   -> bee sits next to auto_env, i.e. ../bee. Override with env BEE for dev/testing.
 if ( $?BEE ) then
   set BEE = "$BEE"
 else
