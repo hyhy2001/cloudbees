@@ -11,7 +11,8 @@ set CREATED = "$AUTO_DIR/.created.jobs.tsv"
 rm -f "$CREATED"
 
 # plan-jobs: FOLDER <base> | JOB <name> <folder> <node> <ip> <sched_b64|-> <shell_b64>
-foreach line ("`$PY plan-jobs $CONFIG`")
+# plan-setup: appends the rx_setup JOB line (ip="-" -> no IP_MODE param, sched="-" -> no schedule).
+foreach line ("`$PY plan-jobs $CONFIG ; $PY plan-setup $CONFIG`")
   set f = ($line)
   set kind = "$f[1]"
 
@@ -30,6 +31,9 @@ foreach line ("`$PY plan-jobs $CONFIG`")
     # sched is b64 (cron string has spaces) or "-" (no schedule). Decode when used.
     set sched_real = ""
     if ( "$sched" != "-" ) set sched_real = "`echo $sched | base64 -d`"
+    # ip="-" (setup job) -> no IP_MODE param; else pass --param-def IP_MODE=<ip>.
+    set ipopt = ""
+    if ( "$ip" != "-" ) set ipopt = "--param-def IP_MODE=$ip"
 
     # already exists? (update in place, keep node/folder)
     set exists = 0
@@ -38,22 +42,29 @@ foreach line ("`$PY plan-jobs $CONFIG`")
 
     if ( $?DRY ) then
       if ( $exists ) then
-        echo "[dry] $BEE job update freestyle $folder/$jn --shell <b64> --param-def IP_MODE=$ip"
+        echo "[dry] $BEE job update freestyle $folder/$jn --shell <b64> $ipopt"
       else if ( "$sched" != "-" ) then
-        echo "[dry] $BEE job create freestyle $jn --folder $folder --node $node --shell <b64> --param-def IP_MODE=$ip --schedule '$sched_real'"
+        echo "[dry] $BEE job create freestyle $jn --folder $folder --node $node --shell <b64> $ipopt --schedule '$sched_real'"
       else
-        echo "[dry] $BEE job create freestyle $jn --folder $folder --node $node --shell <b64> --param-def IP_MODE=$ip"
+        echo "[dry] $BEE job create freestyle $jn --folder $folder --node $node --shell <b64> $ipopt"
       endif
     else
       if ( $exists ) then
         echo "job $jn: exists -> update"
-        "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "IP_MODE=$ip"
+        if ( "$ip" != "-" ) then
+          "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "IP_MODE=$ip"
+        else
+          "$BEE" job update freestyle "$folder/$jn" --shell "$sh"
+        endif
       else if ( "$sched" != "-" ) then
         "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
           --shell "$sh" --param-def "IP_MODE=$ip" --schedule "$sched_real"
-      else
+      else if ( "$ip" != "-" ) then
         "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
           --shell "$sh" --param-def "IP_MODE=$ip"
+      else
+        "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
+          --shell "$sh"
       endif
       echo "job	$folder/$jn" >> "$CREATED"
     endif
