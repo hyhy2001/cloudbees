@@ -28,7 +28,8 @@ RX_AUTO/
 - **manual** - N accounts -> N nodes -> N jobs, **work-stealing**. RX AUTO pre-splits the module list at
   setup into `SUBMIT_LIST/NORMAL|COMMON/.._00,_01,...`; N workers scan and each claims the next split
   file (atomic `mkdir`) until exhausted. accounts > splits -> extra workers idle; accounts < splits ->
-  workers keep claiming. Requires `SUBMIT_LIST` shared across nodes.
+  workers keep claiming. Requires `SUBMIT_LIST` shared across nodes. Each claimed file is submitted to
+  LSF via `bs ... tcsh -f -c "source my_ride_setup; bash rx_run <file>"` (params from the `bs:` block).
 - **auto** - 1 dedicated account -> 1 node -> 1 job running `go_rx_auto` (orchestrator) with `--schedule`
   (e.g. every 30 min).
 
@@ -38,9 +39,25 @@ RX_AUTO/
 
 | Step | What | Where |
 |---|---|---|
-| 1-2 | prerequisites + setup (S4 Makefile mods, general/auto/server_setup) | **outside CloudBees, once** - `scripts/setup_all.bash` |
+| 1-2 | prerequisites + setup (S4 Makefile mods, general/auto/server_setup) | **two options**: `scripts/setup_all.bash` (by hand, outside CloudBees) OR the `rx_setup` bee job (runs on a dedicated node) |
 | 3 | `go_rx_auto` / `rx_run` | **bee job** (deploy.csh + run.csh) |
 | 4 | monitoring/dashboard | not touched; `server_setup` only generates scripts, never starts them |
+
+### Step 1-2 as a bee job (`rx_setup`)
+
+`deploy.csh` also creates a `rx_setup` freestyle job (from the `setup:` block in config) on a
+**dedicated account/node**. Triggering it runs the whole step 1-2 on that node as a single LSF
+submit that sources RiDE first:
+
+```
+bs -m "<host_groups>" -I -os <os> -M <mem> tcsh -f -c 'cd ROOT; source my_ride_setup;
+   source ./my_cmd; source ./my_cmd_for_common; <makefile common mods>; <step-2 makes>'
+```
+
+The `bs`/LSF params live in the `bs:` block; the RXEWS paths come from `rxews_makefile/setup.yaml`
+(`setup_vars`). The step-2 body (Makefile mods + `make` targets) is base64-encoded so the sed/make
+quotes never clash with the single-quoted `tcsh -c` argument. This is an alternative to
+`setup_all.bash`, not a replacement - both exist.
 
 ## Flow
 
@@ -90,8 +107,8 @@ prefix, so a new name means a fresh namespace that never overwrites the previous
 
 | File | Role |
 |---|---|
-| `config.yaml` | the input you edit |
-| `parse_config.py` | brain: parse YAML, render commands, b64-encode command/schedule, manifest |
+| `config.yaml` | the input you edit (accounts, node, mode, `bs:` LSF params, `setup:` job) |
+| `parse_config.py` | brain: parse YAML, render commands (incl. `plan-setup`), b64-encode, manifest |
 | `lib.csh` | resolve bee (`../bee`), select controller |
 | `provision.csh` | folder + cred (captures cred-id) + node |
 | `deploy.csh` | create/update jobs (`--param-def IP_MODE`, `--schedule` for auto) |

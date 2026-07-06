@@ -54,11 +54,20 @@ def emit(*fields):
 
 # -- accounts by mode ------------------------------------------------
 def infra_accounts(cfg):
-    """List of (username, password) needing cred+node, depending on mode."""
+    """List of (username, password) needing cred+node, depending on mode.
+    The dedicated setup account (setup.account) is appended when a setup: section exists,
+    so provision builds its cred+node too (both modes)."""
     if cfg.get("mode") == "auto":
         a = dig(cfg, "auto.account", {})
-        return [(a.get("username", ""), a.get("password", ""))]
-    return [(a.get("username", ""), a.get("password", "")) for a in cfg.get("accounts", [])]
+        accts = [(a.get("username", ""), a.get("password", ""))]
+    else:
+        accts = [(a.get("username", ""), a.get("password", "")) for a in cfg.get("accounts", [])]
+    s = dig(cfg, "setup.account", {})
+    if s and s.get("username"):
+        pair = (s.get("username", ""), s.get("password", ""))
+        if pair not in accts:
+            accts.append(pair)
+    return accts
 
 
 def cmd_plan_infra(cfg):
@@ -84,12 +93,30 @@ def cmd_cred_pass(cfg, user):
             return
 
 
-def shell_b64(command, rx_auto_root=""):
+def bs_env(cfg):
+    """Env exports for the bs/LSF wrapper (from bs: block). Empty dict if no bs: section."""
+    bs = cfg.get("bs") or {}
+    if not bs:
+        return {}
+    return {
+        "BS_GROUPS": bs.get("host_groups", ""),
+        "BS_OS": bs.get("os", ""),
+        "BS_MEM": str(bs.get("mem", "")),
+        "RIDE_SETUP": bs.get("ride_setup", "my_ride_setup"),
+    }
+
+
+def shell_b64(command, rx_auto_root="", extra_env=None):
     """Wrap a bash command into a shell-safe one-word string (csh + escaping): base64-decode then run.
-    Preserves multi-line scripts. Prepends RX_AUTO_ROOT (site path) into env for step 3.
+    Preserves multi-line scripts. Prepends RX_AUTO_ROOT + any extra_env as `export` lines.
     Build param IP_MODE reaches the agent via env -> bash reads it."""
     import base64
-    prefix = f'export RX_AUTO_ROOT="{rx_auto_root}"\n' if rx_auto_root else ""
+    lines = []
+    if rx_auto_root:
+        lines.append(f'export RX_AUTO_ROOT="{rx_auto_root}"')
+    for k, v in (extra_env or {}).items():
+        lines.append(f'export {k}="{v}"')
+    prefix = ("\n".join(lines) + "\n") if lines else ""
     enc = base64.b64encode((prefix + (command or "")).encode()).decode()
     return f"echo {enc} | base64 -d | bash"
 
@@ -113,12 +140,92 @@ def cmd_plan_jobs(cfg):
     else:
         # manual = work-stealing: each job claims split files at runtime (atomic mkdir).
         # No fixed index -> accounts > splits: extra workers idle; accounts < splits: keep claiming.
+        # bs_env injects BS_GROUPS/BS_OS/BS_MEM/RIDE_SETUP so the command submits each file via LSF.
         prefix = dig(cfg, "manual.job_prefix", "job")
         cmd = dig(cfg, "manual.command", "")
+        env = bs_env(cfg)
         for a in cfg.get("accounts", []):
             user = a.get("username", "")
             emit("JOB", f"{prefix}_{user}", base, node_name(base, user), ip, "-",
-                 shell_b64(cmd, root))
+                 shell_b64(cmd, root, env))
+
+
+def _load_setup_vars(cfg_path):
+    """Read setup_vars from rxews_makefile/setup.yaml (next to config.yaml's dir). Empty if missing."""
+    import os
+    d = os.path.dirname(os.path.abspath(cfg_path))
+    sy = os.path.join(d, "rxews_makefile", "setup.yaml")
+    try:
+        return load(sy).get("setup_vars", {}) or {}
+    except FileNotFoundError:
+        return {}
+
+
+def _setup_bash_inner(cfg, cfg_path):
+    """The bash-level part of step 1-2 (runs AFTER RiDE + my_cmd sourced in tcsh):
+       Makefile common changes (S4) on both env dirs -> step-2 make targets.
+    Kept quote-free of single quotes at the tcsh layer by b64-encoding this whole blob."""
+    sv = _load_setup_vars(cfg_path)
+    root = cfg.get("rx_auto_root", "") or sv.get("RX_AUTO_ROOT", "")
+    crt = sv.get("COMMON_RUN_TYPE", "Trunk")
+    ti = sv.get("TRUNK_IP_RXEWS_RUN_DIR_PATH", "")
+    co = sv.get("COMMON_RXEWS_RUN_DIR_PATH", "")
+    tib = sv.get("TRUNK_IP_ENV_BASE", "")
+    cob = sv.get("COMMON_ENV_BASE", "")
+    ddb = sv.get("DASHBOARD_DB_LOCATION", "")
+    rev = sv.get("RIDE_ENV_VER", "")
+    lines = [f'cd "{root}"']
+    # -- Makefile common changes (S4 common) on both env dirs --
+    for d in (ti, co):
+        if d:
+            lines.append(f'sed -i \'s/^\\([ \\t]*OS_TYPE_SETUP[ \\t]*=\\).*/\\1 "RHEL8"/\' "{d}/Makefile"')
+            lines.append(f'sed -i \'s/^\\([ \\t]*RDFS_ALTERNATIVE_CLOCK_GENERATION[ \\t]*=\\).*/\\1 1/\' "{d}/makefile.vars"')
+    # -- step 2: general_setup + auto_setup + server_setup make targets --
+    lines += [
+        f'make setup_run_cmd RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{ti}"',
+        f'make setup_run_cmd RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{co}" RUN_TYPE="{crt}"',
+        f'make setup_check_rp_cmd RX_AUTO_ROOT="{root}"',
+        f'make setup_for_auto RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{ti}"',
+        f'make setup_for_auto RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{co}" RUN_TYPE="{crt}"',
+        f'make gen_dashboard_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="{tib}" RIDE_ENV_VER="{rev}"',
+        f'make gen_dashboard_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="{cob}" RIDE_ENV_VER="{rev}" RUN_TYPE="{crt}"',
+        f'make gen_ticket_panel_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" TRUNK_IP_ENV_PATH="{tib}" COMMON_IP_ENV_PATH="{cob}"',
+        f'make gen_update_dashboard_script RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="{tib}"',
+        f'make gen_update_dashboard_script RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="{cob}" RUN_TYPE="{crt}"',
+        f'make setup_dashboard_sv RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}"',
+    ]
+    return "\n".join(lines)
+
+
+def cmd_plan_setup(cfg, cfg_path):
+    """Emit one JOB line for the rx_setup job (no schedule, no IP_MODE).
+
+    Layering (each layer quote-safe for the next):
+      bee --shell:  echo <OUTER_b64> | base64 -d | bash
+      bash runs:    bs -m "..." -I -os "..." -M "..." tcsh -f -c 'cd ROOT; source ride;
+                      source ./my_cmd; source ./my_cmd_for_common; echo <INNER_b64> | base64 -d | bash'
+      tcsh runs:    csh `source`s (RiDE + my_cmd populate RXEWS) then base64-decodes the bash inner
+      bash inner:   Makefile common mods + step-2 make targets
+
+    The tcsh -c arg is single-quoted and contains ONLY source cmds + base64 chars (no single quotes),
+    so nothing clashes. INNER holds all the double/single quotes safely inside base64."""
+    import base64
+    setup = cfg.get("setup")
+    if not setup:
+        return
+    base = cfg.get("base_name", "RX_AUTO")
+    jn = setup.get("job_name", "rx_setup")
+    user = dig(cfg, "setup.account.username", "")
+    bs = cfg.get("bs") or {}
+    root = cfg.get("rx_auto_root", "") or _load_setup_vars(cfg_path).get("RX_AUTO_ROOT", "")
+    ride = bs.get("ride_setup", "my_ride_setup")
+
+    inner_b64 = base64.b64encode(_setup_bash_inner(cfg, cfg_path).encode()).decode()
+    tcsh_arg = (f'cd {root}; source {root}/{ride}; source ./my_cmd; source ./my_cmd_for_common; '
+                f'echo {inner_b64} | base64 -d | bash')
+    outer = (f'bs -m "{bs.get("host_groups","")}" -I -os "{bs.get("os","")}" '
+             f'-M "{bs.get("mem","")}" tcsh -f -c \'{tcsh_arg}\'')
+    emit("JOB", jn, base, node_name(base, user), "-", "-", shell_b64(outer))
 
 
 def cmd_plan_run(cfg):
@@ -240,6 +347,8 @@ def main():
         cmd_cred_pass(cfg, sys.argv[3])
     elif sub == "plan-jobs":
         cmd_plan_jobs(cfg)
+    elif sub == "plan-setup":
+        cmd_plan_setup(cfg, cfg_path)
     elif sub == "plan-run":
         cmd_plan_run(cfg)
     elif sub == "get":
