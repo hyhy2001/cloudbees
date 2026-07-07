@@ -6,8 +6,10 @@ Subcommands:
   plan-infra     <config.yaml>                          -> emit ACCT lines for provision.csh
   plan-jobs      <config.yaml>                          -> emit FOLDER/JOB lines for deploy.csh
   plan-run       <config.yaml>                          -> emit RUN lines for run.csh
-  plan-prune     <config.yaml> <manifest.yml>           -> emit PRUNE_* lines (stale entries) for deploy.csh
+  plan-prune     <config.yaml> <manifest.yml>           -> emit PRUNE_* lines (destructive: manage prune)
+  plan-stale-jobs <config.yaml> <manifest.yml>          -> emit STALE_JOB lines (deploy clears their schedule)
   prune-manifest <config.yaml> <manifest.yml>           -> drop pruned entries from complete.yml
+  eff-mode/eff-ip <config.yaml>                         -> mode/ip with RXAUTO_MODE/RXAUTO_IP env override
   cred-pass      <config.yaml> <user>                   -> print one account's raw password
   get            <config.yaml> <dotted.key>             -> print one value (e.g. mode, base_name)
   write-manifest <config.yaml> <created.tsv> <out.yml>  -> write complete.yml
@@ -38,10 +40,32 @@ def dig(d, dotted, default=None):
     return cur
 
 
-def host_for(cfg):
-    ip = cfg.get("ip_mode", "common")
+import os
+
+
+def eff_mode(cfg):
+    """mode with RXAUTO_MODE env override (manual|auto)."""
+    return os.environ.get("RXAUTO_MODE") or cfg.get("mode", "manual")
+
+
+def eff_ip(cfg):
+    """ip_mode with RXAUTO_IP env override (common|trunk|all)."""
+    return os.environ.get("RXAUTO_IP") or cfg.get("ip_mode", "common")
+
+
+def ip_list(cfg):
+    """Concrete IPs to act on: all -> [trunk, common], else the single one."""
+    ip = eff_ip(cfg)
+    return ["trunk", "common"] if ip == "all" else [ip]
+
+
+def host_for_ip(cfg, ip):
     node = cfg.get("node", {})
     return node.get("host_trunk" if ip == "trunk" else "host_common", "")
+
+
+def host_for(cfg):
+    return host_for_ip(cfg, ip_list(cfg)[0])
 
 
 def node_name(base, user):
@@ -59,7 +83,7 @@ def infra_accounts(cfg):
     """List of (username, password) needing cred+node, depending on mode.
     The dedicated setup account (setup.account) is appended when a setup: section exists,
     so provision builds its cred+node too (both modes)."""
-    if cfg.get("mode") == "auto":
+    if eff_mode(cfg) == "auto":
         a = dig(cfg, "auto.account", {})
         accts = [(a.get("username", ""), a.get("password", ""))]
     else:
@@ -127,18 +151,21 @@ def cmd_plan_jobs(cfg):
     """Emit: FOLDER<tab>base ; JOB<tab>jobname<tab>folder<tab>node<tab>ip_mode<tab>schedule_b64|-<tab>shell_b64
     shell_b64 is one word (no spaces) -> safe for csh split. (manual needs no index: jobs claim at runtime)"""
     base = cfg.get("base_name", "RX_AUTO")
-    ip = cfg.get("ip_mode", "common")
+    ips = ip_list(cfg)
     root = cfg.get("rx_auto_root", "")
     import base64
     # schedule has spaces (cron) -> b64 into one word; deploy.csh decodes. "-" = no schedule.
     sched_enc = lambda s: base64.b64encode(s.encode()).decode() if s else "-"
     emit("FOLDER", base)
-    if cfg.get("mode") == "auto":
-        jn = dig(cfg, "auto.job_name", "daily")
+    if eff_mode(cfg) == "auto":
+        # ip=all -> one scheduled job per ip (daily_trunk + daily_common); single ip keeps the plain name.
+        jn0 = dig(cfg, "auto.job_name", "daily")
         user = dig(cfg, "auto.account.username", "")
         sched = dig(cfg, "auto.schedule", "")
-        emit("JOB", jn, base, node_name(base, user), ip, sched_enc(sched),
-             shell_b64(dig(cfg, "auto.command", ""), root))
+        for ip in ips:
+            jn = f"{jn0}_{ip}" if len(ips) > 1 else jn0
+            emit("JOB", jn, base, node_name(base, user), ip, sched_enc(sched),
+                 shell_b64(dig(cfg, "auto.command", ""), root))
     else:
         # manual = work-stealing: each job claims split files at runtime (atomic mkdir).
         # No fixed index -> accounts > splits: extra workers idle; accounts < splits: keep claiming.
@@ -146,9 +173,12 @@ def cmd_plan_jobs(cfg):
         prefix = dig(cfg, "manual.job_prefix", "job")
         cmd = dig(cfg, "manual.command", "")
         env = bs_env(cfg)
+        # manual: IP_MODE must be DEFINED on the job (default = first ip) so run.csh can
+        # override it per-ip with -p IP_MODE=... at runtime. ip=all -> default trunk, run does both.
+        ip_def = ips[0]
         for a in cfg.get("accounts", []):
             user = a.get("username", "")
-            emit("JOB", f"{prefix}_{user}", base, node_name(base, user), ip, "-",
+            emit("JOB", f"{prefix}_{user}", base, node_name(base, user), ip_def, "-",
                  shell_b64(cmd, root, env))
 
 
@@ -243,16 +273,16 @@ def cmd_plan_setup(cfg, cfg_path):
 
 def cmd_plan_run(cfg):
     """Emit RUN lines for manual (auto jobs run via schedule, no manual run).
-    RUN<tab>jobname<tab>ip_mode<tab>wait(0|1)"""
-    if cfg.get("mode") == "auto":
+    RUN<tab>jobname<tab>ip_mode<tab>wait(0|1). ip=all -> one RUN per account per ip (trunk+common)."""
+    if eff_mode(cfg) == "auto":
         return  # auto: Jenkins runs it on schedule
     base = cfg.get("base_name", "RX_AUTO")
-    ip = cfg.get("ip_mode", "common")
     prefix = dig(cfg, "manual.job_prefix", "job")
     wait = "1" if dig(cfg, "manual.wait", False) else "0"
     for a in cfg.get("accounts", []):
         user = a.get("username", "")
-        emit("RUN", f"{prefix}_{user}", ip, wait)
+        for ip in ip_list(cfg):
+            emit("RUN", f"{prefix}_{user}", ip, wait)
 
 
 def _desired_sets(cfg):
@@ -261,9 +291,12 @@ def _desired_sets(cfg):
     base = cfg.get("base_name", "RX_AUTO")
     users = [u for u, _ in infra_accounts(cfg) if u]
     nodes = {node_name(base, u) for u in users}
+    ips = ip_list(cfg)
     jobs = set()
-    if cfg.get("mode") == "auto":
-        jobs.add(f"{base}/{dig(cfg, 'auto.job_name', 'daily')}")
+    if eff_mode(cfg) == "auto":
+        jn0 = dig(cfg, "auto.job_name", "daily")
+        for ip in ips:
+            jobs.add(f"{base}/{jn0}_{ip}" if len(ips) > 1 else f"{base}/{jn0}")
     else:
         prefix = dig(cfg, "manual.job_prefix", "job")
         for a in cfg.get("accounts", []):
@@ -272,6 +305,20 @@ def _desired_sets(cfg):
     if cfg.get("setup"):
         jobs.add(f"{base}/{dig(cfg, 'setup.job_name', 'rx_setup')}")
     return jobs, nodes, set(users)
+
+
+def cmd_plan_stale_jobs(cfg, manifest_path):
+    """Emit STALE_JOB <folder/job> for manifest jobs the current plan no longer includes.
+    deploy.csh clears their schedule (bee job update --schedule '') to KEEP the job but disable
+    its timer - e.g. auto->manual leaves daily_* around but stops it firing. Non-destructive."""
+    try:
+        m = load(manifest_path)
+    except FileNotFoundError:
+        return
+    want_jobs, _, _ = _desired_sets(cfg)
+    for j in (m.get("jobs") or []):
+        if j not in want_jobs:
+            emit("STALE_JOB", j)
 
 
 def cmd_plan_prune(cfg, manifest_path):
@@ -431,8 +478,14 @@ def main():
         cmd_plan_run(cfg)
     elif sub == "plan-prune":
         cmd_plan_prune(cfg, sys.argv[3])
+    elif sub == "plan-stale-jobs":
+        cmd_plan_stale_jobs(cfg, sys.argv[3])
     elif sub == "prune-manifest":
         cmd_prune_manifest(cfg, sys.argv[3])
+    elif sub == "eff-mode":
+        print(eff_mode(cfg))
+    elif sub == "eff-ip":
+        print(eff_ip(cfg))
     elif sub == "get":
         print(dig(cfg, sys.argv[3], "") if len(sys.argv) > 3 else "")
     elif sub == "write-manifest":

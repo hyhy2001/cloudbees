@@ -10,37 +10,21 @@ if ( "$1" == "--dry-run" ) set DRY = 1
 set CREATED = "$AUTO_DIR/.created.jobs.tsv"
 rm -f "$CREATED"
 
-# -- PRUNE: delete infra the current config no longer wants (e.g. after manual->auto switch).
-# plan-prune reads the manifest: PRUNE_JOB <folder/job> | PRUNE_NODE <node> | PRUNE_CRED <cred-id>.
-# Delete order: job -> node -> cred (folder is never pruned). Then rewrite the manifest.
+# -- STALE JOBS: jobs in the manifest the current plan no longer includes (e.g. auto->manual).
+# We KEEP the job (and its node/cred) but clear its schedule so its timer stops firing.
+# `bee job update freestyle --schedule ''` removes the cron trigger without deleting the job.
+# Destructive removal is a separate opt-in step: manage.csh prune.
 if ( -e "$MANIFEST" ) then
-  set pruned = 0
-  foreach line ("`$PY plan-prune $CONFIG $MANIFEST`")
+  foreach line ("`$PY plan-stale-jobs $CONFIG $MANIFEST`")
     set p = ($line)
-    if ( "$p[1]" == "PRUNE_JOB" ) then
-      set pruned = 1
-      if ( $?DRY ) then
-        echo "[dry] $BEE job delete $p[2] --yes"
-      else
-        echo "prune job $p[2]" ; "$BEE" job delete "$p[2]" --yes
-      endif
-    else if ( "$p[1]" == "PRUNE_NODE" ) then
-      set pruned = 1
-      if ( $?DRY ) then
-        echo "[dry] $BEE node delete $p[2] --yes"
-      else
-        echo "prune node $p[2]" ; "$BEE" node delete "$p[2]" --yes
-      endif
-    else if ( "$p[1]" == "PRUNE_CRED" ) then
-      set pruned = 1
-      if ( $?DRY ) then
-        echo "[dry] $BEE cred delete $p[2] --yes"
-      else
-        echo "prune cred $p[2]" ; "$BEE" cred delete "$p[2]" --yes
-      endif
+    if ( "$p[1]" != "STALE_JOB" ) continue
+    if ( $?DRY ) then
+      echo "[dry] $BEE job update freestyle $p[2] --schedule '' (keep job, stop timer)"
+    else
+      echo "stale $p[2] - clear schedule (job kept)"
+      "$BEE" job update freestyle "$p[2]" --schedule ""
     endif
   end
-  if ( $pruned && ! $?DRY ) $PY prune-manifest $CONFIG $MANIFEST
 endif
 
 # plan-jobs: FOLDER <base> | JOB <name> <folder> <node> <ip> <sched_b64|-> <shell_b64>
@@ -83,7 +67,7 @@ foreach line ("`$PY plan-jobs $CONFIG ; $PY plan-setup $CONFIG`")
       endif
     else
       if ( $exists ) then
-        echo "job $jn: exists -> update"
+        echo "job ${jn}: exists -> update"
         if ( "$ip" != "-" ) then
           "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "IP_MODE=$ip"
         else
@@ -109,4 +93,4 @@ if ( ! $?DRY && -e "$CREATED" ) then
   $PY merge-jobs $MANIFEST "$CREATED"
   rm -f "$CREATED"
 endif
-echo "== deploy done. mode=`$PY get $CONFIG mode`. Next: run.csh (manual) or wait for schedule (auto) =="
+echo "== deploy done. mode=`$PY eff-mode $CONFIG` ip=`$PY eff-ip $CONFIG`. Next: run.csh (manual) or wait for schedule (auto) =="

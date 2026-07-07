@@ -7,7 +7,7 @@ set AUTO_DIR = `dirname $0`
 source "$AUTO_DIR/lib.csh"
 if ( "$1" == "--dry-run" ) set DRY = 1
 
-set mode = "`$PY get $CONFIG mode`"
+set mode = "`$PY eff-mode $CONFIG`"
 if ( "$mode" == "auto" ) then
   echo "mode=auto -> job runs via --schedule on Jenkins, no manual run. (see deploy.csh)"
   exit 0

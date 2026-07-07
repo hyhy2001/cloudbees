@@ -80,11 +80,14 @@ A single entry point `../rxauto.sh` (sits OUTSIDE auto_env, next to `bee`) auto-
 rxauto.sh provision            # -> auto_env/provision.csh
 rxauto.sh deploy               # -> auto_env/deploy.csh
 rxauto.sh run                  # -> auto_env/run.csh
-rxauto.sh manage list          # -> auto_env/manage.csh
+rxauto.sh manage list          # -> auto_env/manage.csh (list|run|teardown|prune)
+rxauto.sh prune                # -> manage.csh prune (delete stale infra, opt-in)
 rxauto.sh setup all --dry-run  # -> auto_env/scripts/setup_all.bash
 rxauto.sh all                  # provision -> deploy -> run
 rxauto.sh bee <args...>        # raw bee passthrough
 ```
+
+Add `--mode manual|auto` / `--ip common|trunk|all` to any command to override config for that run.
 
 It exports `BEE` from the detected dir. Override detection with `RXAUTO_CB=/path/to/.../Cloudbees`.
 Or call the scripts directly:
@@ -103,13 +106,37 @@ csh manage.csh list           # show what was created
 csh manage.csh teardown       # delete job -> node -> cred -> folder
 ```
 
-Switching common<->trunk for **manual** later: `bee job run -p IP_MODE=...` (build param, no redeploy).
-For **auto**, IP_MODE is baked as the job default at create time -> to change it, re-run `deploy.csh`.
+### Switch mode/ip without editing config: `--mode` / `--ip`
 
-Switching **manual<->auto**: just edit `mode` in config, then `provision.csh` + `deploy.csh`.
-`provision` merges the manifest (keeps old entries); `deploy` then **prunes** the infra the new
-mode no longer wants (old `build_*` jobs + their nodes/creds), so no orphans are left on the
-controller. `rx_setup` + its account survive (shared by both modes). Preview with `deploy.csh --dry-run`.
+`rxauto.sh` takes `--mode manual|auto` and `--ip common|trunk|all` (anywhere in the args); they
+override `mode`/`ip_mode` in config for that one command (via env `RXAUTO_MODE`/`RXAUTO_IP`).
+
+```bash
+rxauto.sh deploy --mode auto --ip all   # 2 scheduled jobs: daily_trunk + daily_common
+rxauto.sh run --ip all                  # manual: run each build_* for BOTH trunk + common
+rxauto.sh deploy --mode manual          # back to manual
+```
+
+`--ip all`: manual -> `run` fires each job for trunk AND common; auto -> deploy makes one scheduled
+job per ip (`daily_trunk`, `daily_common`) since a scheduled job bakes a single IP_MODE.
+
+### Switching manual<->auto keeps the other mode's jobs
+
+`deploy` never deletes jobs. When you switch mode, the jobs of the OTHER mode become "stale" and
+deploy just **clears their schedule** (`bee job update --schedule ''`) - the job stays on the
+controller, only its timer stops. So auto->manual leaves `daily_*` around (idle), manual->auto
+leaves `build_*` around. Flip back later and `deploy` re-attaches everything.
+
+To actually DELETE what the current config no longer wants (jobs + their nodes/creds; folder and
+`rx_setup` kept), run the opt-in destructive step:
+
+```bash
+rxauto.sh prune --dry-run   # preview deletes
+rxauto.sh prune             # delete stale jobs/nodes/creds, rewrite the manifest
+```
+
+Switching common<->trunk within a mode: **manual** just needs `rxauto.sh run --ip ...` (IP_MODE is a
+runtime param); **auto** bakes IP_MODE at create time, so re-run `rxauto.sh deploy --ip ...`.
 
 ## Step-by-step: setup -> provision -> deploy -> run (all 4 combos)
 
@@ -202,8 +229,8 @@ Runs `./02_go_rx_auto.bash` on schedule.
 | auto/common   | (already) | reused | redeploy | schedule -> `02_go_rx_auto` |
 
 Key: setup is shared (once, both IPs); trunk vs common only differs at run/schedule (`01_*` vs `02_*`);
-manual changes IP with `run`, auto needs a `deploy`; changing **mode** = edit `mode` -> `provision` ->
-`deploy` (deploy self-prunes the old infra).
+manual changes IP with `run`, auto needs a `deploy`; changing **mode** = `deploy --mode ...` (keeps
+the other mode's jobs, just clears their schedule; `rxauto.sh prune` deletes them if you want).
 
 ## Avoiding name clashes
 
