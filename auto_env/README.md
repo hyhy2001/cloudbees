@@ -73,6 +73,22 @@ config.yaml
 
 ## Run it
 
+A single entry point `../rxauto.sh` (sits OUTSIDE auto_env, next to `bee`) auto-detects the
+`RX_AUTO/UTLs/Cloudbees` dir and dispatches into this package:
+
+```bash
+rxauto.sh provision            # -> auto_env/provision.csh
+rxauto.sh deploy               # -> auto_env/deploy.csh
+rxauto.sh run                  # -> auto_env/run.csh
+rxauto.sh manage list          # -> auto_env/manage.csh
+rxauto.sh setup all --dry-run  # -> auto_env/scripts/setup_all.bash
+rxauto.sh all                  # provision -> deploy -> run
+rxauto.sh bee <args...>        # raw bee passthrough
+```
+
+It exports `BEE` from the detected dir. Override detection with `RXAUTO_CB=/path/to/.../Cloudbees`.
+Or call the scripts directly:
+
 ```bash
 # 0) RX AUTO step 1-2 (outside CloudBees, once) - edit rxews_makefile/setup.yaml first
 bash scripts/setup_all.bash all --dry-run   # preview make + S4 mods
