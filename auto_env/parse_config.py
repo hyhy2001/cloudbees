@@ -6,6 +6,8 @@ Subcommands:
   plan-infra     <config.yaml>                          -> emit ACCT lines for provision.csh
   plan-jobs      <config.yaml>                          -> emit FOLDER/JOB lines for deploy.csh
   plan-run       <config.yaml>                          -> emit RUN lines for run.csh
+  plan-prune     <config.yaml> <manifest.yml>           -> emit PRUNE_* lines (stale entries) for deploy.csh
+  prune-manifest <config.yaml> <manifest.yml>           -> drop pruned entries from complete.yml
   cred-pass      <config.yaml> <user>                   -> print one account's raw password
   get            <config.yaml> <dotted.key>             -> print one value (e.g. mode, base_name)
   write-manifest <config.yaml> <created.tsv> <out.yml>  -> write complete.yml
@@ -253,6 +255,60 @@ def cmd_plan_run(cfg):
         emit("RUN", f"{prefix}_{user}", ip, wait)
 
 
+def _desired_sets(cfg):
+    """What the CURRENT config wants to exist: (jobs {folder/name}, nodes, cred usernames).
+    Used by prune to find stale manifest entries after a mode/account change."""
+    base = cfg.get("base_name", "RX_AUTO")
+    users = [u for u, _ in infra_accounts(cfg) if u]
+    nodes = {node_name(base, u) for u in users}
+    jobs = set()
+    if cfg.get("mode") == "auto":
+        jobs.add(f"{base}/{dig(cfg, 'auto.job_name', 'daily')}")
+    else:
+        prefix = dig(cfg, "manual.job_prefix", "job")
+        for a in cfg.get("accounts", []):
+            if a.get("username"):
+                jobs.add(f"{base}/{prefix}_{a['username']}")
+    if cfg.get("setup"):
+        jobs.add(f"{base}/{dig(cfg, 'setup.job_name', 'rx_setup')}")
+    return jobs, nodes, set(users)
+
+
+def cmd_plan_prune(cfg, manifest_path):
+    """Emit delete lines for manifest entries the current config no longer wants:
+       PRUNE_JOB <folder/job> | PRUNE_NODE <node> | PRUNE_CRED <cred-id>
+    (folder is never pruned). deploy.csh runs these via bee, then calls prune-manifest."""
+    try:
+        m = load(manifest_path)
+    except FileNotFoundError:
+        return
+    want_jobs, want_nodes, want_users = _desired_sets(cfg)
+    for j in (m.get("jobs") or []):
+        if j not in want_jobs:
+            emit("PRUNE_JOB", j)
+    for n in (m.get("nodes") or []):
+        if n not in want_nodes:
+            emit("PRUNE_NODE", n)
+    for c in (m.get("credentials") or []):
+        if c.get("username") not in want_users:
+            emit("PRUNE_CRED", c.get("cred_id", ""))
+
+
+def cmd_prune_manifest(cfg, manifest_path):
+    """Rewrite the manifest keeping only entries the current config still wants (drop pruned)."""
+    try:
+        m = load(manifest_path)
+    except FileNotFoundError:
+        return
+    want_jobs, want_nodes, want_users = _desired_sets(cfg)
+    m["jobs"] = [j for j in (m.get("jobs") or []) if j in want_jobs]
+    m["nodes"] = [n for n in (m.get("nodes") or []) if n in want_nodes]
+    m["credentials"] = [c for c in (m.get("credentials") or []) if c.get("username") in want_users]
+    with open(manifest_path, "w") as f:
+        yaml.safe_dump(m, f, sort_keys=False, allow_unicode=True)
+    print(f"manifest pruned: {len(m['credentials'])} cred, {len(m['nodes'])} node, {len(m['jobs'])} job")
+
+
 def cmd_write_manifest(cfg, created_tsv, out):
     """created.tsv: lines successfully created by provision/deploy, in the form:
        cred<tab>user<tab>cred_id | node<tab>name | folder<tab>name | job<tab>name
@@ -275,19 +331,30 @@ def cmd_write_manifest(cfg, created_tsv, out):
                     jobs.append(parts[1])
     except FileNotFoundError:
         pass
+    # merge with existing manifest so switching mode (manual<->auto) keeps the OLD
+    # cred/node/job entries around -> deploy's prune step can then delete the stale ones.
+    try:
+        old = load(out)
+    except FileNotFoundError:
+        old = {}
+    cred_map = {c.get("username"): c for c in (old.get("credentials") or [])}
+    for c in creds:
+        cred_map[c["username"]] = c   # new cred-id wins for an existing user
+    merged_nodes = list(dict.fromkeys((old.get("nodes") or []) + nodes))
+    merged_jobs = list(dict.fromkeys((old.get("jobs") or []) + jobs))
     manifest = {
         "base_name": cfg.get("base_name", "RX_AUTO"),
         "mode": cfg.get("mode", "manual"),
         "ip_mode": cfg.get("ip_mode", "common"),
         "created_at": datetime.datetime.now().isoformat(timespec="seconds"),
         "folder": folders[0] if folders else cfg.get("base_name", "RX_AUTO"),
-        "credentials": creds,
-        "nodes": nodes,
-        "jobs": jobs,
+        "credentials": list(cred_map.values()),
+        "nodes": merged_nodes,
+        "jobs": merged_jobs,
     }
     with open(out, "w") as f:
         yaml.safe_dump(manifest, f, sort_keys=False, allow_unicode=True)
-    print(f"wrote {out}: {len(creds)} cred, {len(nodes)} node, {len(jobs)} job")
+    print(f"wrote {out}: {len(manifest['credentials'])} cred, {len(merged_nodes)} node, {len(merged_jobs)} job")
 
 
 def cmd_manifest_cred(manifest_path, user):
@@ -362,6 +429,10 @@ def main():
         cmd_plan_setup(cfg, cfg_path)
     elif sub == "plan-run":
         cmd_plan_run(cfg)
+    elif sub == "plan-prune":
+        cmd_plan_prune(cfg, sys.argv[3])
+    elif sub == "prune-manifest":
+        cmd_prune_manifest(cfg, sys.argv[3])
     elif sub == "get":
         print(dig(cfg, sys.argv[3], "") if len(sys.argv) > 3 else "")
     elif sub == "write-manifest":

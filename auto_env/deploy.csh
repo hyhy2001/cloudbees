@@ -10,6 +10,39 @@ if ( "$1" == "--dry-run" ) set DRY = 1
 set CREATED = "$AUTO_DIR/.created.jobs.tsv"
 rm -f "$CREATED"
 
+# -- PRUNE: delete infra the current config no longer wants (e.g. after manual->auto switch).
+# plan-prune reads the manifest: PRUNE_JOB <folder/job> | PRUNE_NODE <node> | PRUNE_CRED <cred-id>.
+# Delete order: job -> node -> cred (folder is never pruned). Then rewrite the manifest.
+if ( -e "$MANIFEST" ) then
+  set pruned = 0
+  foreach line ("`$PY plan-prune $CONFIG $MANIFEST`")
+    set p = ($line)
+    if ( "$p[1]" == "PRUNE_JOB" ) then
+      set pruned = 1
+      if ( $?DRY ) then
+        echo "[dry] $BEE job delete $p[2] --yes"
+      else
+        echo "prune job $p[2]" ; "$BEE" job delete "$p[2]" --yes
+      endif
+    else if ( "$p[1]" == "PRUNE_NODE" ) then
+      set pruned = 1
+      if ( $?DRY ) then
+        echo "[dry] $BEE node delete $p[2] --yes"
+      else
+        echo "prune node $p[2]" ; "$BEE" node delete "$p[2]" --yes
+      endif
+    else if ( "$p[1]" == "PRUNE_CRED" ) then
+      set pruned = 1
+      if ( $?DRY ) then
+        echo "[dry] $BEE cred delete $p[2] --yes"
+      else
+        echo "prune cred $p[2]" ; "$BEE" cred delete "$p[2]" --yes
+      endif
+    endif
+  end
+  if ( $pruned && ! $?DRY ) $PY prune-manifest $CONFIG $MANIFEST
+endif
+
 # plan-jobs: FOLDER <base> | JOB <name> <folder> <node> <ip> <sched_b64|-> <shell_b64>
 # plan-setup: appends the rx_setup JOB line (ip="-" -> no IP_MODE param, sched="-" -> no schedule).
 foreach line ("`$PY plan-jobs $CONFIG ; $PY plan-setup $CONFIG`")
