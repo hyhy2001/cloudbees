@@ -60,9 +60,9 @@ case "$cmd" in
   prune)                       exec csh "$AUTO/manage.csh" prune "$@" ;;
   setup)                       exec bash "$AUTO/scripts/setup_all.bash" "$@" ;;
   bee)                         exec "${BEE:-$CB/bee}" "$@" ;;
-  all)                         csh "$AUTO/provision.csh" "$@"
-                               csh "$AUTO/deploy.csh"
-                               exec csh "$AUTO/run.csh" ;;
+  all)                         csh "$AUTO/provision.csh" "$@" || { echo "rxauto: provision failed (rc=$?), aborting deploy/run" >&2; exit 1; }
+                               csh "$AUTO/deploy.csh" "$@" || { echo "rxauto: deploy failed (rc=$?), aborting run" >&2; exit 1; }
+                               exec csh "$AUTO/run.csh" "$@" ;;
   ""|-h|--help|help)
     sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     echo "detected CB=$CB" ;;
