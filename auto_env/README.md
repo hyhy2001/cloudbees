@@ -65,7 +65,7 @@ quotes never clash with the single-quoted `tcsh -c` argument. This is an alterna
 config.yaml  0) setup_all.bash    RX AUTO step 1-2 - OUTSIDE CloudBees, once
    |         (or the rx_setup bee job)
    |  1) provision.csh   folder -> cred + node   (built rarely; cred/node reused)
-   |  2) deploy.csh      create/update step-3 jobs (rx_run work-stealing / go_rx_auto)
+   |  2) deploy.csh      prune stale infra (mode switch) + create/update step-3 jobs
    |  3) run.csh         manual: bee job run -p IP_MODE=...   (auto: waits for schedule)
    `-- complete.yml       manifest: base_name, REAL cred-id (bee-generated), nodes, jobs
       manage.csh list|run|teardown   <- operate again from the manifest
@@ -105,6 +105,11 @@ csh manage.csh teardown       # delete job -> node -> cred -> folder
 
 Switching common<->trunk for **manual** later: `bee job run -p IP_MODE=...` (build param, no redeploy).
 For **auto**, IP_MODE is baked as the job default at create time -> to change it, re-run `deploy.csh`.
+
+Switching **manual<->auto**: just edit `mode` in config, then `provision.csh` + `deploy.csh`.
+`provision` merges the manifest (keeps old entries); `deploy` then **prunes** the infra the new
+mode no longer wants (old `build_*` jobs + their nodes/creds), so no orphans are left on the
+controller. `rx_setup` + its account survive (shared by both modes). Preview with `deploy.csh --dry-run`.
 
 ## Avoiding name clashes
 
