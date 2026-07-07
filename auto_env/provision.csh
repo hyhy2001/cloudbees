@@ -45,14 +45,20 @@ foreach line ("`$PY plan-infra $CONFIG`")
     echo "[dry] $BEE cred create --username $user --password *** --description '$BASE $user'"
     set cid = "DRY_CRED_$user"
   else
-    # password read raw (no word-split); bee generates a UUID -> capture it from stdout
-    set pass = "`$PY cred-pass $CONFIG $user`"
-    set out = "`$BEE cred create --username $user --password $pass:q --description $BASE:q`"
-    set cid = "`echo $out | sed -n 's/.*Credential .\([^ ]*\). created.*/\1/p'`"
-    if ( "$cid" == "" ) then
-      echo "ERROR: could not capture cred-id for $user. Output: $out" ; exit 1
+    # deterministic cred-id (--id): we set it to the node name, so no fragile stdout parsing.
+    set cid = "$nname"
+    # idempotent: skip create if a cred with this id already exists (manifest may have been lost).
+    "$BEE" cred get "$cid" >& /dev/null
+    if ( $status == 0 ) then
+      echo "cred ${user}: exists -> reuse $cid"
+    else
+      set pass = "`$PY cred-pass $CONFIG $user`"   # password read raw (no word-split)
+      "$BEE" cred create --id "$cid" --username "$user" --password $pass:q --description $BASE:q
+      if ( $status != 0 ) then
+        echo "ERROR: failed to create cred $cid for $user" >& /dev/stderr ; exit 1
+      endif
+      echo "cred $user -> $cid"
     endif
-    echo "cred $user -> $cid"
   endif
   if ( ! $?DRY ) then
     echo "cred	$user	$cid" >> "$CREATED"

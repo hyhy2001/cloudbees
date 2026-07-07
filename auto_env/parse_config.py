@@ -78,6 +78,27 @@ def emit(*fields):
     print("\t".join(str(f) for f in fields))
 
 
+def _check_no_space(cfg):
+    """csh reads our TSV lines with `foreach`/`set f = ($line)`, which word-splits on ANY
+    whitespace - so fields that land in a space-split position MUST be space-free. Validate the
+    config-derived names up front and fail with a clear message instead of silently mis-parsing."""
+    checks = [
+        ("base_name", cfg.get("base_name", "RX_AUTO")),
+        ("manual.job_prefix", dig(cfg, "manual.job_prefix", "job")),
+        ("auto.job_name", dig(cfg, "auto.job_name", "")),
+        ("setup.job_name", dig(cfg, "setup.job_name", "")),
+        ("node.remote_dir_base", dig(cfg, "node.remote_dir_base", "")),
+        ("node.host_common", dig(cfg, "node.host_common", "")),
+        ("node.host_trunk", dig(cfg, "node.host_trunk", "")),
+    ]
+    for user, _ in infra_accounts(cfg):
+        checks.append(("account username", user))
+    bad = [f"{name}={val!r}" for name, val in checks if val and " " in str(val)]
+    if bad:
+        sys.exit("config error: these fields must not contain spaces (csh word-splits them):\n  "
+                 + "\n  ".join(bad))
+
+
 # -- accounts by mode ------------------------------------------------
 def infra_accounts(cfg):
     """List of (username, password) needing cred+node, depending on mode.
@@ -100,6 +121,7 @@ def cmd_plan_infra(cfg):
     """Emit one line per account, ONLY space-free fields (safe for csh word-split):
        ACCT<tab>user<tab>nodename<tab>host<tab>port<tab>remotedir<tab>executors
     Password fetched separately via `cred-pass` (printed raw, not word-split)."""
+    _check_no_space(cfg)
     base = cfg.get("base_name", "RX_AUTO")
     node = cfg.get("node", {})
     host = host_for(cfg)
@@ -158,6 +180,7 @@ def shell_b64(command, rx_auto_root="", extra_env=None):
 def cmd_plan_jobs(cfg):
     """Emit: FOLDER<tab>base ; JOB<tab>jobname<tab>folder<tab>node<tab>ip_mode<tab>schedule_b64|-<tab>shell_b64
     shell_b64 is one word (no spaces) -> safe for csh split. (manual needs no index: jobs claim at runtime)"""
+    _check_no_space(cfg)
     base = cfg.get("base_name", "RX_AUTO")
     ips = ip_list(cfg)
     root = cfg.get("rx_auto_root", "")
