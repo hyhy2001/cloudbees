@@ -111,6 +111,100 @@ Switching **manual<->auto**: just edit `mode` in config, then `provision.csh` + 
 mode no longer wants (old `build_*` jobs + their nodes/creds), so no orphans are left on the
 controller. `rx_setup` + its account survive (shared by both modes). Preview with `deploy.csh --dry-run`.
 
+## Step-by-step: setup -> provision -> deploy -> run (all 4 combos)
+
+Two facts that make the combos simple:
+- **setup (step 1-2) covers BOTH trunk + common at once** - it applies the Makefile mods to both env
+  dirs and runs the `make` targets for both. It does NOT care about `ip_mode`; run it **once**.
+- **only run (step 3) splits trunk vs common** via `IP_MODE`: `trunk` -> `01_*`, `common` -> `02_*`.
+
+So step 0-1-2 are identical everywhere; only `mode`/`ip_mode` in config and the final trigger differ.
+
+### Common to every combo - setup once
+
+```bash
+# prereq: bee auth login + controller selected; config.yaml has rx_auto_root,
+#         setup.vars (2 RXEWS dirs + ENV_BASE + DASHBOARD_DB), bs: block
+rxauto.sh setup all --dry-run   # preview
+rxauto.sh setup all             # Makefile mods (both dirs) + make general/auto/server
+```
+
+### 1. manual + trunk
+
+```yaml
+mode: manual
+ip_mode: trunk
+accounts: [ user01, user02, ... ]   # N workers
+```
+```bash
+rxauto.sh provision   # N cred + N node (RX_AUTO_userXX) + setup node
+rxauto.sh deploy      # N job build_userXX + rx_setup
+rxauto.sh run         # bee job run build_* -p IP_MODE=trunk
+```
+Each job claims `SUBMIT_LIST/NORMAL/normal_submit_module_list_*` (atomic mkdir), submits via
+`bs ... tcsh -c "source ride; bash 01_rx_run_ip_unit.bash <file>"`.
+
+### 2. manual + common
+
+Same config as (1), just:
+```yaml
+ip_mode: common
+```
+```bash
+rxauto.sh provision   # cred/node reused if already built
+rxauto.sh deploy
+rxauto.sh run         # -p IP_MODE=common
+```
+Claims `SUBMIT_LIST/COMMON/common_submit_module_list_*`, runs `02_rx_run_common_ip_unit.bash`.
+
+> Switching trunk<->common for **manual**: IP_MODE is a build param -> just edit `ip_mode` and
+> `rxauto.sh run` again. **No redeploy.**
+
+### 3. auto + trunk
+
+```yaml
+mode: auto
+ip_mode: trunk
+auto:
+  account: { username: user11, password: ... }
+  job_name: daily
+  schedule: "H/30 * * * *"
+```
+```bash
+rxauto.sh provision   # 1 cred + 1 node for user11 (+ setup node)
+rxauto.sh deploy      # job daily, --param-def IP_MODE=trunk, --schedule
+# no run - the job fires on its schedule
+```
+Runs `cd RX_AUTO; ./01_go_rx_auto.bash` (orchestrator: detect -> queue -> run).
+
+### 4. auto + common
+
+Same as (3), just:
+```yaml
+ip_mode: common
+```
+```bash
+rxauto.sh provision
+rxauto.sh deploy      # IP_MODE=common baked as the job default
+```
+Runs `./02_go_rx_auto.bash` on schedule.
+
+> Switching trunk<->common for **auto**: IP_MODE is baked as the job default at create time ->
+> edit `ip_mode` and **`rxauto.sh deploy` again** (not just run).
+
+### Summary
+
+| combo | setup | provision | deploy | trigger |
+|---|---|---|---|---|
+| manual/trunk  | `setup all` | N cred+node | N `build_*` | `run` -> IP_MODE=trunk -> `01_rx_run` |
+| manual/common | (already) | reused | update | `run` -> IP_MODE=common -> `02_rx_run` |
+| auto/trunk    | `setup all` | 1 cred+node | `daily` + schedule | schedule -> `01_go_rx_auto` |
+| auto/common   | (already) | reused | redeploy | schedule -> `02_go_rx_auto` |
+
+Key: setup is shared (once, both IPs); trunk vs common only differs at run/schedule (`01_*` vs `02_*`);
+manual changes IP with `run`, auto needs a `deploy`; changing **mode** = edit `mode` -> `provision` ->
+`deploy` (deploy self-prunes the old infra).
+
 ## Avoiding name clashes
 
 Change `base_name` in config each round (e.g. `RX_AUTO` -> `RX_AUTO_v2`). Folder/node/job all use it as
