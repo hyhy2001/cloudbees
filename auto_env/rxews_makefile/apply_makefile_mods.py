@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Apply RXEWS Makefile modifications (guide S4, COMMON CHANGES ONLY) - prerequisite step 1.
-Reads setup.yaml: env dir paths from setup_vars, changes from makefile_common_changes.
+Reads ../config.yaml: env dir paths from setup.vars, changes from setup.makefile_common_changes.
 
-    apply_makefile_mods.py [setup.yaml] [--dry-run]
-    apply_makefile_mods.py emit-vars [setup.yaml]   # print setup_vars as KEY=VALUE for setup_all.bash
+    apply_makefile_mods.py [config.yaml] [--dry-run]
+    apply_makefile_mods.py emit-vars [config.yaml]   # print setup.vars as KEY=VALUE for setup_all.bash
 
 Applied to BOTH env dirs (TRUNK_IP_RXEWS_RUN_DIR_PATH + COMMON_RXEWS_RUN_DIR_PATH).
 Rule: empty new "" -> leave that variable unchanged (skip). Only variables with a value are applied.
@@ -21,6 +21,19 @@ except ImportError:
 def load(p):
     with open(p) as f:
         return yaml.safe_load(f) or {}
+
+
+def default_cfg():
+    return os.path.join(os.path.dirname(__file__), "..", "config.yaml")
+
+
+def setup_vars(cfg):
+    """S2 env vars from setup.vars + RX_AUTO_ROOT injected from top-level rx_auto_root."""
+    sv = dict((cfg.get("setup") or {}).get("vars", {}) or {})
+    root = cfg.get("rx_auto_root", "")
+    if root and not sv.get("RX_AUTO_ROOT"):
+        sv["RX_AUTO_ROOT"] = root
+    return sv
 
 
 def backup(path, made, dry):
@@ -79,8 +92,8 @@ def apply_file(path, changes, made, dry):
 
 
 def emit_vars(cfg_path):
-    """Print setup_vars as KEY=VALUE for setup_all.bash to eval (only variables with a value)."""
-    sv = load(cfg_path).get("setup_vars", {})
+    """Print setup.vars as KEY=VALUE for setup_all.bash to eval (only variables with a value)."""
+    sv = setup_vars(load(cfg_path))
     for k, v in sv.items():
         v = str(v) if v is not None else ""
         if v.strip() == "":
@@ -90,17 +103,17 @@ def emit_vars(cfg_path):
 
 def main():
     if len(sys.argv) >= 2 and sys.argv[1] == "emit-vars":
-        cfg = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(__file__), "setup.yaml")
+        cfg = sys.argv[2] if len(sys.argv) > 2 else default_cfg()
         emit_vars(cfg)
         return
 
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     dry = "--dry-run" in sys.argv
-    cfg_path = args[0] if args else os.path.join(os.path.dirname(__file__), "setup.yaml")
+    cfg_path = args[0] if args else default_cfg()
     cfg = load(cfg_path)
-    sv = cfg.get("setup_vars", {})
+    sv = setup_vars(cfg)
     by_file = {}
-    for c in (cfg.get("makefile_common_changes") or []):
+    for c in ((cfg.get("setup") or {}).get("makefile_common_changes") or []):
         by_file.setdefault(c["file"], []).append((c["var"], c.get("new", "")))
 
     trunk = str(sv.get("TRUNK_IP_RXEWS_RUN_DIR_PATH", "")).strip().rstrip("/")

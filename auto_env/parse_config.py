@@ -150,23 +150,30 @@ def cmd_plan_jobs(cfg):
                  shell_b64(cmd, root, env))
 
 
-def _load_setup_vars(cfg_path):
-    """Read setup_vars from rxews_makefile/setup.yaml (next to config.yaml's dir). Empty if missing."""
-    import os
-    d = os.path.dirname(os.path.abspath(cfg_path))
-    sy = os.path.join(d, "rxews_makefile", "setup.yaml")
-    try:
-        return load(sy).get("setup_vars", {}) or {}
-    except FileNotFoundError:
-        return {}
+def _load_setup_vars(cfg):
+    """S2 env vars from setup.vars, with RX_AUTO_ROOT injected from the top-level rx_auto_root."""
+    sv = dict(dig(cfg, "setup.vars", {}) or {})
+    root = cfg.get("rx_auto_root", "")
+    if root and not sv.get("RX_AUTO_ROOT"):
+        sv["RX_AUTO_ROOT"] = root
+    return sv
 
 
-def _setup_bash_inner(cfg, cfg_path):
+def _sed_change(env_dir, ch):
+    """One idempotent sed line for a makefile_common_changes entry (RHS replace). Skip empty new."""
+    var, new, fname = ch.get("var", ""), str(ch.get("new", "")), ch.get("file", "")
+    if not var or new.strip() == "" or not fname:
+        return None
+    esc = new.replace("/", r"\/")   # new may contain quotes -> keep inside single-quoted sed
+    return (f'sed -i \'s/^\\([ \\t]*{var}[ \\t]*=\\).*/\\1 {esc}/\' "{env_dir}/{fname}"')
+
+
+def _setup_bash_inner(cfg):
     """The bash-level part of step 1-2 (runs AFTER RiDE + my_cmd sourced in tcsh):
        Makefile common changes (S4) on both env dirs -> step-2 make targets.
     Kept quote-free of single quotes at the tcsh layer by b64-encoding this whole blob."""
-    sv = _load_setup_vars(cfg_path)
-    root = cfg.get("rx_auto_root", "") or sv.get("RX_AUTO_ROOT", "")
+    sv = _load_setup_vars(cfg)
+    root = sv.get("RX_AUTO_ROOT", "")
     crt = sv.get("COMMON_RUN_TYPE", "Trunk")
     ti = sv.get("TRUNK_IP_RXEWS_RUN_DIR_PATH", "")
     co = sv.get("COMMON_RXEWS_RUN_DIR_PATH", "")
@@ -174,12 +181,16 @@ def _setup_bash_inner(cfg, cfg_path):
     cob = sv.get("COMMON_ENV_BASE", "")
     ddb = sv.get("DASHBOARD_DB_LOCATION", "")
     rev = sv.get("RIDE_ENV_VER", "")
+    changes = cfg.get("setup", {}).get("makefile_common_changes") or []
     lines = [f'cd "{root}"']
-    # -- Makefile common changes (S4 common) on both env dirs --
+    # -- Makefile common changes (S4 common) on both env dirs, derived from config --
     for d in (ti, co):
-        if d:
-            lines.append(f'sed -i \'s/^\\([ \\t]*OS_TYPE_SETUP[ \\t]*=\\).*/\\1 "RHEL8"/\' "{d}/Makefile"')
-            lines.append(f'sed -i \'s/^\\([ \\t]*RDFS_ALTERNATIVE_CLOCK_GENERATION[ \\t]*=\\).*/\\1 1/\' "{d}/makefile.vars"')
+        if not d:
+            continue
+        for ch in changes:
+            sed = _sed_change(d, ch)
+            if sed:
+                lines.append(sed)
     # -- step 2: general_setup + auto_setup + server_setup make targets --
     lines += [
         f'make setup_run_cmd RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{ti}"',
@@ -217,10 +228,10 @@ def cmd_plan_setup(cfg, cfg_path):
     jn = setup.get("job_name", "rx_setup")
     user = dig(cfg, "setup.account.username", "")
     bs = cfg.get("bs") or {}
-    root = cfg.get("rx_auto_root", "") or _load_setup_vars(cfg_path).get("RX_AUTO_ROOT", "")
+    root = _load_setup_vars(cfg).get("RX_AUTO_ROOT", "")
     ride = bs.get("ride_setup", "my_ride_setup")
 
-    inner_b64 = base64.b64encode(_setup_bash_inner(cfg, cfg_path).encode()).decode()
+    inner_b64 = base64.b64encode(_setup_bash_inner(cfg).encode()).decode()
     tcsh_arg = (f'cd {root}; source {root}/{ride}; source ./my_cmd; source ./my_cmd_for_common; '
                 f'echo {inner_b64} | base64 -d | bash')
     outer = (f'bs -m "{bs.get("host_groups","")}" -I -os "{bs.get("os","")}" '

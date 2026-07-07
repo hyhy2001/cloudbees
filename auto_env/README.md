@@ -18,7 +18,7 @@ RX_AUTO/
             |--- lib.csh  provision.csh  deploy.csh  run.csh  manage.csh
             |--- templates/job.sh
             |--- scripts/setup_all.bash
-            `--- rxews_makefile/{setup.yaml, apply_makefile_mods.py}
+            `--- rxews_makefile/apply_makefile_mods.py
 ```
 
 `lib.csh` resolves the binary as `../bee` (relative to auto_env). Override with env `BEE` for testing.
@@ -54,16 +54,16 @@ bs -m "<host_groups>" -I -os <os> -M <mem> tcsh -f -c 'cd ROOT; source my_ride_s
    source ./my_cmd; source ./my_cmd_for_common; <makefile common mods>; <step-2 makes>'
 ```
 
-The `bs`/LSF params live in the `bs:` block; the RXEWS paths come from `rxews_makefile/setup.yaml`
-(`setup_vars`). The step-2 body (Makefile mods + `make` targets) is base64-encoded so the sed/make
+The `bs`/LSF params live in the `bs:` block; the RXEWS paths come from `setup.vars` (in `config.yaml`).
+The step-2 body (Makefile mods + `make` targets) is base64-encoded so the sed/make
 quotes never clash with the single-quoted `tcsh -c` argument. This is an alternative to
 `setup_all.bash`, not a replacement - both exist.
 
 ## Flow
 
 ```
-setup.yaml   0) setup_all.bash    RX AUTO step 1-2 - OUTSIDE CloudBees, once
-config.yaml
+config.yaml  0) setup_all.bash    RX AUTO step 1-2 - OUTSIDE CloudBees, once
+   |         (or the rx_setup bee job)
    |  1) provision.csh   folder -> cred + node   (built rarely; cred/node reused)
    |  2) deploy.csh      create/update step-3 jobs (rx_run work-stealing / go_rx_auto)
    |  3) run.csh         manual: bee job run -p IP_MODE=...   (auto: waits for schedule)
@@ -90,7 +90,7 @@ It exports `BEE` from the detected dir. Override detection with `RXAUTO_CB=/path
 Or call the scripts directly:
 
 ```bash
-# 0) RX AUTO step 1-2 (outside CloudBees, once) - edit rxews_makefile/setup.yaml first
+# 0) RX AUTO step 1-2 (outside CloudBees, once) - edit config.yaml (setup: block) first
 bash scripts/setup_all.bash all --dry-run   # preview make + S4 mods
 bash scripts/setup_all.bash all             # run for real (or a single phase: makefile|general|auto|server)
 ```
@@ -132,8 +132,7 @@ prefix, so a new name means a fresh namespace that never overwrites the previous
 | `manage.csh` | list / run-all / teardown from the manifest |
 | `templates/job.sh` | default step-3 body sample (the config command is the real one) |
 | `scripts/setup_all.bash` | merged step 1-2 (S6): `[all\|makefile\|general\|auto\|server]` |
-| `rxews_makefile/setup.yaml` | **edit here**: S2 setup_vars + S4 common Makefile changes. empty value = no change |
-| `rxews_makefile/apply_makefile_mods.py` | applies S4 common changes to both env dirs (backup, dry-run, idempotent) |
+| `rxews_makefile/apply_makefile_mods.py` | applies S4 common changes (from `config.yaml` `setup:`) to both env dirs (backup, dry-run, idempotent) |
 
 > The config command is **base64-encoded** into `--shell` (the job runs `... | base64 -d | bash`) so a
 > multi-line bash script survives csh intact. Build param `IP_MODE` reaches the agent via env.

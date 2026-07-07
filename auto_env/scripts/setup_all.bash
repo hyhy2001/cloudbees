@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # RX AUTO STEP 1-2 (guide S13) - merges general/auto/server_setup into one.
-# Runs OUTSIDE CloudBees, once. ALL variables are edited in rxews_makefile/setup.yaml (S2).
+# Runs OUTSIDE CloudBees, once. ALL variables are edited in ../config.yaml (setup: block, S2).
 #
 #   setup_all.bash [all|makefile|general|auto|server] [--dry-run]
 #     makefile : step 1 S4 - apply RXEWS Makefile mods
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-YAML="$HERE/../rxews_makefile/setup.yaml"
+YAML="$HERE/../config.yaml"
 APPLY="$HERE/../rxews_makefile/apply_makefile_mods.py"
 
 PHASE="${1:-all}"; DRY=""
