@@ -6,7 +6,14 @@
 #   rxauto.sh provision|deploy|run|manage [args...]   -> auto_env/*.csh
 #   rxauto.sh setup [all|makefile|general|auto|server] [--dry-run]  -> scripts/setup_all.bash
 #   rxauto.sh all                                      -> provision + deploy + run
+#   rxauto.sh prune [--dry-run]                        -> DELETE infra config no longer wants
 #   rxauto.sh bee <args...>                            -> raw bee passthrough
+#
+# Switch mode/ip without editing config (override, anywhere in the args):
+#   --mode manual|auto     --ip common|trunk|all
+#   e.g. rxauto.sh deploy --mode auto --ip all   (2 scheduled jobs: daily_trunk + daily_common)
+#        rxauto.sh run --ip all                  (manual: run each job for BOTH trunk + common)
+# deploy KEEPS jobs of the other mode (just clears their schedule); use `prune` to delete them.
 #
 # Override detection with:  RXAUTO_CB=/path/to/RX_AUTO/UTLs/Cloudbees
 set -euo pipefail
@@ -33,16 +40,31 @@ AUTO="$CB/auto_env"
 [ -d "$AUTO" ] || { echo "rxauto: $AUTO not found" >&2; exit 1; }
 [ -x "$CB/bee" ] && export BEE="$CB/bee"   # else lib.csh falls back to ../bee (same path)
 
+# Pull --mode/--ip out of the args (anywhere) and export as env overrides read by parse_config.
+# Everything else stays positional. --mode manual|auto ; --ip common|trunk|all.
+args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --mode) export RXAUTO_MODE="$2"; shift 2 ;;
+    --mode=*) export RXAUTO_MODE="${1#*=}"; shift ;;
+    --ip) export RXAUTO_IP="$2"; shift 2 ;;
+    --ip=*) export RXAUTO_IP="${1#*=}"; shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+set -- "${args[@]}"
+
 cmd="${1:-}"; shift || true
 case "$cmd" in
   provision|deploy|run|manage) exec csh "$AUTO/$cmd.csh" "$@" ;;
+  prune)                       exec csh "$AUTO/manage.csh" prune "$@" ;;
   setup)                       exec bash "$AUTO/scripts/setup_all.bash" "$@" ;;
   bee)                         exec "${BEE:-$CB/bee}" "$@" ;;
   all)                         csh "$AUTO/provision.csh" "$@"
                                csh "$AUTO/deploy.csh"
                                exec csh "$AUTO/run.csh" ;;
   ""|-h|--help|help)
-    sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     echo "detected CB=$CB" ;;
   *) echo "rxauto: unknown command '$cmd' (try --help)" >&2; exit 1 ;;
 esac
