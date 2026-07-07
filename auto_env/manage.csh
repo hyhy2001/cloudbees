@@ -8,9 +8,17 @@
 
 set AUTO_DIR = `dirname $0`
 source "$AUTO_DIR/lib.csh"
+if ( ! $?LIB_READY ) exit 1   # lib.csh failed (exit inside a sourced file doesn't stop us)
 
-set action = "$1"
-if ( "$2" == "--dry-run" ) set DRY = 1
+# action = first non-flag arg; --dry-run may appear in any position.
+set action = ""
+foreach a ($argv)
+  if ( "$a" == "--dry-run" ) then
+    set DRY = 1
+  else if ( "$action" == "" ) then
+    set action = "$a"
+  endif
+end
 
 if ( ! -e "$MANIFEST" ) then
   echo "No $MANIFEST yet - run provision.csh + deploy.csh first." ; exit 1
@@ -75,34 +83,43 @@ endif
 if ( "$action" == "prune" ) then
   # DESTRUCTIVE opt-in: delete infra the CURRENT config no longer wants (deploy only clears
   # schedules; prune actually removes). plan-prune: PRUNE_JOB|PRUNE_NODE|PRUNE_CRED. folder kept.
+  # Only rewrite the manifest if EVERY delete succeeded - otherwise a failed delete would leave
+  # a live resource with no manifest record (orphan). On any failure we keep the manifest intact
+  # so a re-run retries the same set.
   set did = 0
+  set failed = 0
   foreach line ("`$PY plan-prune $CONFIG $MANIFEST`")
     set p = ($line)
+    set what = "" ; set arg = ""
     if ( "$p[1]" == "PRUNE_JOB" ) then
-      set did = 1
-      if ( $?DRY ) then
-        echo "[dry] $BEE job delete $p[2] --yes"
-      else
-        echo "prune job $p[2]" ; "$BEE" job delete "$p[2]" --yes
-      endif
+      set what = job ; set arg = "$p[2]"
     else if ( "$p[1]" == "PRUNE_NODE" ) then
-      set did = 1
-      if ( $?DRY ) then
-        echo "[dry] $BEE node delete $p[2] --yes"
-      else
-        echo "prune node $p[2]" ; "$BEE" node delete "$p[2]" --yes
-      endif
+      set what = node ; set arg = "$p[2]"
     else if ( "$p[1]" == "PRUNE_CRED" ) then
-      set did = 1
-      if ( $?DRY ) then
-        echo "[dry] $BEE cred delete $p[2] --yes"
-      else
-        echo "prune cred $p[2]" ; "$BEE" cred delete "$p[2]" --yes
+      set what = cred ; set arg = "$p[2]"
+    else
+      continue
+    endif
+    set did = 1
+    if ( $?DRY ) then
+      echo "[dry] $BEE $what delete $arg --yes"
+    else
+      echo "prune $what $arg"
+      "$BEE" $what delete "$arg" --yes
+      if ( $status != 0 ) then
+        echo "WARNING: failed to delete $what $arg - keeping it in the manifest" >& /dev/stderr
+        set failed = 1
       endif
     endif
   end
   if ( ! $did ) echo "nothing to prune (config matches manifest)"
-  if ( $did && ! $?DRY ) $PY prune-manifest $CONFIG $MANIFEST
+  if ( $did && ! $?DRY ) then
+    if ( $failed ) then
+      echo "prune: some deletes failed -> manifest NOT rewritten (re-run after fixing)" >& /dev/stderr
+      exit 1
+    endif
+    $PY prune-manifest $CONFIG $MANIFEST
+  endif
   echo "== prune done =="
   exit 0
 endif

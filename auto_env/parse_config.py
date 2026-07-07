@@ -132,6 +132,14 @@ def bs_env(cfg):
     }
 
 
+def _dq(v):
+    """Escape a value for inside a bash double-quoted string: \\ then " $ ` ."""
+    v = str(v)
+    for ch in ("\\", '"', "$", "`"):
+        v = v.replace(ch, "\\" + ch)
+    return v
+
+
 def shell_b64(command, rx_auto_root="", extra_env=None):
     """Wrap a bash command into a shell-safe one-word string (csh + escaping): base64-decode then run.
     Preserves multi-line scripts. Prepends RX_AUTO_ROOT + any extra_env as `export` lines.
@@ -139,9 +147,9 @@ def shell_b64(command, rx_auto_root="", extra_env=None):
     import base64
     lines = []
     if rx_auto_root:
-        lines.append(f'export RX_AUTO_ROOT="{rx_auto_root}"')
+        lines.append(f'export RX_AUTO_ROOT="{_dq(rx_auto_root)}"')
     for k, v in (extra_env or {}).items():
-        lines.append(f'export {k}="{v}"')
+        lines.append(f'export {k}="{_dq(v)}"')
     prefix = ("\n".join(lines) + "\n") if lines else ""
     enc = base64.b64encode((prefix + (command or "")).encode()).decode()
     return f"echo {enc} | base64 -d | bash"
@@ -162,6 +170,8 @@ def cmd_plan_jobs(cfg):
         jn0 = dig(cfg, "auto.job_name", "daily")
         user = dig(cfg, "auto.account.username", "")
         sched = dig(cfg, "auto.schedule", "")
+        if not (dig(cfg, "auto.command", "") or "").strip():
+            sys.exit("plan-jobs: auto.command is empty -> job would run an empty script. Set it in config.yaml.")
         for ip in ips:
             jn = f"{jn0}_{ip}" if len(ips) > 1 else jn0
             emit("JOB", jn, base, node_name(base, user), ip, sched_enc(sched),
@@ -172,6 +182,8 @@ def cmd_plan_jobs(cfg):
         # bs_env injects BS_GROUPS/BS_OS/BS_MEM/RIDE_SETUP so the command submits each file via LSF.
         prefix = dig(cfg, "manual.job_prefix", "job")
         cmd = dig(cfg, "manual.command", "")
+        if not (cmd or "").strip():
+            sys.exit("plan-jobs: manual.command is empty -> job would run an empty script. Set it in config.yaml.")
         env = bs_env(cfg)
         # manual: IP_MODE must be DEFINED on the job (default = first ip) so run.csh can
         # override it per-ip with -p IP_MODE=... at runtime. ip=all -> default trunk, run does both.
@@ -196,7 +208,8 @@ def _sed_change(env_dir, ch):
     var, new, fname = ch.get("var", ""), str(ch.get("new", "")), ch.get("file", "")
     if not var or new.strip() == "" or not fname:
         return None
-    esc = new.replace("/", r"\/")   # new may contain quotes -> keep inside single-quoted sed
+    # sed replacement metachars: \ (first), then & and / . Kept in single-quoted sed arg.
+    esc = new.replace("\\", r"\\").replace("&", r"\&").replace("/", r"\/")
     return (f'sed -i \'s/^\\([ \\t]*{var}[ \\t]*=\\).*/\\1 {esc}/\' "{env_dir}/{fname}"')
 
 
@@ -455,13 +468,17 @@ def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
     sub = sys.argv[1]
+    def need(n):
+        # total argv count required; clear error instead of IndexError.
+        if len(sys.argv) < n:
+            sys.exit(f"{sub}: expected {n - 2} argument(s), got {max(0, len(sys.argv) - 2)}")
     # Subcommands that read the manifest (not config).
     if sub == "manifest-cred":
-        cmd_manifest_cred(sys.argv[2], sys.argv[3]); return
+        need(4); cmd_manifest_cred(sys.argv[2], sys.argv[3]); return
     if sub == "manifest-list":
-        cmd_manifest_list(sys.argv[2], sys.argv[3]); return
+        need(4); cmd_manifest_list(sys.argv[2], sys.argv[3]); return
     if sub == "merge-jobs":
-        cmd_merge_jobs(sys.argv[2], sys.argv[3]); return
+        need(4); cmd_merge_jobs(sys.argv[2], sys.argv[3]); return
     if len(sys.argv) < 3:
         sys.exit(__doc__)
     cfg_path = sys.argv[2]
@@ -469,7 +486,7 @@ def main():
     if sub == "plan-infra":
         cmd_plan_infra(cfg)
     elif sub == "cred-pass":
-        cmd_cred_pass(cfg, sys.argv[3])
+        need(4); cmd_cred_pass(cfg, sys.argv[3])
     elif sub == "plan-jobs":
         cmd_plan_jobs(cfg)
     elif sub == "plan-setup":
@@ -477,11 +494,11 @@ def main():
     elif sub == "plan-run":
         cmd_plan_run(cfg)
     elif sub == "plan-prune":
-        cmd_plan_prune(cfg, sys.argv[3])
+        need(4); cmd_plan_prune(cfg, sys.argv[3])
     elif sub == "plan-stale-jobs":
-        cmd_plan_stale_jobs(cfg, sys.argv[3])
+        need(4); cmd_plan_stale_jobs(cfg, sys.argv[3])
     elif sub == "prune-manifest":
-        cmd_prune_manifest(cfg, sys.argv[3])
+        need(4); cmd_prune_manifest(cfg, sys.argv[3])
     elif sub == "eff-mode":
         print(eff_mode(cfg))
     elif sub == "eff-ip":
@@ -489,7 +506,7 @@ def main():
     elif sub == "get":
         print(dig(cfg, sys.argv[3], "") if len(sys.argv) > 3 else "")
     elif sub == "write-manifest":
-        cmd_write_manifest(cfg, sys.argv[3], sys.argv[4])
+        need(5); cmd_write_manifest(cfg, sys.argv[3], sys.argv[4])
     else:
         sys.exit(f"unknown subcommand: {sub}")
 
