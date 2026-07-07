@@ -5,6 +5,7 @@
 
 set AUTO_DIR = `dirname $0`
 source "$AUTO_DIR/lib.csh"
+if ( ! $?LIB_READY ) exit 1   # lib.csh failed (exit inside a sourced file doesn't stop us)
 if ( "$1" == "--dry-run" ) set DRY = 1
 
 set CREATED = "$AUTO_DIR/.created.jobs.tsv"
@@ -23,13 +24,31 @@ if ( -e "$MANIFEST" ) then
     else
       echo "stale $p[2] - clear schedule (job kept)"
       "$BEE" job update freestyle "$p[2]" --schedule ""
+      if ( $status != 0 ) then
+        echo "WARNING: could not clear schedule on stale job $p[2] (it may keep firing)" >& /dev/stderr
+      endif
     endif
   end
 endif
 
+# Build the plan into a temp file FIRST so a plan-jobs / plan-setup failure (e.g. empty command)
+# is caught here instead of being swallowed by a chained backtick.
+set PLAN = "$AUTO_DIR/.plan.tsv"
+rm -f "$PLAN"
+$PY plan-jobs $CONFIG >> "$PLAN"
+if ( $status != 0 ) then
+  echo "ERROR: plan-jobs failed - see message above. Aborting deploy." >& /dev/stderr
+  rm -f "$PLAN" ; exit 1
+endif
+$PY plan-setup $CONFIG >> "$PLAN"
+if ( $status != 0 ) then
+  echo "ERROR: plan-setup failed - see message above. Aborting deploy." >& /dev/stderr
+  rm -f "$PLAN" ; exit 1
+endif
+
 # plan-jobs: FOLDER <base> | JOB <name> <folder> <node> <ip> <sched_b64|-> <shell_b64>
 # plan-setup: appends the rx_setup JOB line (ip="-" -> no IP_MODE param, sched="-" -> no schedule).
-foreach line ("`$PY plan-jobs $CONFIG ; $PY plan-setup $CONFIG`")
+foreach line ("`cat $PLAN`")
   set f = ($line)
   set kind = "$f[1]"
 
@@ -37,7 +56,14 @@ foreach line ("`$PY plan-jobs $CONFIG ; $PY plan-setup $CONFIG`")
     if ( $?DRY ) then
       echo "[dry] $BEE job create folder $f[2]"
     else
-      "$BEE" job create folder "$f[2]"
+      # idempotent: only create if missing (provision usually made it already).
+      "$BEE" job get "$f[2]" >& /dev/null
+      if ( $status != 0 ) then
+        "$BEE" job create folder "$f[2]"
+        if ( $status != 0 ) then
+          echo "ERROR: failed to create folder $f[2]" >& /dev/stderr ; rm -f "$PLAN" ; exit 1
+        endif
+      endif
     endif
     continue
   endif
@@ -83,11 +109,18 @@ foreach line ("`$PY plan-jobs $CONFIG ; $PY plan-setup $CONFIG`")
         "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
           --shell "$sh"
       endif
+      # only record the job in the manifest if bee actually succeeded.
+      set rc = $status
+      if ( $rc != 0 ) then
+        echo "ERROR: bee job create/update failed for $folder/$jn (rc=$rc)" >& /dev/stderr
+        rm -f "$PLAN" ; exit 1
+      endif
       echo "job	$folder/$jn" >> "$CREATED"
     endif
   endif
 end
 
+rm -f "$PLAN"
 if ( ! $?DRY && -e "$CREATED" ) then
   # merge jobs into the existing manifest (keep cred/node)
   $PY merge-jobs $MANIFEST "$CREATED"

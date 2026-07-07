@@ -6,6 +6,7 @@
 
 set AUTO_DIR = `dirname $0`
 source "$AUTO_DIR/lib.csh"
+if ( ! $?LIB_READY ) exit 1   # lib.csh failed (exit inside a sourced file doesn't stop us)
 
 if ( "$1" == "--dry-run" ) set DRY = 1
 
@@ -18,7 +19,14 @@ echo "== folder $BASE =="
 if ( $?DRY ) then
   echo "[dry] $BEE job create folder $BASE"
 else
-  "$BEE" job create folder "$BASE"
+  # idempotent: skip create if the folder already exists; else create and verify it succeeded.
+  "$BEE" job get "$BASE" >& /dev/null
+  if ( $status != 0 ) then
+    "$BEE" job create folder "$BASE"
+    if ( $status != 0 ) then
+      echo "ERROR: failed to create folder $BASE" >& /dev/stderr ; exit 1
+    endif
+  endif
   echo "folder	$BASE" >> "$CREATED"
 endif
 
@@ -32,7 +40,7 @@ foreach line ("`$PY plan-infra $CONFIG`")
   # -- cred: reuse if the manifest already has one (users rarely change), else create --
   set cid = "`$PY manifest-cred $MANIFEST $user`"
   if ( "$cid" != "" ) then
-    echo "cred $user: reuse $cid"
+    echo "cred ${user}: reuse $cid"
   else if ( $?DRY ) then
     echo "[dry] $BEE cred create --username $user --password *** --description '$BASE $user'"
     set cid = "DRY_CRED_$user"
@@ -46,14 +54,24 @@ foreach line ("`$PY plan-infra $CONFIG`")
     endif
     echo "cred $user -> $cid"
   endif
-  if ( ! $?DRY ) echo "cred	$user	$cid" >> "$CREATED"
+  if ( ! $?DRY ) then
+    echo "cred	$user	$cid" >> "$CREATED"
+  endif
 
   # -- node: use the cred-id just obtained --
   if ( $?DRY ) then
     echo "[dry] $BEE node create $nname --host $host --port $port --cred-id $cid --remote-dir $rdir --executors $nexec"
   else
-    "$BEE" node create "$nname" --host "$host" --port "$port" \
-      --cred-id "$cid" --remote-dir "$rdir" --executors "$nexec"
+    # idempotent: skip if the node already exists; else create and verify. Fail loud (don't
+    # write a manifest entry for a node that was never created).
+    "$BEE" node get "$nname" >& /dev/null
+    if ( $status != 0 ) then
+      "$BEE" node create "$nname" --host "$host" --port "$port" \
+        --cred-id "$cid" --remote-dir "$rdir" --executors "$nexec"
+      if ( $status != 0 ) then
+        echo "ERROR: failed to create node $nname" >& /dev/stderr ; exit 1
+      endif
+    endif
     echo "node	$nname" >> "$CREATED"
   endif
 end

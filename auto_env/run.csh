@@ -5,6 +5,7 @@
 
 set AUTO_DIR = `dirname $0`
 source "$AUTO_DIR/lib.csh"
+if ( ! $?LIB_READY ) exit 1   # lib.csh failed (exit inside a sourced file doesn't stop us)
 if ( "$1" == "--dry-run" ) set DRY = 1
 
 set mode = "`$PY eff-mode $CONFIG`"

@@ -114,12 +114,16 @@ def main():
     sv = setup_vars(cfg)
     by_file = {}
     for c in ((cfg.get("setup") or {}).get("makefile_common_changes") or []):
-        by_file.setdefault(c["file"], []).append((c["var"], c.get("new", "")))
+        fname, var = c.get("file"), c.get("var")
+        if not fname or not var:
+            print(f"  SKIP incomplete change entry (need file+var): {c}")
+            continue
+        by_file.setdefault(fname, []).append((var, c.get("new", "")))
 
     trunk = str(sv.get("TRUNK_IP_RXEWS_RUN_DIR_PATH", "")).strip().rstrip("/")
     common = str(sv.get("COMMON_RXEWS_RUN_DIR_PATH", "")).strip().rstrip("/")
     if not trunk and not common:
-        sys.exit("STOP: set TRUNK_IP_RXEWS_RUN_DIR_PATH / COMMON_RXEWS_RUN_DIR_PATH in setup.yaml")
+        sys.exit("STOP: set TRUNK_IP_RXEWS_RUN_DIR_PATH / COMMON_RXEWS_RUN_DIR_PATH in config.yaml (setup.vars)")
 
     made = set()
     for env_dir in (trunk, common):
