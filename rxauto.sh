@@ -5,6 +5,7 @@
 #
 #   rxauto.sh provision|deploy|run|manage [args...]   -> auto_env/*.csh
 #   rxauto.sh setup [all|makefile|general|auto|server] [--dry-run]  -> scripts/setup_all.bash
+#   rxauto.sh run-setup                                -> trigger the rx_setup bee job (step 1-2)
 #   rxauto.sh all                                      -> provision + deploy + run
 #   rxauto.sh prune [--dry-run]                        -> DELETE infra config no longer wants
 #   rxauto.sh pause [--dry-run]                        -> clear schedule on auto jobs (stop firing)
@@ -69,6 +70,11 @@ case "$cmd" in
   pause|resume)                exec csh "$AUTO/$cmd.csh" "$@" ;;
   prune)                       exec csh "$AUTO/manage.csh" prune "$@" ;;
   setup)                       exec bash "$AUTO/scripts/setup_all.bash" "$@" ;;
+  run-setup)                   # trigger the rx_setup bee job (resolves folder/job from config)
+                               base="$(python3 "$AUTO/parse_config.py" get "$RXAUTO_CONFIG" base_name)"
+                               jn="$(python3 "$AUTO/parse_config.py" get "$RXAUTO_CONFIG" setup.job_name)"
+                               [ -n "$jn" ] || jn=rx_setup
+                               exec "${BEE:-$CB/bee}" job run "${base:-RX_AUTO}/$jn" "$@" ;;
   bee)                         exec "${BEE:-$CB/bee}" "$@" ;;
   all)                         csh "$AUTO/provision.csh" "$@" || { echo "rxauto: provision failed (rc=$?), aborting deploy/run" >&2; exit 1; }
                                csh "$AUTO/deploy.csh" "$@" || { echo "rxauto: deploy failed (rc=$?), aborting run" >&2; exit 1; }
