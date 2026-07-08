@@ -43,7 +43,6 @@ while ( 1 )
   if ( "$line[1]" != "ACCT" ) continue
   set user = "$line[2]" ; set nname = "$line[3]" ; set host = "$line[4]"
   set port = "$line[5]" ; set rdir = "$line[6]" ; set nexec = "$line[7]"
-  echo "DEBUG: user=[$user] nname=[$nname] #line=$#line"
 
   # -- cred: reuse if the manifest already has one (users rarely change), else create --
   set cid = "`$PY manifest-cred $MANIFEST $user`"
@@ -62,7 +61,6 @@ while ( 1 )
     else
       set pass = "`$PY cred-pass $CONFIG $user`"
       set desc = "${BASE}_${user}"
-      echo "DEBUG: cred create --id $cid --username $user --password [${#pass} chars] --description $desc"
       "$BEE" cred create --id "$cid" --username "$user" --password "$pass" --description "$desc"
       if ( $status != 0 ) then
         echo "ERROR: failed to create cred $cid for $user" >& /dev/stderr ; exit 1
