@@ -45,13 +45,6 @@ AUTO="$CB/auto_env"
 # config.yaml may live next to rxauto.sh (not inside Cloudbees/). Export so lib.csh can find it.
 export RXAUTO_CONFIG="$SCRIPT_DIR/config.yaml"
 
-# Pin the bee DB to ONE shared file. Without this, bee stores its session under
-# data/<linux-user>/cb.db (see src/core/db/connection.ts getDbPath). So a login done
-# as user A is invisible to `rxauto.sh provision` run as user B -> "AUTH ERROR: Not
-# logged in". Pinning CB_DB_PATH makes login + every command share the same session,
-# regardless of which Linux account runs them. Override with CB_DB_PATH set externally.
-export CB_DB_PATH="${CB_DB_PATH:-$CB/data/cb.db}"
-
 # RX_AUTO_ROOT = the RX_AUTO package root: CB is .../RX_AUTO/UTLs/Cloudbees, so 3 levels up.
 # parse_config uses this when config.yaml's rx_auto_root is unset. config value always wins.
 export RXAUTO_ROOT="$(cd "$CB/../.." && pwd)"
