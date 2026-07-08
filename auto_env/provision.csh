@@ -43,6 +43,7 @@ while ( 1 )
   if ( "$line[1]" != "ACCT" ) continue
   set user = "$line[2]" ; set nname = "$line[3]" ; set host = "$line[4]"
   set port = "$line[5]" ; set rdir = "$line[6]" ; set nexec = "$line[7]"
+  echo "DEBUG: user=[$user] nname=[$nname] #line=$#line"
 
   # -- cred: reuse if the manifest already has one (users rarely change), else create --
   set cid = "`$PY manifest-cred $MANIFEST $user`"
