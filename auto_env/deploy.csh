@@ -54,23 +54,30 @@ endif
 
 # plan-jobs: FOLDER <base> | JOB <name> <folder> <node> <ip> <sched_b64|-> <shell_b64>
 # plan-setup: appends the rx_setup JOB line (ip="-" -> no IP_MODE param, sched="-" -> no schedule).
+# NOTE: read fields with `cut -f` (tab-delimited), NOT csh word-split. The last field
+# (shell_b64 = "echo <b64> | base64 -d | bash") CONTAINS SPACES, so `set f = (\`head\`)`
+# would split it and $f[7] would only capture "echo". cut -f keeps each field intact.
 set _plan_tmp = "$PLAN"
+set _row_tmp = "$AUTO_DIR/.plan_row.$$"
 while ( 1 )
-  set f = ( `head -1 "$_plan_tmp"` )
-  if ( $#f == 0 ) break
+  head -1 "$_plan_tmp" >! "$_row_tmp"
+  if ( -z "$_row_tmp" ) break
   sed -i '1d' "$_plan_tmp"
-  set kind = "$f[1]"
+  # cut -f reads tab-delimited fields; the shell_b64 field has spaces so csh
+  # word-split is unusable here — cut from the single-row file keeps fields whole.
+  set kind = "`cut -f1 $_row_tmp`"
 
   if ( "$kind" == "FOLDER" ) then
+    set _fbase = "`cut -f2 $_row_tmp`"
     if ( $?DRY ) then
-      echo "[dry] $BEE job create folder $f[2]"
+      echo "[dry] $BEE job create folder $_fbase"
     else
       # idempotent: only create if missing (provision usually made it already).
-      "$BEE" job get "$f[2]" >& /dev/null
+      "$BEE" job get "$_fbase" >& /dev/null
       if ( $status != 0 ) then
-        "$BEE" job create folder "$f[2]"
+        "$BEE" job create folder "$_fbase"
         if ( $status != 0 ) then
-          echo "ERROR: failed to create folder $f[2]" >& /dev/stderr ; rm -f "$PLAN" ; exit 1
+          echo "ERROR: failed to create folder $_fbase" >& /dev/stderr ; rm -f "$PLAN" "$_row_tmp" ; exit 1
         endif
       endif
     endif
@@ -78,8 +85,8 @@ while ( 1 )
   endif
 
   if ( "$kind" == "JOB" ) then
-    set jn = "$f[2]" ; set folder = "$f[3]" ; set node = "$f[4]"
-    set ip = "$f[5]" ; set sched = "$f[6]" ; set sh = "$f[7]"
+    set jn = "`cut -f2 $_row_tmp`" ; set folder = "`cut -f3 $_row_tmp`" ; set node = "`cut -f4 $_row_tmp`"
+    set ip = "`cut -f5 $_row_tmp`" ; set sched = "`cut -f6 $_row_tmp`" ; set sh = "`cut -f7 $_row_tmp`"
     # sched is b64 (cron string has spaces) or "-" (no schedule). Decode when used.
     set sched_real = ""
     if ( "$sched" != "-" ) set sched_real = "`echo $sched | base64 -d`"
@@ -122,14 +129,14 @@ while ( 1 )
       set rc = $status
       if ( $rc != 0 ) then
         echo "ERROR: bee job create/update failed for $folder/$jn (rc=$rc)" >& /dev/stderr
-        rm -f "$PLAN" ; exit 1
+        rm -f "$PLAN" "$_row_tmp" ; exit 1
       endif
       echo "job	$folder/$jn" >> "$CREATED"
     endif
   endif
 end
 
-rm -f "$PLAN"
+rm -f "$PLAN" "$_row_tmp"
 if ( ! $?DRY && -e "$CREATED" ) then
   # merge jobs into the existing manifest (keep cred/node)
   $PY merge-jobs $MANIFEST "$CREATED"
