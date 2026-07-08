@@ -1,7 +1,8 @@
 #!/usr/bin/env csh
 # resume.csh [--dry-run] - restore schedule on auto jobs from config (undo pause).
 
-set AUTO_DIR = `cd "$0:h" && pwd`
+set AUTO_DIR = "$0:h"
+if ( "$AUTO_DIR" !~ /* ) set AUTO_DIR = "$cwd/$AUTO_DIR"
 source "$AUTO_DIR/lib.csh"
 if ( ! $?LIB_READY ) exit 1
 

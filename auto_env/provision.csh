@@ -4,7 +4,8 @@
 #   -> use deploy.csh to (re)create jobs.
 # NOTE: RX AUTO step 1-2 (setup_all.bash) runs SEPARATELY, outside CloudBees - not called from here.
 
-set AUTO_DIR = `cd "$0:h" && pwd`
+set AUTO_DIR = "$0:h"
+if ( "$AUTO_DIR" !~ /* ) set AUTO_DIR = "$cwd/$AUTO_DIR"
 source "$AUTO_DIR/lib.csh"
 if ( ! $?LIB_READY ) exit 1   # lib.csh failed (exit inside a sourced file doesn't stop us)
 
