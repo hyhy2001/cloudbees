@@ -2,7 +2,7 @@
 # run.csh [--dry-run] - trigger jobs (manual mode only; auto runs via --schedule on Jenkins).
 # Split files are distributed round-robin across jobs; each build gets exactly one SPLIT_FILE.
 
-set AUTO_DIR = `dirname $0`
+set AUTO_DIR = `cd "$0:h" && pwd`
 source "$AUTO_DIR/lib.csh"
 if ( ! $?LIB_READY ) exit 1
 

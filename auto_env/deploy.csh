@@ -3,7 +3,7 @@
 # cred+node already exist from provision.csh. Run provision first.
 #   manual -> N jobs (work-stealing rx_run)   |  auto -> 1 job with --schedule (go_rx_auto)
 
-set AUTO_DIR = `dirname $0`
+set AUTO_DIR = `cd "$0:h" && pwd`
 source "$AUTO_DIR/lib.csh"
 if ( ! $?LIB_READY ) exit 1   # lib.csh failed (exit inside a sourced file doesn't stop us)
 if ( "$1" == "--dry-run" ) set DRY = 1
