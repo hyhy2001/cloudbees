@@ -121,17 +121,25 @@ def infra_accounts(cfg):
 def cmd_plan_infra(cfg):
     """Emit one line per account, ONLY space-free fields (safe for csh word-split):
        ACCT<tab>user<tab>nodename<tab>host<tab>port<tab>remotedir<tab>executors
-    Password fetched separately via `cred-pass` (printed raw, not word-split)."""
+    Password fetched separately via `cred-pass` (printed raw, not word-split).
+    executors: auto.account and setup.account can override via their own `executors` field."""
     _check_no_space(cfg)
     base = cfg.get("base_name", "RX_AUTO")
     node = cfg.get("node", {})
     host = host_for(cfg)
+    default_exec = node.get("executors", 1)
+    # build per-user executor overrides from special accounts
+    exec_override = {}
+    for key in ("auto.account", "setup.account"):
+        a = dig(cfg, key, {}) or {}
+        if a.get("username") and a.get("executors"):
+            exec_override[a["username"]] = a["executors"]
     for user, _pw in infra_accounts(cfg):
         if not user:
             continue
         emit("ACCT", user, node_name(base, user), host, node.get("port", 22),
              f"{node.get('remote_dir_base', '/home').rstrip('/')}/{user}",
-             node.get("executors", 1))
+             exec_override.get(user, default_exec))
 
 
 def cmd_cred_pass(cfg, user):
