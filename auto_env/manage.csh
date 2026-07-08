@@ -34,43 +34,66 @@ if ( "$action" == "list" ) then
   exit 0
 endif
 
+# helper: iterate a manifest list via temp file (avoids csh word-split on multi-line backtick)
+set _tmp = "$AUTO_DIR/.manage.$$.tmp"
+
 if ( "$action" == "run" ) then
-  foreach j ("`$PY manifest-list $MANIFEST jobs`")
+  $PY manifest-list $MANIFEST jobs >! "$_tmp"
+  while ( 1 )
+    set j = ( `head -1 "$_tmp"` )
+    if ( $#j == 0 ) break
+    sed -i '1d' "$_tmp"
     if ( $?DRY ) then
-      echo "[dry] $BEE job run $j"
+      echo "[dry] $BEE job run $j[1]"
     else
-      "$BEE" job run "$j"
+      "$BEE" job run "$j[1]"
     endif
   end
+  rm -f "$_tmp"
   echo "== run-all done =="
   exit 0
 endif
 
 if ( "$action" == "teardown" ) then
   # jobs first
-  foreach j ("`$PY manifest-list $MANIFEST jobs`")
+  $PY manifest-list $MANIFEST jobs >! "$_tmp"
+  while ( 1 )
+    set j = ( `head -1 "$_tmp"` )
+    if ( $#j == 0 ) break
+    sed -i '1d' "$_tmp"
     if ( $?DRY ) then
-      echo "[dry] $BEE job delete $j --yes"
+      echo "[dry] $BEE job delete $j[1] --yes"
     else
-      "$BEE" job delete "$j" --yes
+      "$BEE" job delete "$j[1]" --yes
     endif
   end
+  rm -f "$_tmp"
   # nodes
-  foreach n ("`$PY manifest-list $MANIFEST nodes`")
+  $PY manifest-list $MANIFEST nodes >! "$_tmp"
+  while ( 1 )
+    set n = ( `head -1 "$_tmp"` )
+    if ( $#n == 0 ) break
+    sed -i '1d' "$_tmp"
     if ( $?DRY ) then
-      echo "[dry] $BEE node delete $n --yes"
+      echo "[dry] $BEE node delete $n[1] --yes"
     else
-      "$BEE" node delete "$n" --yes
+      "$BEE" node delete "$n[1]" --yes
     endif
   end
+  rm -f "$_tmp"
   # creds (by the real cred-id from the manifest)
-  foreach c ("`$PY manifest-list $MANIFEST credentials`")
+  $PY manifest-list $MANIFEST credentials >! "$_tmp"
+  while ( 1 )
+    set c = ( `head -1 "$_tmp"` )
+    if ( $#c == 0 ) break
+    sed -i '1d' "$_tmp"
     if ( $?DRY ) then
-      echo "[dry] $BEE cred delete $c --yes"
+      echo "[dry] $BEE cred delete $c[1] --yes"
     else
-      "$BEE" cred delete "$c" --yes
+      "$BEE" cred delete "$c[1]" --yes
     endif
   end
+  rm -f "$_tmp"
   # folder last
   if ( $?DRY ) then
     echo "[dry] $BEE job delete $base --yes"
@@ -82,15 +105,13 @@ if ( "$action" == "teardown" ) then
 endif
 
 if ( "$action" == "prune" ) then
-  # DESTRUCTIVE opt-in: delete infra the CURRENT config no longer wants (deploy only clears
-  # schedules; prune actually removes). plan-prune: PRUNE_JOB|PRUNE_NODE|PRUNE_CRED. folder kept.
-  # Only rewrite the manifest if EVERY delete succeeded - otherwise a failed delete would leave
-  # a live resource with no manifest record (orphan). On any failure we keep the manifest intact
-  # so a re-run retries the same set.
   set did = 0
   set failed = 0
-  foreach line ("`$PY plan-prune $CONFIG $MANIFEST`")
-    set p = ($line)
+  $PY plan-prune $CONFIG $MANIFEST >! "$_tmp"
+  while ( 1 )
+    set p = ( `head -1 "$_tmp"` )
+    if ( $#p == 0 ) break
+    sed -i '1d' "$_tmp"
     set what = "" ; set arg = ""
     if ( "$p[1]" == "PRUNE_JOB" ) then
       set what = job ; set arg = "$p[2]"
@@ -113,6 +134,7 @@ if ( "$action" == "prune" ) then
       endif
     endif
   end
+  rm -f "$_tmp"
   if ( ! $did ) echo "nothing to prune (config matches manifest)"
   if ( $did && ! $?DRY ) then
     if ( $failed ) then
