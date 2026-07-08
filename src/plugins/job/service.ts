@@ -183,9 +183,16 @@ export async function getJob(client: CloudBeesClient, name: string): Promise<Job
       // fall through to list approach on other errors
     }
 
-    // Fallback: look up from the flat list (handles cases where the direct
-    // endpoint is unavailable but the job appears in the root listing).
-    const allJobs = await listJobs(client);
+    // Fallback: look up from the job list when the direct endpoint didn't
+    // resolve. A folder-qualified name ("RX_AUTO/build_user01") only appears in
+    // the RECURSIVE listing — plain listJobs() returns root-level jobs whose
+    // name is the bare leaf, so a folder job would never match and getJob()
+    // would wrongly return null. That makes callers (deploy's exists-check, the
+    // create duplicate-guard) re-create an existing job -> HTTP 400. Use the
+    // recursive listing whenever the name is folder-qualified.
+    const allJobs = name.includes("/")
+      ? await listJobsRecursive(client)
+      : await listJobs(client);
     for (const job of allJobs) {
       if (job.name === name) return job;
     }
