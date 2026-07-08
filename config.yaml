@@ -54,7 +54,7 @@ manual:
 
 # -- auto = STEP 3 go_rx_auto (orchestrator: detect -> queue -> run all). No index, IP_MODE only. --
 auto:
-  account: { username: user11, password: pass11 }   # 11th account, dedicated node for auto
+  account: { username: user11, password: pass11, executors: 2 }   # executor=2: trunk+common run in parallel
   job_name: daily
   schedule: "H/30 * * * *"  # every 30 min: go_rx_auto detects SVN changes and runs
   command: |
