@@ -6,6 +6,7 @@ Subcommands:
   plan-infra     <config.yaml>                          -> emit ACCT lines for provision.csh
   plan-jobs      <config.yaml>                          -> emit FOLDER/JOB lines for deploy.csh
   plan-run       <config.yaml>                          -> emit RUN lines for run.csh
+  plan-splits    <config.yaml> <rx_auto_root> <ip>      -> emit SPLIT lines (round-robin split files -> jobs)
   plan-prune     <config.yaml> <manifest.yml>           -> emit PRUNE_* lines (destructive: manage prune)
   plan-stale-jobs <config.yaml> <manifest.yml>          -> emit STALE_JOB lines (deploy clears their schedule)
   prune-manifest <config.yaml> <manifest.yml>           -> drop pruned entries from complete.yml
@@ -375,6 +376,27 @@ def cmd_plan_setup(cfg, cfg_path):
     emit("JOB", jn, base, node_name(base, user), "-", "-", shell_b64(outer))
 
 
+def cmd_plan_splits(cfg, rx_auto_root, ip):
+    """Emit SPLIT<tab>jobname<tab>split_file lines, round-robin across jobs.
+    rx_auto_root: path to RX_AUTO package root (so we can glob SUBMIT_LIST).
+    ip: trunk|common (single value, not all)."""
+    base = cfg.get("base_name", "RX_AUTO")
+    prefix = dig(cfg, "manual.job_prefix", "job")
+    jobs = [f"{prefix}_{a['username']}" for a in cfg.get("accounts", []) if a.get("username")]
+    if not jobs:
+        sys.exit("plan-splits: no accounts configured")
+    if ip == "trunk":
+        pat = os.path.join(rx_auto_root, "RX_AUTO", "SUBMIT_LIST", "NORMAL", "normal_submit_module_list_*")
+    else:
+        pat = os.path.join(rx_auto_root, "RX_AUTO", "SUBMIT_LIST", "COMMON", "common_submit_module_list_*")
+    import glob as _glob
+    files = sorted(_glob.glob(pat))
+    if not files:
+        sys.exit(f"plan-splits: no split files found at {pat}")
+    for i, f in enumerate(files):
+        emit("SPLIT", jobs[i % len(jobs)], f)
+
+
 def cmd_plan_run(cfg):
     """Emit RUN lines for manual (auto jobs run via schedule, no manual run).
     RUN<tab>jobname<tab>ip_mode<tab>wait(0|1). ip=all -> one RUN per account per ip (trunk+common)."""
@@ -584,6 +606,9 @@ def main():
         cmd_plan_setup(cfg, cfg_path)
     elif sub == "plan-run":
         cmd_plan_run(cfg)
+    elif sub == "plan-splits":
+        # plan-splits <config.yaml> <rx_auto_root> <ip>
+        need(5); cmd_plan_splits(cfg, sys.argv[3], sys.argv[4])
     elif sub == "plan-prune":
         need(4); cmd_plan_prune(cfg, sys.argv[3])
     elif sub == "plan-stale-jobs":
