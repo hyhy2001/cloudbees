@@ -46,9 +46,15 @@ AUTO="$CB/auto_env"
 # config.yaml may live next to rxauto.sh (not inside Cloudbees/). Export so lib.csh can find it.
 export RXAUTO_CONFIG="$SCRIPT_DIR/config.yaml"
 
-# RX_AUTO_ROOT = the RX_AUTO package root: CB is .../RX_AUTO/UTLs/Cloudbees, so 3 levels up.
+# RX_AUTO_ROOT = the RX_AUTO package dir (holds rx_run scripts + SUBMIT_LIST).
+# CB is .../RX_AUTO/UTLs/Cloudbees, so RX_AUTO/ is 2 levels up.
 # parse_config uses this when config.yaml's rx_auto_root is unset. config value always wins.
 export RXAUTO_ROOT="$(cd "$CB/../.." && pwd)"
+
+# RXAUTO_PARENT = where rxauto.sh + config.yaml live, and where the shell-init
+# files (my_ride_setup, my_cmd, my_cmd_for_common) sit — one level ABOVE RX_AUTO/.
+# The run/setup commands source those files, so they need this path, not RX_AUTO_ROOT.
+export RXAUTO_PARENT="$SCRIPT_DIR"
 
 # Pull --mode/--ip out of the args (anywhere) and export as env overrides read by parse_config.
 # Everything else stays positional. --mode manual|auto ; --ip common|trunk|all.
