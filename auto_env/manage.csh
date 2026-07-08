@@ -6,7 +6,7 @@
 #   prune     : delete only what the CURRENT config no longer wants (deploy just clears schedules)
 # The manifest stores the REAL cred-id (bee auto-generates a random one), so teardown/run never guess names.
 
-set AUTO_DIR = `dirname $0`
+set AUTO_DIR = `cd "$0:h" && pwd`
 source "$AUTO_DIR/lib.csh"
 if ( ! $?LIB_READY ) exit 1   # lib.csh failed (exit inside a sourced file doesn't stop us)
 
