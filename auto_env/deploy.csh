@@ -17,8 +17,12 @@ rm -f "$CREATED"
 # `bee job update freestyle --schedule ''` removes the cron trigger without deleting the job.
 # Destructive removal is a separate opt-in step: manage.csh prune.
 if ( -e "$MANIFEST" ) then
-  foreach line ("`$PY plan-stale-jobs $CONFIG $MANIFEST`")
-    set p = ($line)
+  set _stale_tmp = "$AUTO_DIR/.stale.$$"
+  $PY plan-stale-jobs $CONFIG $MANIFEST >! "$_stale_tmp"
+  while ( 1 )
+    set p = ( `head -1 "$_stale_tmp"` )
+    if ( $#p == 0 ) break
+    sed -i '1d' "$_stale_tmp"
     if ( "$p[1]" != "STALE_JOB" ) continue
     if ( $?DRY ) then
       echo "[dry] $BEE job update freestyle $p[2] --schedule '' (keep job, stop timer)"
@@ -30,6 +34,7 @@ if ( -e "$MANIFEST" ) then
       endif
     endif
   end
+  rm -f "$_stale_tmp"
 endif
 
 # Build the plan into a temp file FIRST so a plan-jobs / plan-setup failure (e.g. empty command)
@@ -49,8 +54,11 @@ endif
 
 # plan-jobs: FOLDER <base> | JOB <name> <folder> <node> <ip> <sched_b64|-> <shell_b64>
 # plan-setup: appends the rx_setup JOB line (ip="-" -> no IP_MODE param, sched="-" -> no schedule).
-foreach line ("`cat $PLAN`")
-  set f = ($line)
+set _plan_tmp = "$PLAN"
+while ( 1 )
+  set f = ( `head -1 "$_plan_tmp"` )
+  if ( $#f == 0 ) break
+  sed -i '1d' "$_plan_tmp"
   set kind = "$f[1]"
 
   if ( "$kind" == "FOLDER" ) then

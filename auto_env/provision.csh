@@ -32,11 +32,17 @@ else
 endif
 
 # plan-infra emits one line per account: ACCT <user> <nodename> <host> <port> <remotedir> <executors>
-foreach line ("`$PY plan-infra $CONFIG`")
-  set f = ($line)
-  if ( "$f[1]" != "ACCT" ) continue
-  set user = "$f[2]" ; set nname = "$f[3]" ; set host = "$f[4]"
-  set port = "$f[5]" ; set rdir = "$f[6]" ; set nexec = "$f[7]"
+# Use a temp file + while-read to avoid csh word-split collapsing all lines into one list.
+set _infra_tmp = "$AUTO_DIR/.infra_lines.$$"
+$PY plan-infra $CONFIG >! "$_infra_tmp"
+while ( 1 )
+  set line = ( `head -1 "$_infra_tmp"` )
+  if ( $#line == 0 ) break
+  # remove first line from temp file
+  sed -i '1d' "$_infra_tmp"
+  if ( "$line[1]" != "ACCT" ) continue
+  set user = "$line[2]" ; set nname = "$line[3]" ; set host = "$line[4]"
+  set port = "$line[5]" ; set rdir = "$line[6]" ; set nexec = "$line[7]"
 
   # -- cred: reuse if the manifest already has one (users rarely change), else create --
   set cid = "`$PY manifest-cred $MANIFEST $user`"
@@ -82,6 +88,7 @@ foreach line ("`$PY plan-infra $CONFIG`")
     echo "node	$nname" >> "$CREATED"
   endif
 end
+rm -f "$_infra_tmp"
 
 # -- write complete.yml manifest --
 if ( ! $?DRY ) then

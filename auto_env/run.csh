@@ -34,8 +34,12 @@ foreach ip ("`$PY eff-ip $CONFIG`")
   foreach cur_ip ($iplist)
     echo "== triggering builds for ip=$cur_ip =="
     # plan-splits: SPLIT <jobname> <split_file>  (round-robin)
-    foreach line ("`$PY plan-splits $CONFIG $root $cur_ip`")
-      set f = ($line)
+    set _splits_tmp = "$AUTO_DIR/.splits.$$.tmp"
+    $PY plan-splits $CONFIG $root $cur_ip >! "$_splits_tmp"
+    while ( 1 )
+      set f = ( `head -1 "$_splits_tmp"` )
+      if ( $#f == 0 ) break
+      sed -i '1d' "$_splits_tmp"
       if ( "$f[1]" != "SPLIT" ) continue
       set jn = "$f[2]" ; set sf = "$f[3]"
 
@@ -54,6 +58,7 @@ foreach ip ("`$PY eff-ip $CONFIG`")
         endif
       endif
     end
+    rm -f "$_splits_tmp"
   end
 end
 echo "== run done (mode=manual) =="
