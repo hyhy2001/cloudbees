@@ -42,6 +42,9 @@ AUTO="$CB/auto_env"
 [ -d "$AUTO" ] || { echo "rxauto: $AUTO not found" >&2; exit 1; }
 [ -x "$CB/bee" ] && export BEE="$CB/bee"   # else lib.csh falls back to ../bee (same path)
 
+# config.yaml may live next to rxauto.sh (not inside Cloudbees/). Export so lib.csh can find it.
+export RXAUTO_CONFIG="$SCRIPT_DIR/config.yaml"
+
 # RX_AUTO_ROOT = the RX_AUTO package root: CB is .../RX_AUTO/UTLs/Cloudbees, so 3 levels up.
 # parse_config uses this when config.yaml's rx_auto_root is unset. config value always wins.
 export RXAUTO_ROOT="$(cd "$CB/../.." && pwd)"

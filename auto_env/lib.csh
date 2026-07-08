@@ -18,7 +18,13 @@ else
 endif
 
 set PY = "python3 $AUTO_DIR/parse_config.py"
-set CONFIG = "$AUTO_DIR/../config.yaml"
+# config.yaml: prefer RXAUTO_CONFIG (exported by rxauto.sh, may live next to it),
+# else fall back to ../config.yaml (same Cloudbees/ dir as auto_env/).
+if ( $?RXAUTO_CONFIG ) then
+  set CONFIG = "$RXAUTO_CONFIG"
+else
+  set CONFIG = "$AUTO_DIR/../config.yaml"
+endif
 set MANIFEST = "$AUTO_DIR/complete.yml"
 
 if ( ! -x "$BEE" ) then
