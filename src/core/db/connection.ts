@@ -7,6 +7,23 @@ import { Database } from "bun:sqlite";
 import { mkdirSync, existsSync, chmodSync } from "fs";
 import { join, dirname } from "path";
 import { userInfo } from "os";
+
+/**
+ * Stable per-OS-user identifier for the data dir.
+ *
+ * MUST NOT be spoofable by the environment. Bun's os.userInfo().username reads
+ * the $USER env var, so a caller that exports USER=someone-else (as RX AUTO /
+ * LSF submit wrappers do) would flip the whole session DB to data/<that-name>/,
+ * landing on an empty db -> "AUTH ERROR: Not logged in" mid-run. process.getuid()
+ * comes from the real kernel uid and cannot be changed by env, so we key the dir
+ * on the numeric uid. Falls back to userInfo().username only on platforms without
+ * getuid (Windows), where env-spoofing of USER is not the concern.
+ */
+export function stableUserDir(): string {
+  const getuid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
+  if (typeof getuid === "function") return `uid-${getuid.call(process)}`;
+  return userInfo().username;
+}
 // Embed schema.sql into the bundle/binary at build time. Reading it at
 // runtime via import.meta.dir breaks in the compiled binary, where the path
 // resolves into Bun's virtual "/$bunfs" filesystem (file not on disk).
@@ -138,8 +155,7 @@ export function getDbPath(): string {
         "Cannot determine bee database location. Set BEE_DIR or CB_DB_PATH explicitly."
       );
     }
-    const username = userInfo().username;
-    const userDataDir = join(beeRoot, "data", username);
+    const userDataDir = join(beeRoot, "data", stableUserDir());
     mkdirSync(userDataDir, { recursive: true });
     chmodSync(userDataDir, 0o700);
     _DB_PATH = join(userDataDir, "cb.db");
