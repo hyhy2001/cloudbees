@@ -18,7 +18,7 @@ else
 endif
 
 set PY = "python3 $AUTO_DIR/parse_config.py"
-set CONFIG = "$AUTO_DIR/config.yaml"
+set CONFIG = "$AUTO_DIR/../config.yaml"
 set MANIFEST = "$AUTO_DIR/complete.yml"
 
 if ( ! -x "$BEE" ) then

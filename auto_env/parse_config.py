@@ -208,6 +208,7 @@ def cmd_plan_jobs(cfg):
         if not (cmd or "").strip():
             sys.exit("plan-jobs: manual.command is empty -> job would run an empty script. Set it in config.yaml.")
         env = bs_env(cfg)
+        env["CB_AUTO_ENV"] = os.path.dirname(os.path.abspath(__file__))
         # manual: IP_MODE must be DEFINED on the job (default = first ip) so run.csh can
         # override it per-ip with -p IP_MODE=... at runtime. ip=all -> default trunk, run does both.
         ip_def = ips[0]
@@ -217,23 +218,77 @@ def cmd_plan_jobs(cfg):
                  shell_b64(cmd, root, env))
 
 
+# -- S2 env-var derivation (guide S2) ---------------------------------------
+# Each var is auto-derived from RX_AUTO_ROOT following OUR naming rule, but a
+# non-empty user value in config always wins. RX_AUTO_ROOT itself: config
+# rx_auto_root > env RXAUTO_ROOT (exported by rxauto.sh from where it's invoked).
+# ENV_BASE vars stay EMPTY here on purpose: the real RxEnv-* dir carries a dynamic
+# SVN ${REV} (guide S4) so it's globbed at runtime by the bash that consumes it.
+# LOCAL_PYTHON/LOCAL_PYTHON_BIN/UPDATE_DB_SCHEDULES/USER_CUSTOM_SRC: user-fillable, no default.
+
+def _rx_auto_root(cfg):
+    """RX_AUTO_ROOT: user override (config rx_auto_root) else env RXAUTO_ROOT (rxauto.sh)."""
+    return (cfg.get("rx_auto_root") or "").strip() or os.environ.get("RXAUTO_ROOT", "").strip()
+
+
 def _load_setup_vars(cfg):
-    """S2 env vars from setup.vars, with RX_AUTO_ROOT injected from the top-level rx_auto_root."""
+    """S2 env vars: start from setup.vars, then fill any empty one with its derived default.
+    User-set (non-empty) values are never overwritten."""
     sv = dict(dig(cfg, "setup.vars", {}) or {})
-    root = cfg.get("rx_auto_root", "")
-    if root and not sv.get("RX_AUTO_ROOT"):
-        sv["RX_AUTO_ROOT"] = root
+    root = _rx_auto_root(cfg)
+    defaults = {
+        "RX_AUTO_ROOT": root,
+        "TRUNK_IP_RXEWS_RUN_DIR_PATH": f"{root}/rxews_trunk_ip_vnet_" if root else "",
+        "COMMON_RXEWS_RUN_DIR_PATH": f"{root}/rxews_trunk_vnet_wk_" if root else "",
+        "DEDICATED_SV": "HOSTGR_L HOSTGR_M HOSTGR_S HOSTGR_621910",
+        "RIDE_ENV_VER": "WK18",
+        "DASHBOARD_DB_LOCATION": f"{root}/dashboard_db" if root else "",
+        "COMMON_RUN_TYPE": "Trunk",
+    }
+    for k, v in defaults.items():
+        if str(sv.get(k, "")).strip() == "" and v:
+            sv[k] = v
     return sv
 
 
+def _sed_escape(s):
+    r"""Escape for BRE sed replacement: \ first, then & and /."""
+    return s.replace("\\", r"\\").replace("&", r"\&").replace("/", r"\/")
+
+
 def _sed_change(env_dir, ch):
-    """One idempotent sed line for a makefile_common_changes entry (RHS replace). Skip empty new."""
-    var, new, fname = ch.get("var", ""), str(ch.get("new", "")), ch.get("file", "")
-    if not var or new.strip() == "" or not fname:
+    """One idempotent sed line for a makefile change entry. Skip empty new.
+    - var present: replace RHS of `[export] VAR [?:]= ...`
+    - old present (no var): literal string replace (for eval/macro lines)."""
+    new, fname = str(ch.get("new", "")), ch.get("file", "")
+    if new.strip() == "" or not fname:
         return None
-    # sed replacement metachars: \ (first), then & and / . Kept in single-quoted sed arg.
-    esc = new.replace("\\", r"\\").replace("&", r"\&").replace("/", r"\/")
-    return (f'sed -i \'s/^\\([ \\t]*{var}[ \\t]*=\\).*/\\1 {esc}/\' "{env_dir}/{fname}"')
+    var = ch.get("var", "")
+    old = ch.get("old", "")
+    path = f'"{env_dir}/{fname}"'
+    if var:
+        esc = _sed_escape(new)
+        pat = f'^\\([ \\t]*\\(export[ \\t]\\+\\)\\?{var}[ \\t]*[?:]*=\\)'
+        return f'sed -i \'s/{pat}.*/\\1 {esc}/\' {path}'
+    if old:
+        esc_old = _sed_escape(old)
+        esc_new = _sed_escape(new)
+        return f'sed -i \'s/{esc_old}/{esc_new}/\' {path}'
+    return None
+
+
+def _envbase_resolve_bash(var, user_val, rxews_dir, prefix):
+    """Emit bash that sets $var to the ENV_BASE path.
+    User value wins; else read REV from the dir's Makefile and build the path deterministically."""
+    if str(user_val).strip():
+        return f'{var}="{_dq(user_val)}"'
+    rev_var = f'_REV_{var}'
+    return (
+        f'{rev_var}=$(grep -m1 "^[[:space:]]*REV[[:space:]]*[?:]*=" "{rxews_dir}/Makefile" '
+        f'| sed "s/.*=[[:space:]]*//" | tr -d " \\t"); '
+        f'[ -n "${{{rev_var}}}" ] || {{ echo "setup: REV not found in {rxews_dir}/Makefile" >&2; exit 1; }}; '
+        f'{var}="{rxews_dir}/{prefix}-${{{rev_var}}}"'
+    )
 
 
 def _setup_bash_inner(cfg):
@@ -249,16 +304,29 @@ def _setup_bash_inner(cfg):
     cob = sv.get("COMMON_ENV_BASE", "")
     ddb = sv.get("DASHBOARD_DB_LOCATION", "")
     rev = sv.get("RIDE_ENV_VER", "")
+    dsv = sv.get("DEDICATED_SV", "")
     changes = cfg.get("setup", {}).get("makefile_common_changes") or []
+    trunk_ip_chg = cfg.get("setup", {}).get("makefile_trunk_ip_changes") or []
+    common_ip_chg = cfg.get("setup", {}).get("makefile_common_ip_changes") or []
+    # BS_PY3/BSIQ/BSBQ: inject -m "DEDICATED_SV" after the bs flag, applied to both dirs.
+    bs_changes = []
+    if dsv:
+        for var, flag in (("BS_PY3", "-I"), ("BSIQ", "-K"), ("BSBQ", "-B")):
+            bs_changes.append({"file": "Makefile",
+                                "old": f"bs {flag} -os ${{OS_TYPE_SETUP}}",
+                                "new": f'bs {flag} -os ${{OS_TYPE_SETUP}} -m "{dsv}"'})
     lines = [f'cd "{root}"']
-    # -- Makefile common changes (S4 common) on both env dirs, derived from config --
-    for d in (ti, co):
+    # -- S4 Makefile changes: common (both dirs) + per-dir-only changes + BS changes --
+    for d, extra in ((ti, trunk_ip_chg), (co, common_ip_chg)):
         if not d:
             continue
-        for ch in changes:
+        for ch in changes + bs_changes + extra:
             sed = _sed_change(d, ch)
             if sed:
                 lines.append(sed)
+    # -- ENV_BASE: user value wins; else glob the RxEnv-* dir my_cmd created (dynamic ${REV}). --
+    lines.append(_envbase_resolve_bash("TIB", tib, ti, "RxEnv-Trunk-IP-VNET"))
+    lines.append(_envbase_resolve_bash("COB", cob, co, "RxEnv-Trunk-VNET"))
     # -- step 2: general_setup + auto_setup + server_setup make targets --
     lines += [
         f'make setup_run_cmd RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{ti}"',
@@ -266,11 +334,11 @@ def _setup_bash_inner(cfg):
         f'make setup_check_rp_cmd RX_AUTO_ROOT="{root}"',
         f'make setup_for_auto RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{ti}"',
         f'make setup_for_auto RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{co}" RUN_TYPE="{crt}"',
-        f'make gen_dashboard_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="{tib}" RIDE_ENV_VER="{rev}"',
-        f'make gen_dashboard_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="{cob}" RIDE_ENV_VER="{rev}" RUN_TYPE="{crt}"',
-        f'make gen_ticket_panel_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" TRUNK_IP_ENV_PATH="{tib}" COMMON_IP_ENV_PATH="{cob}"',
-        f'make gen_update_dashboard_script RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="{tib}"',
-        f'make gen_update_dashboard_script RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="{cob}" RUN_TYPE="{crt}"',
+        f'make gen_dashboard_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="$TIB" RIDE_ENV_VER="{rev}"',
+        f'make gen_dashboard_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="$COB" RIDE_ENV_VER="{rev}" RUN_TYPE="{crt}"',
+        f'make gen_ticket_panel_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" TRUNK_IP_ENV_PATH="$TIB" COMMON_IP_ENV_PATH="$COB"',
+        f'make gen_update_dashboard_script RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="$TIB"',
+        f'make gen_update_dashboard_script RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="$COB" RUN_TYPE="{crt}"',
         f'make setup_dashboard_sv RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}"',
     ]
     return "\n".join(lines)

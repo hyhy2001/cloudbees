@@ -40,6 +40,10 @@ AUTO="$CB/auto_env"
 [ -d "$AUTO" ] || { echo "rxauto: $AUTO not found" >&2; exit 1; }
 [ -x "$CB/bee" ] && export BEE="$CB/bee"   # else lib.csh falls back to ../bee (same path)
 
+# RX_AUTO_ROOT = the RX_AUTO package root: CB is .../RX_AUTO/UTLs/Cloudbees, so 3 levels up.
+# parse_config uses this when config.yaml's rx_auto_root is unset. config value always wins.
+export RXAUTO_ROOT="$(cd "$CB/../.." && pwd)"
+
 # Pull --mode/--ip out of the args (anywhere) and export as env overrides read by parse_config.
 # Everything else stays positional. --mode manual|auto ; --ip common|trunk|all.
 args=()

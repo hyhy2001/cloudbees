@@ -24,16 +24,11 @@ def load(p):
 
 
 def default_cfg():
-    return os.path.join(os.path.dirname(__file__), "..", "config.yaml")
+    return os.path.join(os.path.dirname(__file__), "..", "..", "config.yaml")
 
 
-def setup_vars(cfg):
-    """S2 env vars from setup.vars + RX_AUTO_ROOT injected from top-level rx_auto_root."""
-    sv = dict((cfg.get("setup") or {}).get("vars", {}) or {})
-    root = cfg.get("rx_auto_root", "")
-    if root and not sv.get("RX_AUTO_ROOT"):
-        sv["RX_AUTO_ROOT"] = root
-    return sv
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from parse_config import _load_setup_vars as setup_vars  # single source of S2 derivation (guide S2)
 
 
 def backup(path, made, dry):
@@ -54,7 +49,10 @@ def backup(path, made, dry):
 
 def set_var_rhs(text, var, new):
     """Replace the RHS of `VAR = ...` (keeps operator = / := / ?=). Returns (text, status)."""
-    pat = re.compile(rf'^([ \t]*{re.escape(var)}[ \t]*)(=|:=|\?=)([ \t]*)(.*)$', re.M)
+    # Match both `VAR ?= val` and `export VAR ?= val` (with any whitespace between tokens).
+    pat = re.compile(
+        rf'^([ \t]*(?:export[ \t]+)?{re.escape(var)}[ \t]*)(=|:=|\?=)([ \t]*)(.*?)[ \t]*$',
+        re.M)
     m = pat.search(text)
     if not m:
         return text, "not-found"
@@ -66,8 +64,8 @@ def set_var_rhs(text, var, new):
 
 
 def apply_file(path, changes, made, dry):
-    """changes: list of (var, new). Read once, apply all, write once. Skip empty new."""
-    active = [(v, n) for v, n in changes if str(n).strip() != ""]
+    """changes: list of (key, new, mode) where mode is 'var' (RHS replace) or 'literal' (exact replace). Skip empty new."""
+    active = [(k, n, m) for k, n, m in changes if str(n).strip() != ""]
     if not active:
         print(f"  (no changes with a value for {os.path.basename(path)})")
         return
@@ -77,10 +75,20 @@ def apply_file(path, changes, made, dry):
     with open(path) as f:
         text = f.read()
     orig = text
-    for var, new in active:
-        text, st = set_var_rhs(text, var, new)
+    for key, new, mode in active:
+        if mode == "literal":
+            if key in text:
+                text = text.replace(key, new, 1)
+                st = "changed"
+            elif new in text:
+                st = "already"
+            else:
+                st = "not-found"
+        else:
+            text, st = set_var_rhs(text, key, new)
         mark = {"changed": "OK", "already": "=", "not-found": "!!"}[st]
-        print(f"    [{mark}] {var} -> {new}" + ("   (not found in file)" if st == "not-found" else ""))
+        label = key[:60] + "..." if len(key) > 60 else key
+        print(f"    [{mark}] {label} -> {new}" + ("   (not found in file)" if st == "not-found" else ""))
     if text != orig:
         backup(path, made, dry)
         print(f"  {'[dry] would write' if dry else 'wrote'} {path}")
@@ -101,6 +109,30 @@ def emit_vars(cfg_path):
         print(f"{k}='{v}'")   # single-quoted for safe bash eval
 
 
+def _changes_by_file(entries):
+    """Group entries into {fname: [(var_or_old, new, mode)]} where mode is 'var' or 'literal'."""
+    by_file = {}
+    for c in (entries or []):
+        fname = c.get("file")
+        var, old, new = c.get("var"), c.get("old"), c.get("new", "")
+        if not fname:
+            print(f"  SKIP incomplete entry (need file): {c}")
+            continue
+        if var:
+            by_file.setdefault(fname, []).append((var, new, "var"))
+        elif old:
+            by_file.setdefault(fname, []).append((old, new, "literal"))
+        else:
+            print(f"  SKIP incomplete entry (need var or old): {c}")
+    return by_file
+
+
+def apply_dir(env_dir, by_file, made, dry):
+    for fname, chs in by_file.items():
+        print(f"  file: {fname}")
+        apply_file(os.path.join(env_dir, fname), chs, made, dry)
+
+
 def main():
     if len(sys.argv) >= 2 and sys.argv[1] == "emit-vars":
         cfg = sys.argv[2] if len(sys.argv) > 2 else default_cfg()
@@ -112,27 +144,41 @@ def main():
     cfg_path = args[0] if args else default_cfg()
     cfg = load(cfg_path)
     sv = setup_vars(cfg)
-    by_file = {}
-    for c in ((cfg.get("setup") or {}).get("makefile_common_changes") or []):
-        fname, var = c.get("file"), c.get("var")
-        if not fname or not var:
-            print(f"  SKIP incomplete change entry (need file+var): {c}")
-            continue
-        by_file.setdefault(fname, []).append((var, c.get("new", "")))
+    setup = cfg.get("setup") or {}
 
     trunk = str(sv.get("TRUNK_IP_RXEWS_RUN_DIR_PATH", "")).strip().rstrip("/")
     common = str(sv.get("COMMON_RXEWS_RUN_DIR_PATH", "")).strip().rstrip("/")
     if not trunk and not common:
-        sys.exit("STOP: set TRUNK_IP_RXEWS_RUN_DIR_PATH / COMMON_RXEWS_RUN_DIR_PATH in config.yaml (setup.vars)")
+        sys.exit("STOP: set TRUNK_IP_RXEWS_RUN_DIR_PATH / COMMON_RXEWS_RUN_DIR_PATH in config.yaml (setup.vars, one level above auto_env/)")
+
+    common_chg   = _changes_by_file(setup.get("makefile_common_changes") or [])
+    trunk_ip_chg = _changes_by_file(setup.get("makefile_trunk_ip_changes") or [])
+    common_ip_chg= _changes_by_file(setup.get("makefile_common_ip_changes") or [])
+
+    # BS_PY3/BSIQ/BSBQ: inject -m "DEDICATED_SV" into bs command, applied to both dirs.
+    dsv = str(sv.get("DEDICATED_SV", "")).strip()
+    bs_chg = {}
+    if dsv:
+        bs_entries = [
+            {"file": "Makefile", "old": f"bs -I -os ${{OS_TYPE_SETUP}}", "new": f'bs -I -os ${{OS_TYPE_SETUP}} -m "{dsv}"'},
+            {"file": "Makefile", "old": f"bs -K -os ${{OS_TYPE_SETUP}}", "new": f'bs -K -os ${{OS_TYPE_SETUP}} -m "{dsv}"'},
+            {"file": "Makefile", "old": f"bs -B -os ${{OS_TYPE_SETUP}}", "new": f'bs -B -os ${{OS_TYPE_SETUP}} -m "{dsv}"'},
+        ]
+        bs_chg = _changes_by_file(bs_entries)
 
     made = set()
-    for env_dir in (trunk, common):
+    for env_dir, extra in ((trunk, trunk_ip_chg), (common, common_ip_chg)):
         if not env_dir:
             continue
-        print(f"== common changes @ {env_dir} ==")
-        for fname, chs in by_file.items():
-            print(f"  file: {fname}")
-            apply_file(os.path.join(env_dir, fname), chs, made, dry)
+        label = "trunk IP" if env_dir == trunk else "common IP"
+        print(f"== common changes @ {env_dir} ({label}) ==")
+        apply_dir(env_dir, common_chg, made, dry)
+        if bs_chg:
+            print(f"== BS host-group changes @ {env_dir} ==")
+            apply_dir(env_dir, bs_chg, made, dry)
+        if extra:
+            print(f"== {label}-only changes @ {env_dir} ==")
+            apply_dir(env_dir, extra, made, dry)
 
     print("== done ==" + ("  (dry-run, nothing written)" if dry else ""))
 
