@@ -95,7 +95,7 @@ foreach line ("`cat $PLAN`")
       if ( $exists ) then
         echo "job ${jn}: exists -> update"
         if ( "$ip" != "-" ) then
-          "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "IP_MODE=$ip"
+          "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "IP_MODE=$ip" --param-def "SPLIT_FILE="
         else
           "$BEE" job update freestyle "$folder/$jn" --shell "$sh"
         endif
@@ -104,7 +104,7 @@ foreach line ("`cat $PLAN`")
           --shell "$sh" --param-def "IP_MODE=$ip" --schedule "$sched_real"
       else if ( "$ip" != "-" ) then
         "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
-          --shell "$sh" --param-def "IP_MODE=$ip"
+          --shell "$sh" --param-def "IP_MODE=$ip" --param-def "SPLIT_FILE="
       else
         "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
           --shell "$sh"

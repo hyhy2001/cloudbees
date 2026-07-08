@@ -16,7 +16,7 @@ node:
   host_trunk:  10.0.0.20    # ip_mode=trunk  -> SSH this host  (VLSI common/trunk)
   port: 22
   remote_dir_base: /home    # node remote-dir -> <base>/<username>
-  executors: 2
+  executors: 1
 
 # -- SWITCHES --
 mode: manual                # manual (N jobs, work-stealing rx_run) | auto (1 job with schedule)
@@ -39,26 +39,18 @@ bs:
 # REQUIRES: SUBMIT_LIST shared across nodes (shared claim dir). host=localhost satisfies this.
 manual:
   job_prefix: build
-  wait: false               # true = bee job run --wait (job runs multiple files sequentially)
-  # $RX_AUTO_ROOT, $BS_GROUPS, $BS_OS, $BS_MEM, $RIDE_SETUP are injected by parse_config (from bs:).
-  # $IP_MODE is a build param. Each claimed split file is submitted to LSF via bs, inside a single
-  # tcsh that sources RiDE first (double-quotes for tcsh -c so they don't clash with bash).
+  wait: false               # true = bee job run --wait (blocks until each build finishes)
+  # $RX_AUTO_ROOT, $BS_GROUPS, $BS_OS, $BS_MEM, $RIDE_SETUP injected by parse_config (from bs:).
+  # $IP_MODE and $SPLIT_FILE are build params passed per-build by run.csh.
   command: |
     cd "$RX_AUTO_ROOT/RX_AUTO"
     if [ "$IP_MODE" = trunk ]; then
-      RX=01_rx_run_ip_unit.bash;        DIR=SUBMIT_LIST/NORMAL; PAT=normal_submit_module_list_
+      RX=01_rx_run_ip_unit.bash
     else
-      RX=02_rx_run_common_ip_unit.bash; DIR=SUBMIT_LIST/COMMON; PAT=common_submit_module_list_
+      RX=02_rx_run_common_ip_unit.bash
     fi
-    CLAIM="$CB_AUTO_ENV/claims/${IP_MODE}"; mkdir -p "$CLAIM"
-    for f in "$DIR"/${PAT}*; do
-      [ -e "$f" ] || continue
-      lock="$CLAIM/$(basename "$f")"
-      mkdir "$lock" 2>/dev/null || continue          # claim failed (another worker holds it) -> skip
-      echo "[worker] claim $f"
-      bs -m "$BS_GROUPS" -I -os "$BS_OS" -M "$BS_MEM" \
-        tcsh -f -c "source $RX_AUTO_ROOT/$RIDE_SETUP; bash $RX_AUTO_ROOT/RX_AUTO/$RX $f"
-    done
+    bs -m "$BS_GROUPS" -I -os "$BS_OS" -M "$BS_MEM" \
+      tcsh -f -c "source $RX_AUTO_ROOT/$RIDE_SETUP; bash $RX_AUTO_ROOT/RX_AUTO/$RX $SPLIT_FILE"
 
 # -- auto = STEP 3 go_rx_auto (orchestrator: detect -> queue -> run all). No index, IP_MODE only. --
 auto:
