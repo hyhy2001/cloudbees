@@ -60,7 +60,8 @@ while ( 1 )
       echo "cred ${user}: exists -> reuse $cid"
     else
       set pass = "`$PY cred-pass $CONFIG $user`"   # password read raw (no word-split)
-      "$BEE" cred create --id "$cid" --username "$user" --password $pass:q --description $BASE:q
+      echo "DEBUG: cred create --id $cid --username $user --password [${#pass} chars] --description $BASE $user"
+      "$BEE" cred create --id "$cid" --username "$user" --password "$pass" --description "$BASE $user"
       if ( $status != 0 ) then
         echo "ERROR: failed to create cred $cid for $user" >& /dev/stderr ; exit 1
       endif
