@@ -403,10 +403,12 @@ def cmd_plan_splits(cfg, rx_auto_root, ip):
     jobs = [f"{prefix}_{a['username']}" for a in cfg.get("accounts", []) if a.get("username")]
     if not jobs:
         sys.exit("plan-splits: no accounts configured")
+    # rx_auto_root already points at the RX_AUTO dir (holds rx_run + SUBMIT_LIST),
+    # so do NOT append another "RX_AUTO" segment.
     if ip == "trunk":
-        pat = os.path.join(rx_auto_root, "RX_AUTO", "SUBMIT_LIST", "NORMAL", "normal_submit_module_list_*")
+        pat = os.path.join(rx_auto_root, "SUBMIT_LIST", "NORMAL", "normal_submit_module_list_*")
     else:
-        pat = os.path.join(rx_auto_root, "RX_AUTO", "SUBMIT_LIST", "COMMON", "common_submit_module_list_*")
+        pat = os.path.join(rx_auto_root, "SUBMIT_LIST", "COMMON", "common_submit_module_list_*")
     import glob as _glob
     files = sorted(_glob.glob(pat))
     if not files:
