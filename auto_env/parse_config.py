@@ -32,6 +32,19 @@ def load(path):
         return yaml.safe_load(f) or {}
 
 
+def dump_yaml(data, f):
+    """yaml.safe_dump with sort_keys=False, but tolerate PyYAML < 5.1.
+
+    sort_keys was only added in PyYAML 5.1 (2019); older versions on some hosts
+    raise 'dump_all() got an unexpected keyword argument sort_keys'. Fall back to
+    a plain safe_dump there (key order not preserved, but the manifest still writes).
+    """
+    try:
+        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+    except TypeError:
+        yaml.safe_dump(data, f, default_flow_style=False, allow_unicode=True)
+
+
 def dig(d, dotted, default=None):
     cur = d
     for k in dotted.split("."):
@@ -483,7 +496,7 @@ def cmd_prune_manifest(cfg, manifest_path):
     m["nodes"] = [n for n in (m.get("nodes") or []) if n in want_nodes]
     m["credentials"] = [c for c in (m.get("credentials") or []) if c.get("username") in want_users]
     with open(manifest_path, "w") as f:
-        yaml.safe_dump(m, f, sort_keys=False, allow_unicode=True)
+        dump_yaml(m, f)
     print(f"manifest pruned: {len(m['credentials'])} cred, {len(m['nodes'])} node, {len(m['jobs'])} job")
 
 
@@ -531,7 +544,7 @@ def cmd_write_manifest(cfg, created_tsv, out):
         "jobs": merged_jobs,
     }
     with open(out, "w") as f:
-        yaml.safe_dump(manifest, f, sort_keys=False, allow_unicode=True)
+        dump_yaml(manifest, f)
     print(f"wrote {out}: {len(manifest['credentials'])} cred, {len(merged_nodes)} node, {len(merged_jobs)} job")
 
 
@@ -578,7 +591,7 @@ def cmd_merge_jobs(manifest_path, created_tsv):
         pass
     m["jobs"] = jobs
     with open(manifest_path, "w") as f:
-        yaml.safe_dump(m, f, sort_keys=False, allow_unicode=True)
+        dump_yaml(m, f)
     print(f"manifest: {len(jobs)} job")
 
 
