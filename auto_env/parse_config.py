@@ -226,6 +226,9 @@ def cmd_plan_jobs(cfg):
         if not (cmd or "").strip():
             sys.exit("plan-jobs: manual.command is empty -> job would run an empty script. Set it in config.yaml.")
         env = bs_env(cfg)
+        parent = _rx_parent(cfg)
+        if parent:
+            env["RX_AUTO_PARENT"] = parent
         if root:
             env["CB_RUN_DIR"] = f"{root}/cb_run"
         # manual: IP_MODE must be DEFINED on the job (default = first ip) so run.csh can
@@ -248,6 +251,17 @@ def cmd_plan_jobs(cfg):
 def _rx_auto_root(cfg):
     """RX_AUTO_ROOT: user override (config rx_auto_root) else env RXAUTO_ROOT (rxauto.sh)."""
     return (cfg.get("rx_auto_root") or "").strip() or os.environ.get("RXAUTO_ROOT", "").strip()
+
+
+def _rx_parent(cfg):
+    """RX_AUTO_PARENT: dir holding rxauto.sh/config.yaml + the shell-init files
+    (my_ride_setup, my_cmd, my_cmd_for_common). Config override > env RXAUTO_PARENT
+    (rxauto.sh) > RX_AUTO_ROOT's parent as a last resort."""
+    v = (cfg.get("rx_auto_parent") or "").strip() or os.environ.get("RXAUTO_PARENT", "").strip()
+    if v:
+        return v
+    root = _rx_auto_root(cfg)
+    return os.path.dirname(root) if root else ""
 
 
 def _load_setup_vars(cfg):
@@ -384,10 +398,14 @@ def cmd_plan_setup(cfg, cfg_path):
     user = dig(cfg, "setup.account.username", "")
     bs = cfg.get("bs") or {}
     root = _load_setup_vars(cfg).get("RX_AUTO_ROOT", "")
+    parent = _rx_parent(cfg)
     ride = bs.get("ride_setup", "my_ride_setup")
 
+    # my_ride_setup, my_cmd, my_cmd_for_common all live in the PARENT dir (next to
+    # rxauto.sh), not in RX_AUTO/. cd there to source them, then the inner bash
+    # (which cd's to RX_AUTO_ROOT itself) runs the make targets.
     inner_b64 = base64.b64encode(_setup_bash_inner(cfg).encode()).decode()
-    tcsh_arg = (f'cd {root}; source {root}/{ride}; source ./my_cmd; source ./my_cmd_for_common; '
+    tcsh_arg = (f'cd {parent}; source {parent}/{ride}; source ./my_cmd; source ./my_cmd_for_common; '
                 f'echo {inner_b64} | base64 -d | bash')
     outer = (f'bs -m "{bs.get("host_groups","")}" -I -os "{bs.get("os","")}" '
              f'-M "{bs.get("mem","")}" tcsh -f -c \'{tcsh_arg}\'')
