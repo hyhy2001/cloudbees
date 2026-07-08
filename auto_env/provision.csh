@@ -89,7 +89,7 @@ if ( ! $?DRY ) then
 endif
 
 # -- environment warning --
-set host_c = "`$PY get $CONFIG node.host_common`"
+set host_c = "`$PY get $CONFIG node.host`"
 if ( "$host_c" == "localhost" || "$host_c" == "127.0.0.1" ) then
   echo "WARNING: host=localhost + sshd PasswordAuthentication no -> node will be offline, jobs PENDING."
 endif
