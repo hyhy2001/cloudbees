@@ -16,8 +16,8 @@ RX_AUTO/
         `--- auto_env/        <- this package
             |--- parse_config.py
             |--- lib.csh  provision.csh  deploy.csh  run.csh  manage.csh
+            |--- pause.csh  resume.csh
             |--- scripts/setup_all.bash
-            |--- claims/      <- runtime claim dirs (trunk/ common/) for work-stealing
             `--- rxews_makefile/apply_makefile_mods.py
 ```
 
@@ -42,10 +42,8 @@ accounts:                          # Linux accounts -> 1 cred + 1 node + 1 job e
   - { username: user02, password: pass02 }
 
 node:
-  host_common: 10.0.0.10           # all nodes SSH to this host (shared filesystem required)
-  host_trunk:  10.0.0.20
+  host: 10.0.0.10                  # all nodes SSH to this host (shared filesystem required)
   port: 22
-  remote_dir_base: /home
 
 bs:                                # LSF submit params (used by rx_setup job and step-3 jobs)
   host_groups: "HOSTGR_L HOSTGR_M HOSTGR_S HOSTGR_621910"
@@ -118,19 +116,26 @@ S4 changes applied automatically (both trunk IP and common IP dirs):
 
 **manual mode:**
 ```bash
-rxauto.sh run              # triggers all build_* jobs with IP_MODE from config
-rxauto.sh run --ip trunk   # override IP_MODE for this run only
-rxauto.sh run --ip all     # run trunk AND common
+rxauto.sh run              # triggers builds for all split files (round-robin across jobs)
+rxauto.sh run --ip trunk   # trunk only
+rxauto.sh run --ip all     # trunk AND common
 ```
 
-Each job claims split files from `SUBMIT_LIST/NORMAL|COMMON/` (atomic `mkdir` into
-`auto_env/claims/<ip_mode>/`) and submits each via LSF:
+`run.csh` scans `SUBMIT_LIST/NORMAL|COMMON/`, distributes split files round-robin across jobs,
+and triggers one `bee job run` per file with `-p SPLIT_FILE=<path>`. Each build runs:
 ```
-bs ... tcsh -f -c "source my_ride_setup; bash rx_run <file>"
+bs ... tcsh -f -c "source my_ride_setup; bash rx_run $SPLIT_FILE"
 ```
+CloudBees queues builds per node (executor=1) — nodes run in parallel, each node processes
+its assigned files sequentially.
 
-**auto mode:** no manual trigger needed — the `daily` job fires on schedule (e.g. every 30 min)
+**auto mode:** no manual trigger — the `daily` job fires on schedule (e.g. every 30 min)
 and runs `go_rx_auto` which detects SVN changes, queues, and runs everything.
+
+```bash
+rxauto.sh pause    # stop the schedule (job kept, just stops firing)
+rxauto.sh resume   # restore schedule from config
+```
 
 ---
 
@@ -149,11 +154,12 @@ and runs `go_rx_auto` which detects SVN changes, queues, and runs everything.
 
 ## Two modes
 
-- **manual** — N accounts → N nodes → N jobs, **work-stealing**. Jobs run in parallel; each
-  claims the next unclaimed split file (atomic `mkdir` in `auto_env/claims/<ip_mode>/`) until all
-  files are processed. More accounts = more parallelism.
-- **auto** — 1 dedicated account → 1 node → 1 scheduled job running `go_rx_auto` (detects SVN
-  changes and orchestrates the full run automatically).
+- **manual** — N accounts → N nodes → N jobs. `run.csh` calls `plan-splits` which round-robins
+  split files across jobs; one `bee job run` per file with `-p SPLIT_FILE=<path>`. Each node has
+  `executors=1` so its builds queue and process serially; nodes run in parallel. More accounts =
+  more parallelism. `--ip all` triggers both trunk and common in one call.
+- **auto** — 1 dedicated account → 1 node (executor=2 to allow trunk + common in parallel) → 1 or
+  2 scheduled jobs (`daily_trunk`/`daily_common` when `ip_mode: all`) running `go_rx_auto`.
 
 `IP_MODE=trunk` → `01_*` scripts; `IP_MODE=common` → `02_*` scripts.
 
@@ -191,9 +197,8 @@ prefix, so a new name is a fresh namespace that never overwrites the previous ro
 | `lib.csh` | resolve `bee` binary, select controller, set `$CONFIG` / `$MANIFEST` |
 | `provision.csh` | create folder + cred + node per account, write `complete.yml` |
 | `deploy.csh` | create/update jobs (`rx_setup` + step-3 jobs); clear schedule on stale jobs |
-| `run.csh` | trigger step-3 jobs (manual mode) |
+| `run.csh` | trigger step-3 builds (manual mode): calls `plan-splits` → round-robin → one `bee job run` per split file |
 | `manage.csh` | `list` / `teardown` / `prune` from the manifest |
 | `scripts/setup_all.bash` | manual alternative for step 1-2 (outside CloudBees) |
 | `rxews_makefile/apply_makefile_mods.py` | applies S4 Makefile changes to both RXEWS dirs (backup, dry-run, idempotent) |
-| `claims/` | runtime claim dirs: `trunk/` and `common/` — one subdir per claimed split file |
 | `complete.yml` | manifest: folder, cred-ids, node names, job names (written by provision/deploy) |

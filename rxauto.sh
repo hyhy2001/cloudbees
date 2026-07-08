@@ -7,6 +7,8 @@
 #   rxauto.sh setup [all|makefile|general|auto|server] [--dry-run]  -> scripts/setup_all.bash
 #   rxauto.sh all                                      -> provision + deploy + run
 #   rxauto.sh prune [--dry-run]                        -> DELETE infra config no longer wants
+#   rxauto.sh pause [--dry-run]                        -> clear schedule on auto jobs (stop firing)
+#   rxauto.sh resume [--dry-run]                       -> restore schedule from config
 #   rxauto.sh bee <args...>                            -> raw bee passthrough
 #
 # Switch mode/ip without editing config (override, anywhere in the args):
@@ -61,6 +63,7 @@ set -- "${args[@]}"
 cmd="${1:-}"; shift || true
 case "$cmd" in
   provision|deploy|run|manage) exec csh "$AUTO/$cmd.csh" "$@" ;;
+  pause|resume)                exec csh "$AUTO/$cmd.csh" "$@" ;;
   prune)                       exec csh "$AUTO/manage.csh" prune "$@" ;;
   setup)                       exec bash "$AUTO/scripts/setup_all.bash" "$@" ;;
   bee)                         exec "${BEE:-$CB/bee}" "$@" ;;

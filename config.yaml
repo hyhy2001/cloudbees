@@ -12,15 +12,14 @@ accounts:                   # Linux accounts -> 1 cred + 1 node each
   - { username: user03, password: pass03 }
 
 node:
-  host_common: 10.0.0.10    # ip_mode=common -> SSH this host
-  host_trunk:  10.0.0.20    # ip_mode=trunk  -> SSH this host  (VLSI common/trunk)
+  host: 10.0.0.10           # SSH host for all nodes (all accounts share the same host)
   port: 22
-  remote_dir_base: /home    # node remote-dir -> <base>/<username>
+  remote_dir_base: ""       # "" -> auto: $RX_AUTO_ROOT/cb_remote/<username>
   executors: 1
 
 # -- SWITCHES --
 mode: manual                # manual (N jobs, work-stealing rx_run) | auto (1 job with schedule)
-ip_mode: common             # common | trunk -> picks host + default IP_MODE param
+ip_mode: common             # common | trunk | all -> picks host + default IP_MODE param
 
 # -- LSF submit (bs) - shared by manual step-3 and the rx_setup job --
 # Everything runs inside one `tcsh -f -c '...'` so `source my_ride_setup` takes effect.

@@ -60,13 +60,8 @@ def ip_list(cfg):
     return ["trunk", "common"] if ip == "all" else [ip]
 
 
-def host_for_ip(cfg, ip):
-    node = cfg.get("node", {})
-    return node.get("host_trunk" if ip == "trunk" else "host_common", "")
-
-
 def host_for(cfg):
-    return host_for_ip(cfg, ip_list(cfg)[0])
+    return cfg.get("node", {}).get("host", "")
 
 
 def node_name(base, user):
@@ -89,8 +84,7 @@ def _check_no_space(cfg):
         ("auto.job_name", dig(cfg, "auto.job_name", "")),
         ("setup.job_name", dig(cfg, "setup.job_name", "")),
         ("node.remote_dir_base", dig(cfg, "node.remote_dir_base", "")),
-        ("node.host_common", dig(cfg, "node.host_common", "")),
-        ("node.host_trunk", dig(cfg, "node.host_trunk", "")),
+        ("node.host", dig(cfg, "node.host", "")),
     ]
     for user, _ in infra_accounts(cfg):
         checks.append(("account username", user))
@@ -128,6 +122,8 @@ def cmd_plan_infra(cfg):
     node = cfg.get("node", {})
     host = host_for(cfg)
     default_exec = node.get("executors", 1)
+    root = _rx_auto_root(cfg)
+    remote_base = f"{root}/cb_remote" if root else node.get("remote_dir_base", "/home")
     # build per-user executor overrides from special accounts
     exec_override = {}
     for key in ("auto.account", "setup.account"):
@@ -138,7 +134,7 @@ def cmd_plan_infra(cfg):
         if not user:
             continue
         emit("ACCT", user, node_name(base, user), host, node.get("port", 22),
-             f"{node.get('remote_dir_base', '/home').rstrip('/')}/{user}",
+             f"{remote_base.rstrip('/')}/{user}",
              exec_override.get(user, default_exec))
 
 
@@ -217,7 +213,8 @@ def cmd_plan_jobs(cfg):
         if not (cmd or "").strip():
             sys.exit("plan-jobs: manual.command is empty -> job would run an empty script. Set it in config.yaml.")
         env = bs_env(cfg)
-        env["CB_AUTO_ENV"] = os.path.dirname(os.path.abspath(__file__))
+        if root:
+            env["CB_RUN_DIR"] = f"{root}/cb_run"
         # manual: IP_MODE must be DEFINED on the job (default = first ip) so run.csh can
         # override it per-ip with -p IP_MODE=... at runtime. ip=all -> default trunk, run does both.
         ip_def = ips[0]
