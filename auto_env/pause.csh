@@ -2,7 +2,8 @@
 # pause.csh [--dry-run] - clear schedule on auto jobs (jobs kept, just stop firing).
 # resume.csh restores the schedule from config. Only affects auto mode jobs.
 
-set AUTO_DIR = `cd "$0:h" && pwd`
+set AUTO_DIR = "$0:h"
+if ( "$AUTO_DIR" !~ /* ) set AUTO_DIR = "$cwd/$AUTO_DIR"
 source "$AUTO_DIR/lib.csh"
 if ( ! $?LIB_READY ) exit 1
 
