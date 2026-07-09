@@ -97,8 +97,9 @@ Creates/updates all jobs on CloudBees:
 ### 4. Run step 1-2: trigger rx_setup (once per environment)
 
 ```bash
-rxauto.sh run-setup                        # resolves folder/job from config
-# or explicitly: rxauto.sh bee job run RX_AUTO/rx_setup   (folder = base_name)
+rxauto.sh run-setup                        # all phases (default): makefile -> general -> auto -> server
+rxauto.sh run-setup general                # only one phase: makefile | general | auto | server | all
+# or explicitly: rxauto.sh bee job run RX_AUTO/rx_setup -p PHASE=all   (folder = base_name)
 # or click the job in the CloudBees UI
 ```
 
