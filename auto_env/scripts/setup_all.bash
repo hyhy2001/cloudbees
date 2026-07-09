@@ -24,6 +24,11 @@ eval "$(python3 "$APPLY" emit-vars "$YAML")"
 : "${RX_AUTO_ROOT:?set RX_AUTO_ROOT in config.yaml}"
 COMMON_RUN_TYPE="${COMMON_RUN_TYPE:-Trunk}"
 
+# The make targets (setup_run_cmd, gen_dashboard_sv_core, ...) live in the
+# Makefile in the PARENT dir (one level above RX_AUTO/), so make runs from there.
+# Prefer RXAUTO_PARENT (exported by rxauto.sh); else fall back to RX_AUTO_ROOT's parent.
+RX_AUTO_PARENT="${RXAUTO_PARENT:-$(dirname "$RX_AUTO_ROOT")}"
+
 run(){ if [ -n "$DRY" ]; then echo "[dry] $*"; else "$@"; fi; }
 
 phase_makefile(){
@@ -33,7 +38,7 @@ phase_makefile(){
 
 phase_general(){
   echo "== general_setup (S6-general): run + report scripts =="
-  cd "$RX_AUTO_ROOT"
+  cd "$RX_AUTO_PARENT"
   run make setup_run_cmd RX_AUTO_ROOT="$RX_AUTO_ROOT" RXEWS_RUN_DIR_PATH="$TRUNK_IP_RXEWS_RUN_DIR_PATH"
   run make setup_run_cmd RX_AUTO_ROOT="$RX_AUTO_ROOT" RXEWS_RUN_DIR_PATH="$COMMON_RXEWS_RUN_DIR_PATH" RUN_TYPE="$COMMON_RUN_TYPE"
   run make setup_check_rp_cmd RX_AUTO_ROOT="$RX_AUTO_ROOT"
@@ -41,7 +46,7 @@ phase_general(){
 
 phase_auto(){
   echo "== auto_setup (S6-auto): auto + queue scripts =="
-  cd "$RX_AUTO_ROOT"
+  cd "$RX_AUTO_PARENT"
   run make setup_for_auto RX_AUTO_ROOT="$RX_AUTO_ROOT" RXEWS_RUN_DIR_PATH="$TRUNK_IP_RXEWS_RUN_DIR_PATH"
   [ -n "$DRY" ] || sleep 3
   run make setup_for_auto RX_AUTO_ROOT="$RX_AUTO_ROOT" RXEWS_RUN_DIR_PATH="$COMMON_RXEWS_RUN_DIR_PATH" RUN_TYPE="$COMMON_RUN_TYPE"
@@ -58,7 +63,7 @@ resolve_env_base(){  # $1=current value  $2=rxews dir  $3=RxEnv prefix (e.g. RxE
 
 phase_server(){
   echo "== server_setup (S6-server): dashboard + ticket + run_rxqor (GENERATES scripts only) =="
-  cd "$RX_AUTO_ROOT"
+  cd "$RX_AUTO_PARENT"
   TRUNK_IP_ENV_BASE="$(resolve_env_base "${TRUNK_IP_ENV_BASE:-}" "$TRUNK_IP_RXEWS_RUN_DIR_PATH" 'RxEnv-Trunk-IP-VNET')" || exit 1
   COMMON_ENV_BASE="$(resolve_env_base "${COMMON_ENV_BASE:-}" "$COMMON_RXEWS_RUN_DIR_PATH" 'RxEnv-Trunk-VNET')" || exit 1
   run make gen_dashboard_sv_core   RX_AUTO_ROOT="$RX_AUTO_ROOT" DASHBOARD_DB_LOCATION="$DASHBOARD_DB_LOCATION" ENV_BASE="$TRUNK_IP_ENV_BASE" RIDE_ENV_VER="${RIDE_ENV_VER:-}"
