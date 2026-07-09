@@ -25,7 +25,8 @@ if ( $?RXAUTO_CONFIG ) then
 else
   set CONFIG = "$AUTO_DIR/../config.yaml"
 endif
-set MANIFEST = "$AUTO_DIR/complete.yml"
+# complete.yml lives in the Cloudbees dir (one level up from auto_env), next to bee.
+set MANIFEST = "$AUTO_DIR/../complete.yml"
 
 if ( ! -x "$BEE" ) then
   echo "lib.csh: bee binary not found at $BEE (set env BEE to override)" ; exit 1
@@ -35,17 +36,11 @@ endif
 # quoting of args containing spaces/pipes (e.g. --shell "echo X | base64 -d | bash").
 # Each script checks `if ($?DRY)` and calls $BEE directly instead.
 
-# Select controller if config names one (empty = keep the active one).
-# Check status: a wrong/unreachable controller must fail loudly, not let every later bee call
-# silently hit the wrong server.
-set _ctrl = "`$PY get $CONFIG controller`"
-if ( "$_ctrl" != "" ) then
-  "$BEE" controller select "$_ctrl"
-  if ( $status != 0 ) then
-    echo "lib.csh: 'bee controller select $_ctrl' failed - fix the controller name in config.yaml" >& /dev/stderr
-    exit 1
-  endif
-endif
+# NOTE: we no longer run `bee controller select` here. bee persists the active
+# controller in its session (per profile), so a one-time `bee controller select`
+# right after `bee auth login` sticks for every later command. Re-selecting on
+# each step was redundant. If no controller is active, bee itself errors with
+# "No active controller selected. Run: bee controller select <name>" — clear enough.
+# (config.yaml `controller:` is now advisory only; select it once by hand.)
 
-# Reached only if nothing above failed -> caller checks $?LIB_READY to know lib.csh succeeded.
 set LIB_READY = 1

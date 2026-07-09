@@ -26,9 +26,12 @@ RX_AUTO/
 ### 0. Prerequisites
 
 ```bash
-bee auth login
-bee controller select <your-controller>
+rxauto.sh bee auth login
+rxauto.sh bee controller select <your-controller>
 ```
+
+Do this **once**. bee remembers the active controller in its session, so the
+provision/deploy/run steps don't re-select it.
 
 Make sure `csh`/`tcsh` is installed (`apt install tcsh` if missing).
 
@@ -78,7 +81,7 @@ rxauto.sh provision
 ```
 
 Creates: CloudBees folder → credential + SSH node for **every** account in `accounts:` **and**
-`setup.account`. Writes `auto_env/complete.yml` (the manifest). Idempotent — existing creds/nodes
+`setup.account`. Writes `complete.yml` (the manifest, next to `bee` in the Cloudbees dir). Idempotent — existing creds/nodes
 are reused.
 
 ### 3. Deploy (once, or when mode/ip changes)
@@ -202,4 +205,4 @@ prefix, so a new name is a fresh namespace that never overwrites the previous ro
 | `manage.csh` | `list` / `teardown` / `prune` from the manifest |
 | `scripts/setup_all.bash` | manual alternative for step 1-2 (outside CloudBees) |
 | `rxews_makefile/apply_makefile_mods.py` | applies S4 Makefile changes to both RXEWS dirs (backup, dry-run, idempotent) |
-| `complete.yml` | manifest: folder, cred-ids, node names, job names (written by provision/deploy) |
+| `../complete.yml` | manifest (in the Cloudbees dir, next to `bee`): folder, cred-ids, node names, job names (written by provision/deploy) |
