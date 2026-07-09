@@ -420,10 +420,13 @@ def cmd_plan_setup(cfg, cfg_path):
     # my_ride_setup, my_cmd, my_cmd_for_common live in RX_AUTO_ROOT (next to
     # rxauto.sh). cd there to source them, then the inner bash (also RX_AUTO_ROOT)
     # runs the make targets from the Makefile in that same dir.
-    # PHASE (build param) selects the sub-step; forward it from the bee env into
-    # the inner bash via `setenv PHASE` inside tcsh. Default "all" when unset.
+    # PHASE (build param) selects the sub-step. The outer bash exports it, and bs
+    # forwards the env to the tcsh on the agent. Guard with $?PHASE: bare
+    # `setenv PHASE "$PHASE"` CRASHES tcsh ("PHASE: Undefined variable") if the
+    # env didn't make it across; when unset we default to all. The inner bash
+    # also has its own PHASE="${PHASE:-all}" as a second safety net.
     inner_b64 = base64.b64encode(_setup_bash_inner(cfg).encode()).decode()
-    tcsh_arg = (f'setenv PHASE "$PHASE"; cd {root}; source {root}/{ride}; '
+    tcsh_arg = (f'if ( ! $?PHASE ) setenv PHASE all; cd {root}; source {root}/{ride}; '
                 f'source ./my_cmd; source ./my_cmd_for_common; '
                 f'echo {inner_b64} | base64 -d | bash')
     # bash (outer) defaults PHASE=all so the tcsh setenv always has a value.
