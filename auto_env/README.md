@@ -156,6 +156,29 @@ rxauto.sh resume   # restore schedule from config
 | Teardown everything | `rxauto.sh manage teardown` |
 | Check what exists | `rxauto.sh manage list` |
 
+## After editing config.yaml — what to re-run
+
+Match the section you changed to the command(s) that pick it up. When in doubt,
+`provision` → `deploy` is always safe (both are idempotent).
+
+| You edited | Re-run | Why |
+|---|---|---|
+| `accounts:` (add/remove/rename, or change password) | `rxauto.sh provision` then `rxauto.sh deploy` | provision makes the new cred+node; deploy makes that account's job |
+| `node:` (`host`, `port`, `executors`, `remote_dir_base`) | `rxauto.sh provision` | node config is set at create time; re-provision updates it |
+| `setup.account:` | `rxauto.sh provision` then `rxauto.sh deploy` | dedicated setup cred+node, then the `rx_setup` job |
+| `mode:` (manual ↔ auto) | `rxauto.sh deploy` | old mode's jobs kept but schedule cleared; new mode's jobs created |
+| `ip_mode:` (trunk/common/all) — **auto** | `rxauto.sh deploy` | changes which `daily_*` jobs + schedules exist |
+| `ip_mode:` — **manual** | nothing; just `rxauto.sh run --ip <x>` | manual picks IP at run time, no redeploy |
+| `bs:` (host_groups, os, mem, ride_setup) | `rxauto.sh deploy` | baked into each job's shell command |
+| `manual.command` / `auto.command` / `auto.schedule` | `rxauto.sh deploy` | the job body/schedule is re-written |
+| `setup.vars` / `setup.makefile_*` | `rxauto.sh deploy` then `rxauto.sh run-setup` | rebuilds the `rx_setup` job, then re-run step 1-2 |
+| `base_name:` | `rxauto.sh provision` then `rxauto.sh deploy` | fresh namespace — creates a whole new folder/cred/node/job set (old one stays; `prune`/`teardown` to remove) |
+| `controller:` | nothing in auto_env | select once by hand: `rxauto.sh bee controller select <name>` |
+
+`provision` only creates what's missing (existing cred/node reused), and `deploy`
+updates jobs in place, so re-running after a small edit is cheap and safe. Use
+`prune` to delete infra the edited config no longer wants.
+
 ## Two modes
 
 - **manual** — N accounts → N nodes → N jobs. `run.csh` calls `plan-splits` which round-robins
