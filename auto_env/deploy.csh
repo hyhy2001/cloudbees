@@ -113,7 +113,8 @@ while ( 1 )
         if ( "$ip" != "-" ) then
           "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "IP_MODE=$ip" --param-def "SPLIT_FILE="
         else
-          "$BEE" job update freestyle "$folder/$jn" --shell "$sh"
+          # ip="-" -> the rx_setup job: expose PHASE (default all) so run-setup can pick a sub-step.
+          "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "PHASE=all"
         endif
       else if ( "$sched" != "-" ) then
         "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
@@ -123,7 +124,7 @@ while ( 1 )
           --shell "$sh" --param-def "IP_MODE=$ip" --param-def "SPLIT_FILE="
       else
         "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
-          --shell "$sh"
+          --shell "$sh" --param-def "PHASE=all"
       endif
       # only record the job in the manifest if bee actually succeeded.
       set rc = $status

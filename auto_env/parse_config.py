@@ -339,33 +339,52 @@ def _setup_bash_inner(cfg):
                                 "new": f'bs {flag} -os ${{OS_TYPE_SETUP}} -m "{dsv}"'})
     # make targets (setup_run_cmd, gen_dashboard_sv_core, setup_for_auto, ...)
     # are defined in the Makefile in RX_AUTO_ROOT, so run make from there.
-    lines = [f'cd "{root}"']
-    # -- S4 Makefile changes: common (both dirs) + per-dir-only changes + BS changes --
+    # PHASE (build param, default all) selects which sub-step runs, mirroring
+    # setup_all.bash: makefile | general | auto | server | all.
+    lines = [f'cd "{root}"', 'PHASE="${PHASE:-all}"']
+
+    # -- S4 Makefile changes (phase: makefile|all): common + per-dir + BS changes --
+    mk = []
     for d, extra in ((ti, trunk_ip_chg), (co, common_ip_chg)):
         if not d:
             continue
         for ch in changes + bs_changes + extra:
             sed = _sed_change(d, ch)
             if sed:
-                lines.append(sed)
-    # -- ENV_BASE: user value wins; else read REV from the RXEWS Makefile and build
-    #    <rxews_dir>/RxEnv-*-${REV} deterministically (no glob). --
-    lines.append(_envbase_resolve_bash("TIB", tib, ti, "RxEnv-Trunk-IP-VNET"))
-    lines.append(_envbase_resolve_bash("COB", cob, co, "RxEnv-Trunk-VNET"))
-    # -- step 2: general_setup + auto_setup + server_setup make targets --
-    lines += [
+                mk.append(sed)
+    if mk:
+        lines.append('if [ "$PHASE" = makefile ] || [ "$PHASE" = all ]; then')
+        lines += ["  " + m for m in mk]
+        lines.append('fi')
+
+    # -- ENV_BASE (needed by the server phase): read REV from the RXEWS Makefile
+    #    and build <rxews_dir>/RxEnv-*-${REV} deterministically (no glob). --
+    lines.append('if [ "$PHASE" = server ] || [ "$PHASE" = all ]; then')
+    lines.append("  " + _envbase_resolve_bash("TIB", tib, ti, "RxEnv-Trunk-IP-VNET"))
+    lines.append("  " + _envbase_resolve_bash("COB", cob, co, "RxEnv-Trunk-VNET"))
+    lines.append('fi')
+
+    def block(phase, cmds):
+        return ([f'if [ "$PHASE" = {phase} ] || [ "$PHASE" = all ]; then']
+                + ["  " + c for c in cmds] + ['fi'])
+
+    lines += block("general", [
         f'make setup_run_cmd RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{ti}"',
         f'make setup_run_cmd RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{co}" RUN_TYPE="{crt}"',
         f'make setup_check_rp_cmd RX_AUTO_ROOT="{root}"',
+    ])
+    lines += block("auto", [
         f'make setup_for_auto RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{ti}"',
         f'make setup_for_auto RX_AUTO_ROOT="{root}" RXEWS_RUN_DIR_PATH="{co}" RUN_TYPE="{crt}"',
+    ])
+    lines += block("server", [
         f'make gen_dashboard_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="$TIB" RIDE_ENV_VER="{rev}"',
         f'make gen_dashboard_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="$COB" RIDE_ENV_VER="{rev}" RUN_TYPE="{crt}"',
         f'make gen_ticket_panel_sv_core RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" TRUNK_IP_ENV_PATH="$TIB" COMMON_IP_ENV_PATH="$COB"',
         f'make gen_update_dashboard_script RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="$TIB"',
         f'make gen_update_dashboard_script RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}" ENV_BASE="$COB" RUN_TYPE="{crt}"',
         f'make setup_dashboard_sv RX_AUTO_ROOT="{root}" DASHBOARD_DB_LOCATION="{ddb}"',
-    ]
+    ])
     return "\n".join(lines)
 
 
@@ -395,10 +414,15 @@ def cmd_plan_setup(cfg, cfg_path):
     # my_ride_setup, my_cmd, my_cmd_for_common live in RX_AUTO_ROOT (next to
     # rxauto.sh). cd there to source them, then the inner bash (also RX_AUTO_ROOT)
     # runs the make targets from the Makefile in that same dir.
+    # PHASE (build param) selects the sub-step; forward it from the bee env into
+    # the inner bash via `setenv PHASE` inside tcsh. Default "all" when unset.
     inner_b64 = base64.b64encode(_setup_bash_inner(cfg).encode()).decode()
-    tcsh_arg = (f'cd {root}; source {root}/{ride}; source ./my_cmd; source ./my_cmd_for_common; '
+    tcsh_arg = (f'setenv PHASE "$PHASE"; cd {root}; source {root}/{ride}; '
+                f'source ./my_cmd; source ./my_cmd_for_common; '
                 f'echo {inner_b64} | base64 -d | bash')
-    outer = (f'bs -m "{bs.get("host_groups","")}" -I -os "{bs.get("os","")}" '
+    # bash (outer) defaults PHASE=all so the tcsh setenv always has a value.
+    outer = (f'export PHASE="${{PHASE:-all}}"; '
+             f'bs -m "{bs.get("host_groups","")}" -I -os "{bs.get("os","")}" '
              f'-M "{bs.get("mem","")}" tcsh -f -c \'{tcsh_arg}\'')
     emit("JOB", jn, base, node_name(base, user), "-", "-", shell_b64(outer))
 
