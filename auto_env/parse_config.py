@@ -269,13 +269,16 @@ def _load_setup_vars(cfg):
     User-set (non-empty) values are never overwritten."""
     sv = dict(dig(cfg, "setup.vars", {}) or {})
     root = _rx_auto_root(cfg)
+    parent = _rx_parent(cfg)
+    # rxews dirs and dashboard_db live in the PARENT dir (next to rxauto.sh /
+    # my_cmd), NOT inside RX_AUTO/. Derive them from parent, not root.
     defaults = {
         "RX_AUTO_ROOT": root,
-        "TRUNK_IP_RXEWS_RUN_DIR_PATH": f"{root}/rxews_trunk_ip_vnet_" if root else "",
-        "COMMON_RXEWS_RUN_DIR_PATH": f"{root}/rxews_trunk_vnet_wk_" if root else "",
+        "TRUNK_IP_RXEWS_RUN_DIR_PATH": f"{parent}/rxews_trunk_ip_vnet_" if parent else "",
+        "COMMON_RXEWS_RUN_DIR_PATH": f"{parent}/rxews_trunk_vnet_wk_" if parent else "",
         "DEDICATED_SV": "HOSTGR_L HOSTGR_M HOSTGR_S HOSTGR_621910",
         "RIDE_ENV_VER": "WK18",
-        "DASHBOARD_DB_LOCATION": f"{root}/dashboard_db" if root else "",
+        "DASHBOARD_DB_LOCATION": f"{parent}/dashboard_db" if parent else "",
         "COMMON_RUN_TYPE": "Trunk",
     }
     for k, v in defaults.items():
