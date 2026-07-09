@@ -88,25 +88,25 @@ setup:
 
   # Applied to BOTH env dirs (trunk IP + common IP):
   makefile_common_changes:
-    - { file: Makefile,      var: OS_TYPE_SETUP,                     new: '"RHEL8"', old: '"RHEL7"' }
-    - { file: makefile.vars, var: RDFS_ALTERNATIVE_CLOCK_GENERATION, new: '1',       old: '0' }
+    - { file: Makefile,      var: OS_TYPE_SETUP,                     new: '"RHEL8"', old: '"RHEL7"', export: false }
+    - { file: makefile.vars, var: RDFS_ALTERNATIVE_CLOCK_GENERATION, new: '1',       old: '0', export: true }
 
   # Applied to Trunk IP dir only (TRUNK_IP_RXEWS_RUN_DIR_PATH):
   makefile_trunk_ip_changes:
-    - { file: Makefile, var: GPUBASE,            new: '${EWS_LOCAL_REPO}/MASTER_RTL_IP/GPU/DXS-48-1536-MC', old: '${EWS_LOCAL_REPO}/MASTER_RTL/GPU/BXS-32-1024-MC' }
-    - { file: Makefile, var: MASTER_LIST,        new: '${EWS_LOCAL_REPO}/MASTER_LIST_IP',  old: '${EWS_LOCAL_REPO}/MASTER_LIST' }
-    - { file: Makefile, var: MASTER_RTL,         new: '${EWS_LOCAL_REPO}/MASTER_RTL_IP',   old: '${EWS_LOCAL_REPO}/MASTER_RTL' }
-    - { file: Makefile, var: MASTER_BBOX,        new: '${EWS_LOCAL_REPO}/MASTER_BBOX_IP',  old: '${EWS_LOCAL_REPO}/MASTER_BBOX' }
-    - { file: Makefile, var: MASTER_RTL_RTVRAM,  new: '/design01/shura_ipride_vf/99_users/TOP/SEC_IP/MASTER_RTL_FOR_RELEASE', old: '${EWS_LOCAL_REPO}/MASTER_RTL' }
-    - { file: Makefile, var: MASTER_LIST_VRAM,   new: '${EWS_LOCAL_REPO}/MASTER_LIST_IP/u7808hrtvram0top0_unenc.list', old: '${EWS_LOCAL_REPO}/MASTER_LIST/u7808hrtvram0top0_unenc.list' }
-    - { file: Makefile, var: MASTER_RTL_SEC,     new: '/design01/shura_ipride_vf/99_users/TOP/SEC_IP/MASTER_CONF_RTL_IP', old: '${EWS_LOCAL_REPO}/MASTER_RTL' }
-    - { file: Makefile, var: MASTER_RTL_CR52,    new: '${EWS_LOCAL_REPO}/MASTER_RTL_IP',   old: '${EWS_LOCAL_REPO}/MASTER_RTL' }
-    - { file: Makefile, var: MASTER_RTL_APU,     new: '${EWS_LOCAL_REPO}/MASTER_RTL_IP/apu', old: '${EWS_LOCAL_REPO}/MASTER_CONF_RTL/apcore_conf_rtl/apcore' }
+    - { file: Makefile, var: GPUBASE,            new: '${EWS_LOCAL_REPO}/MASTER_RTL_IP/GPU/DXS-48-1536-MC', old: '${EWS_LOCAL_REPO}/MASTER_RTL/GPU/BXS-32-1024-MC', export: true }
+    - { file: Makefile, var: MASTER_LIST,        new: '${EWS_LOCAL_REPO}/MASTER_LIST_IP',  old: '${EWS_LOCAL_REPO}/MASTER_LIST', export: true }
+    - { file: Makefile, var: MASTER_RTL,         new: '${EWS_LOCAL_REPO}/MASTER_RTL_IP',   old: '${EWS_LOCAL_REPO}/MASTER_RTL', export: true }
+    - { file: Makefile, var: MASTER_BBOX,        new: '${EWS_LOCAL_REPO}/MASTER_BBOX_IP',  old: '${EWS_LOCAL_REPO}/MASTER_BBOX', export: true }
+    - { file: Makefile, var: MASTER_RTL_RTVRAM,  new: '/design01/shura_ipride_vf/99_users/TOP/SEC_IP/MASTER_RTL_FOR_RELEASE', old: '${EWS_LOCAL_REPO}/MASTER_RTL', export: true }
+    - { file: Makefile, var: MASTER_LIST_VRAM,   new: '${EWS_LOCAL_REPO}/MASTER_LIST_IP/u7808hrtvram0top0_unenc.list', old: '${EWS_LOCAL_REPO}/MASTER_LIST/u7808hrtvram0top0_unenc.list', export: true }
+    - { file: Makefile, var: MASTER_RTL_SEC,     new: '/design01/shura_ipride_vf/99_users/TOP/SEC_IP/MASTER_CONF_RTL_IP', old: '${EWS_LOCAL_REPO}/MASTER_RTL', export: true }
+    - { file: Makefile, var: MASTER_RTL_CR52,    new: '${EWS_LOCAL_REPO}/MASTER_RTL_IP',   old: '${EWS_LOCAL_REPO}/MASTER_RTL', export: true }
+    - { file: Makefile, var: MASTER_RTL_APU,     new: '${EWS_LOCAL_REPO}/MASTER_RTL_IP/apu', old: '${EWS_LOCAL_REPO}/MASTER_CONF_RTL/apcore_conf_rtl/apcore', export: true }
     - { file: Makefile, old: 'RxEnv-${DATE_TAG}-${REV}', new: 'RxEnv-Trunk-IP-VNET-${REV}' }
 
   # Applied to Common IP dir only (COMMON_RXEWS_RUN_DIR_PATH):
   makefile_common_ip_changes:
-    - { file: Makefile, var: GPUBASE,           new: '${EWS_LOCAL_REPO}/MASTER_RTL/GPU/DXS-48-1536-MC', old: '${EWS_LOCAL_REPO}/MASTER_RTL/GPU/BXS-32-1024-MC' }
-    - { file: Makefile, var: MASTER_RTL_RTVRAM, new: '/design01/shura_ipride_vf/99_users/TOP/SEC_IP/MASTER_RTL_FOR_RELEASE', old: '${EWS_LOCAL_REPO}/MASTER_RTL' }
-    - { file: Makefile, var: MASTER_RTL_SEC,    new: '/design01/shura_ipride_vf/99_users/TOP/SEC_IP/MASTER_CONF_RTL_IP', old: '${EWS_LOCAL_REPO}/MASTER_RTL' }
+    - { file: Makefile, var: GPUBASE,           new: '${EWS_LOCAL_REPO}/MASTER_RTL/GPU/DXS-48-1536-MC', old: '${EWS_LOCAL_REPO}/MASTER_RTL/GPU/BXS-32-1024-MC', export: true }
+    - { file: Makefile, var: MASTER_RTL_RTVRAM, new: '/design01/shura_ipride_vf/99_users/TOP/SEC_IP/MASTER_RTL_FOR_RELEASE', old: '${EWS_LOCAL_REPO}/MASTER_RTL', export: true }
+    - { file: Makefile, var: MASTER_RTL_SEC,    new: '/design01/shura_ipride_vf/99_users/TOP/SEC_IP/MASTER_CONF_RTL_IP', old: '${EWS_LOCAL_REPO}/MASTER_RTL', export: true }
     - { file: Makefile, old: 'RxEnv-${DATE_TAG}-${REV}', new: 'RxEnv-Trunk-VNET-${REV}' }
