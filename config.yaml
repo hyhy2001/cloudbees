@@ -102,11 +102,11 @@ setup:
     - { file: Makefile, var: MASTER_RTL_SEC,     new: '/design01/shura_ipride_vf/99_users/TOP/SEC_IP/MASTER_CONF_RTL_IP', old: '${EWS_LOCAL_REPO}/MASTER_RTL' }
     - { file: Makefile, var: MASTER_RTL_CR52,    new: '${EWS_LOCAL_REPO}/MASTER_RTL_IP',   old: '${EWS_LOCAL_REPO}/MASTER_RTL' }
     - { file: Makefile, var: MASTER_RTL_APU,     new: '${EWS_LOCAL_REPO}/MASTER_RTL_IP/apu', old: '${EWS_LOCAL_REPO}/MASTER_CONF_RTL/apcore_conf_rtl/apcore' }
-    - { file: Makefile, old: 'RxEnv-${DATE_TAG}-${REV}/$(ip_name)', new: 'RxEnv-Trunk-IP-VNET-${REV}/$(ip_name)' }
+    - { file: Makefile, old: 'RxEnv-${DATE_TAG}-${REV}', new: 'RxEnv-Trunk-IP-VNET-${REV}' }
 
   # Applied to Common IP dir only (COMMON_RXEWS_RUN_DIR_PATH):
   makefile_common_ip_changes:
     - { file: Makefile, var: GPUBASE,           new: '${EWS_LOCAL_REPO}/MASTER_RTL/GPU/DXS-48-1536-MC', old: '${EWS_LOCAL_REPO}/MASTER_RTL/GPU/BXS-32-1024-MC' }
     - { file: Makefile, var: MASTER_RTL_RTVRAM, new: '/design01/shura_ipride_vf/99_users/TOP/SEC_IP/MASTER_RTL_FOR_RELEASE', old: '${EWS_LOCAL_REPO}/MASTER_RTL' }
     - { file: Makefile, var: MASTER_RTL_SEC,    new: '/design01/shura_ipride_vf/99_users/TOP/SEC_IP/MASTER_CONF_RTL_IP', old: '${EWS_LOCAL_REPO}/MASTER_RTL' }
-    - { file: Makefile, old: 'RxEnv-${DATE_TAG}-${REV}/$(ip_name)', new: 'RxEnv-Trunk-VNET-${REV}/$(ip_name)' }
+    - { file: Makefile, old: 'RxEnv-${DATE_TAG}-${REV}', new: 'RxEnv-Trunk-VNET-${REV}' }
