@@ -6,7 +6,7 @@
 #   rxauto.sh provision|deploy|run|manage [args...]   -> auto_env/*.csh
 #   rxauto.sh setup [all|makefile|general|auto|server] [--dry-run]  -> scripts/setup_all.bash
 #   rxauto.sh run-setup [makefile|general|auto|server|all]  -> trigger rx_setup job (default all)
-#   rxauto.sh all                                      -> provision + deploy + run
+#   rxauto.sh all                                      -> provision + deploy + rx_setup(--wait) + run
 #   rxauto.sh prune [--dry-run]                        -> DELETE infra config no longer wants
 #   rxauto.sh pause [--dry-run]                        -> clear schedule on auto jobs (stop firing)
 #   rxauto.sh resume [--dry-run]                       -> restore schedule from config
@@ -67,6 +67,15 @@ while [ $# -gt 0 ]; do
 done
 set -- "${args[@]}"
 
+# Resolve the rx_setup job path (folder/job) from config; echo it.
+setup_job_path() {
+  local base jn
+  base="$(python3 "$AUTO/parse_config.py" get "$RXAUTO_CONFIG" base_name)"
+  jn="$(python3 "$AUTO/parse_config.py" get "$RXAUTO_CONFIG" setup.job_name)"
+  [ -n "$jn" ] || jn=rx_setup
+  echo "${base:-RX_AUTO}/$jn"
+}
+
 cmd="${1:-}"; shift || true
 case "$cmd" in
   provision|deploy|run|manage) exec csh "$AUTO/$cmd.csh" "$@" ;;
@@ -82,13 +91,15 @@ case "$cmd" in
                                  -*) ;;   # a flag, not a phase -> leave default, pass through
                                  *) echo "rxauto: bad phase '$1' (use makefile|general|auto|server|all)" >&2; exit 1 ;;
                                esac
-                               base="$(python3 "$AUTO/parse_config.py" get "$RXAUTO_CONFIG" base_name)"
-                               jn="$(python3 "$AUTO/parse_config.py" get "$RXAUTO_CONFIG" setup.job_name)"
-                               [ -n "$jn" ] || jn=rx_setup
-                               exec "${BEE:-$CB/bee}" job run "${base:-RX_AUTO}/$jn" -p "PHASE=$phase" "$@" ;;
+                               exec "${BEE:-$CB/bee}" job run "$(setup_job_path)" -p "PHASE=$phase" "$@" ;;
   bee)                         exec "${BEE:-$CB/bee}" "$@" ;;
-  all)                         csh "$AUTO/provision.csh" "$@" || { echo "rxauto: provision failed (rc=$?), aborting deploy/run" >&2; exit 1; }
-                               csh "$AUTO/deploy.csh" "$@" || { echo "rxauto: deploy failed (rc=$?), aborting run" >&2; exit 1; }
+  all)                         # full pipeline: provision -> deploy -> rx_setup (wait) -> run
+                               csh "$AUTO/provision.csh" "$@" || { echo "rxauto: provision failed (rc=$?), aborting" >&2; exit 1; }
+                               csh "$AUTO/deploy.csh" "$@" || { echo "rxauto: deploy failed (rc=$?), aborting" >&2; exit 1; }
+                               # step 1-2: trigger rx_setup and BLOCK until it finishes (--wait),
+                               # so step 3 only runs once the environment is set up.
+                               "${BEE:-$CB/bee}" job run "$(setup_job_path)" -p "PHASE=all" --wait \
+                                 || { echo "rxauto: rx_setup job failed (rc=$?), aborting run" >&2; exit 1; }
                                exec csh "$AUTO/run.csh" "$@" ;;
   ""|-h|--help|help)
     sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'

@@ -148,6 +148,7 @@ rxauto.sh resume   # restore schedule from config
 
 | Situation | Command |
 |---|---|
+| Everything, first run | `rxauto.sh all` (provision → deploy → rx_setup `--wait` → run) |
 | Run step 3 again | `rxauto.sh run` |
 | Environment changed (new SVN rev) | trigger `rx_setup` again, then `rxauto.sh run` |
 | Switch trunk ↔ common (manual) | `rxauto.sh run --ip trunk\|common` (no redeploy needed) |
