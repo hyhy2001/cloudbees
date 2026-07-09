@@ -334,6 +334,7 @@ def _setup_bash_inner(cfg):
     Kept quote-free of single quotes at the tcsh layer by b64-encoding this whole blob."""
     sv = _load_setup_vars(cfg)
     root = sv.get("RX_AUTO_ROOT", "")
+    parent = _rx_parent(cfg)
     crt = sv.get("COMMON_RUN_TYPE", "Trunk")
     ti = sv.get("TRUNK_IP_RXEWS_RUN_DIR_PATH", "")
     co = sv.get("COMMON_RXEWS_RUN_DIR_PATH", "")
@@ -352,7 +353,9 @@ def _setup_bash_inner(cfg):
             bs_changes.append({"file": "Makefile",
                                 "old": f"bs {flag} -os ${{OS_TYPE_SETUP}}",
                                 "new": f'bs {flag} -os ${{OS_TYPE_SETUP}} -m "{dsv}"'})
-    lines = [f'cd "{root}"']
+    # make targets (setup_run_cmd, gen_dashboard_sv_core, setup_for_auto, ...)
+    # are defined in the Makefile in the PARENT dir, so run make from there.
+    lines = [f'cd "{parent}"']
     # -- S4 Makefile changes: common (both dirs) + per-dir-only changes + BS changes --
     for d, extra in ((ti, trunk_ip_chg), (co, common_ip_chg)):
         if not d:
