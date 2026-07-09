@@ -293,7 +293,10 @@ def _sed_change(env_dir, ch):
     path = f'"{env_dir}/{fname}"'
     if var:
         esc = _sed_escape(new)
-        pat = f'^\\([ \\t]*\\(export[ \\t]\\+\\)\\?{var}[ \\t]*[?:]*=\\)'
+        # Only rewrite the `export VAR ...= ...` line. A plain `VAR = ...` line
+        # (no export) is left untouched — same var can appear both ways and only
+        # the exported one should change. 'export' is REQUIRED, not optional.
+        pat = f'^\\([ \\t]*export[ \\t]\\+{var}[ \\t]*[?:]*=\\)'
         return f'sed -i \'s/{pat}.*/\\1 {esc}/\' {path}'
     if old:
         esc_old = _sed_escape(old)
