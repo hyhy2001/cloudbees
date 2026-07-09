@@ -3,7 +3,7 @@
 
 # -- STABLE: rarely changes. cred+node reused via complete.yml --
 base_name: RX_AUTO          # change by hand to avoid folder/node/job name clashes (RX_AUTO_v2...)
-controller: ""              # "" = use the active controller; a name = auto `bee controller select`
+controller: ""              # advisory only now: select once by hand after login (bee controller select <name>). auto_env no longer re-selects per step.
 rx_auto_root: ""            # "" = auto-derived from where rxauto.sh lives (RXAUTO_ROOT). Set a path to override.
 
 accounts:                   # Linux accounts -> 1 cred + 1 node each
