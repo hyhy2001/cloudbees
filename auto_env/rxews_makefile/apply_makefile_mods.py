@@ -48,10 +48,11 @@ def backup(path, made, dry):
 
 
 def set_var_rhs(text, var, new):
-    """Replace the RHS of `VAR = ...` (keeps operator = / := / ?=). Returns (text, status)."""
-    # Match both `VAR ?= val` and `export VAR ?= val` (with any whitespace between tokens).
+    """Replace the RHS of `export VAR = ...` (keeps operator = / := / ?=). Returns (text, status)."""
+    # Only the EXPORTED line: `export VAR ...= val`. A plain `VAR = val` (no export)
+    # is left alone — the same var can appear both ways, only the exported one changes.
     pat = re.compile(
-        rf'^([ \t]*(?:export[ \t]+)?{re.escape(var)}[ \t]*)(=|:=|\?=)([ \t]*)(.*?)[ \t]*$',
+        rf'^([ \t]*export[ \t]+{re.escape(var)}[ \t]*)(=|:=|\?=)([ \t]*)(.*?)[ \t]*$',
         re.M)
     m = pat.search(text)
     if not m:
