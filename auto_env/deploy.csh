@@ -24,10 +24,18 @@ if ( -e "$MANIFEST" ) then
     if ( $#p == 0 ) break
     sed -i '1d' "$_stale_tmp"
     if ( "$p[1]" != "STALE_JOB" ) continue
+    # Only clear a timer that ACTUALLY exists. Read the job's schedule row from
+    # `bee job get` (a table: "│ schedule │ <cron or -> │"). Pull field 3 with awk
+    # on the │ separator; a real cron has digits/*, an empty one shows "-". This
+    # never guesses from the job name, so it's correct even if job_name changed.
+    set _sched = "`$BEE job get $p[2] |& grep -i '│ schedule' | awk -F'│' '{print $3}' | tr -d ' '`"
+    if ( "$_sched" == "" || "$_sched" == "-" ) then
+      continue
+    endif
     if ( $?DRY ) then
-      echo "[dry] $BEE job update freestyle $p[2] --schedule '' (keep job, stop timer)"
+      echo "[dry] $BEE job update freestyle $p[2] --schedule '' (keep job, stop timer; was: $_sched)"
     else
-      echo "stale $p[2] - clear schedule (job kept)"
+      echo "stale $p[2] - clear schedule (job kept; was: $_sched)"
       "$BEE" job update freestyle "$p[2]" --schedule ""
       if ( $status != 0 ) then
         echo "WARNING: could not clear schedule on stale job $p[2] (it may keep firing)" >& /dev/stderr

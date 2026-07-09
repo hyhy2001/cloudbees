@@ -503,25 +503,18 @@ def _desired_sets(cfg):
 
 
 def cmd_plan_stale_jobs(cfg, manifest_path):
-    """Emit STALE_JOB <folder/job> for stale AUTO jobs only — the ones that carry a
-    schedule. deploy.csh clears their timer (bee job update --schedule '') to KEEP the
-    job but stop it firing, e.g. auto->manual leaves daily_* around but disabled.
-
-    Manual jobs (build_*) never have a schedule, so switching manual->auto emits
-    nothing here: there is no timer to clear. Only jobs whose leaf name matches the
-    auto job_name (daily / daily_trunk / daily_common) are considered."""
+    """Emit STALE_JOB <folder/job> for every manifest job the current plan no longer
+    includes. deploy.csh then checks each one's ACTUAL schedule via `bee job get` and
+    only clears a timer that really exists — so a scheduleless manual job is a no-op,
+    and this stays correct even if job_name changed between deploys (we don't guess
+    from the name)."""
     try:
         m = load(manifest_path)
     except FileNotFoundError:
         return
-    base = cfg.get("base_name", "RX_AUTO")
-    jn0 = dig(cfg, "auto.job_name", "daily") or "daily"
-    # auto jobs are `<base>/<jn0>` or `<base>/<jn0>_<ip>` — those are the only ones
-    # that ever hold a schedule worth clearing.
-    auto_names = {f"{base}/{jn0}", f"{base}/{jn0}_trunk", f"{base}/{jn0}_common"}
     want_jobs, _, _ = _desired_sets(cfg)
     for j in (m.get("jobs") or []):
-        if j not in want_jobs and j in auto_names:
+        if j not in want_jobs:
             emit("STALE_JOB", j)
 
 
