@@ -47,12 +47,18 @@ def backup(path, made, dry):
     print(f"  backup -> {bak}")
 
 
-def set_var_rhs(text, var, new):
-    """Replace the RHS of `export VAR = ...` (keeps operator = / := / ?=). Returns (text, status)."""
-    # Only the EXPORTED line: `export VAR ...= val`. A plain `VAR = val` (no export)
-    # is left alone — the same var can appear both ways, only the exported one changes.
+def set_var_rhs(text, var, new, export=None):
+    """Replace the RHS of `VAR = ...` (keeps operator = / := / ?=). Returns (text, status).
+    export: None -> match both `VAR` and `export VAR`; True -> only exported;
+    False -> only a plain (non-export) assignment."""
+    if export is True:
+        exp = r'export[ \t]+'
+    elif export is False:
+        exp = ''
+    else:
+        exp = r'(?:export[ \t]+)?'
     pat = re.compile(
-        rf'^([ \t]*export[ \t]+{re.escape(var)}[ \t]*)(=|:=|\?=)([ \t]*)(.*?)[ \t]*$',
+        rf'^([ \t]*{exp}{re.escape(var)}[ \t]*)(=|:=|\?=)([ \t]*)(.*?)[ \t]*$',
         re.M)
     m = pat.search(text)
     if not m:
@@ -66,7 +72,7 @@ def set_var_rhs(text, var, new):
 
 def apply_file(path, changes, made, dry):
     """changes: list of (key, new, mode) where mode is 'var' (RHS replace) or 'literal' (exact replace). Skip empty new."""
-    active = [(k, n, m) for k, n, m in changes if str(n).strip() != ""]
+    active = [(k, n, m, e) for k, n, m, e in changes if str(n).strip() != ""]
     if not active:
         print(f"  (no changes with a value for {os.path.basename(path)})")
         return
@@ -76,7 +82,7 @@ def apply_file(path, changes, made, dry):
     with open(path) as f:
         text = f.read()
     orig = text
-    for key, new, mode in active:
+    for key, new, mode, export in active:
         if mode == "literal":
             if key in text:
                 text = text.replace(key, new, 1)
@@ -86,7 +92,7 @@ def apply_file(path, changes, made, dry):
             else:
                 st = "not-found"
         else:
-            text, st = set_var_rhs(text, key, new)
+            text, st = set_var_rhs(text, key, new, export)
         mark = {"changed": "OK", "already": "=", "not-found": "!!"}[st]
         label = key[:60] + "..." if len(key) > 60 else key
         print(f"    [{mark}] {label} -> {new}" + ("   (not found in file)" if st == "not-found" else ""))
@@ -111,7 +117,8 @@ def emit_vars(cfg_path):
 
 
 def _changes_by_file(entries):
-    """Group entries into {fname: [(var_or_old, new, mode)]} where mode is 'var' or 'literal'."""
+    """Group entries into {fname: [(var_or_old, new, mode, export)]}.
+    mode is 'var' or 'literal'; export is None/True/False (var mode only)."""
     by_file = {}
     for c in (entries or []):
         fname = c.get("file")
@@ -120,9 +127,9 @@ def _changes_by_file(entries):
             print(f"  SKIP incomplete entry (need file): {c}")
             continue
         if var:
-            by_file.setdefault(fname, []).append((var, new, "var"))
+            by_file.setdefault(fname, []).append((var, new, "var", c.get("export", None)))
         elif old:
-            by_file.setdefault(fname, []).append((old, new, "literal"))
+            by_file.setdefault(fname, []).append((old, new, "literal", None))
         else:
             print(f"  SKIP incomplete entry (need var or old): {c}")
     return by_file
