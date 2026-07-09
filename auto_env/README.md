@@ -50,7 +50,10 @@ Make sure `csh`/`tcsh` is installed (`apt install tcsh` if missing).
 `config.yaml` sits next to `rxauto.sh`. The minimum you must fill in:
 
 ```yaml
-accounts:                          # Linux accounts -> 1 cred + 1 node + 1 job each (manual mode)
+mode: manual                       # manual | auto  (see "manual vs auto" below)
+ip_mode: common                    # common | trunk | all
+
+accounts:                          # manual mode: Linux accounts -> 1 cred + 1 node + 1 job each
   - { username: user01, password: pass01 }
   - { username: user02, password: pass02 }
 
@@ -64,10 +67,21 @@ bs:                                # LSF submit params (used by rx_setup job and
   mem: 8000
   ride_setup: my_ride_setup        # sourced inside tcsh before any RX AUTO script
 
+manual:                            # used when mode: manual
+  job_prefix: build                # job names become build_<username>
+  wait: false                      # true = bee job run --wait (block per build)
+
+auto:                              # used when mode: auto
+  account: { username: user11, password: pass11, executors: 2 }  # dedicated account+node
+  job_name: daily                  # ip=all -> daily_trunk + daily_common
+  schedule: "H/30 * * * *"         # cron: how often go_rx_auto fires
+
 setup:
   job_name: rx_setup
   account: { username: setupuser, password: setuppass }   # dedicated account for step 1-2
 ```
+
+**Which of `accounts:` / `auto:` you fill depends on `mode:`** — see the next section.
 
 Everything in `setup.vars` (S2 env vars) is **auto-derived** from `RX_AUTO_ROOT` — leave them `""`
 unless you need to override a specific value:
@@ -83,6 +97,24 @@ unless you need to override a specific value:
 | `RIDE_ENV_VER` | `WK18` |
 | `DASHBOARD_DB_LOCATION` | `$RX_AUTO_ROOT/dashboard_db` |
 | `COMMON_RUN_TYPE` | `Trunk` (fixed) |
+
+#### manual vs auto — which fields matter
+
+`mode:` decides how step 3 runs. Fill the block for the mode you pick; the other
+block is ignored.
+
+| | **manual** (`mode: manual`) | **auto** (`mode: auto`) |
+|---|---|---|
+| Fill in | `accounts:` (N Linux accounts) + `manual:` | `auto:` (one dedicated account) |
+| Jobs created | one `build_<user>` per account | `daily` (or `daily_trunk`+`daily_common` if `ip_mode: all`) |
+| How step 3 runs | you trigger it: `rxauto.sh run` distributes the pre-split module files round-robin across the `build_*` jobs; each build submits one file via LSF | the `daily` job fires on `auto.schedule` and runs `go_rx_auto`, which detects SVN changes and orchestrates everything itself |
+| Parallelism | N accounts = N nodes running in parallel (each `executors=1`, so files queue per node) | one node with `executors: 2` so trunk + common can run together |
+| `ip_mode` | picked at run time: `rxauto.sh run --ip trunk\|common\|all` (no redeploy) | baked into the job(s) at deploy time; change `ip_mode:` then `rxauto.sh deploy` |
+| Stop / resume | n/a (you control when to run) | `rxauto.sh pause` / `rxauto.sh resume` (clear/restore the schedule) |
+
+`ip_mode` in both modes: `trunk` → `01_*` scripts, `common` → `02_*` scripts,
+`all` → both. Switch mode any time by editing `mode:` and running `rxauto.sh deploy`
+(old-mode jobs are kept but their schedule is cleared; use `prune` to delete them).
 
 ### Fast path: one command for everything
 
