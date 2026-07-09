@@ -46,15 +46,12 @@ AUTO="$CB/auto_env"
 # config.yaml may live next to rxauto.sh (not inside Cloudbees/). Export so lib.csh can find it.
 export RXAUTO_CONFIG="$SCRIPT_DIR/config.yaml"
 
-# RX_AUTO_ROOT = the RX_AUTO package dir (holds rx_run scripts + SUBMIT_LIST).
-# CB is .../RX_AUTO/UTLs/Cloudbees, so RX_AUTO/ is 2 levels up.
-# parse_config uses this when config.yaml's rx_auto_root is unset. config value always wins.
-export RXAUTO_ROOT="$(cd "$CB/../.." && pwd)"
-
-# RXAUTO_PARENT = where rxauto.sh + config.yaml live, and where the shell-init
-# files (my_ride_setup, my_cmd, my_cmd_for_common) sit — one level ABOVE RX_AUTO/.
-# The run/setup commands source those files, so they need this path, not RX_AUTO_ROOT.
-export RXAUTO_PARENT="$SCRIPT_DIR"
+# RX_AUTO_ROOT = the top dir that holds rxauto.sh + config.yaml, and also
+# my_cmd/my_ride_setup, the Makefile (setup targets), rxews_* dirs, dashboard_db
+# and SUBMIT_LIST. ONLY the 01_*/02_* rx_run scripts live one level down in a
+# subdir literally named RX_AUTO/ (which in turn holds UTLs/Cloudbees/). So the
+# root is simply where rxauto.sh sits. config.yaml's rx_auto_root overrides.
+export RXAUTO_ROOT="$SCRIPT_DIR"
 
 # Pull --mode/--ip out of the args (anywhere) and export as env overrides read by parse_config.
 # Everything else stays positional. --mode manual|auto ; --ip common|trunk|all.

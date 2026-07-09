@@ -226,9 +226,6 @@ def cmd_plan_jobs(cfg):
         if not (cmd or "").strip():
             sys.exit("plan-jobs: manual.command is empty -> job would run an empty script. Set it in config.yaml.")
         env = bs_env(cfg)
-        parent = _rx_parent(cfg)
-        if parent:
-            env["RX_AUTO_PARENT"] = parent
         if root:
             env["CB_RUN_DIR"] = f"{root}/cb_run"
         # manual: IP_MODE must be DEFINED on the job (default = first ip) so run.csh can
@@ -254,32 +251,20 @@ def _rx_auto_root(cfg):
     return (cfg.get("rx_auto_root") or "").strip() or os.environ.get("RXAUTO_ROOT", "").strip()
 
 
-def _rx_parent(cfg):
-    """RX_AUTO_PARENT: dir holding rxauto.sh/config.yaml + the shell-init files
-    (my_ride_setup, my_cmd, my_cmd_for_common). Config override > env RXAUTO_PARENT
-    (rxauto.sh) > RX_AUTO_ROOT's parent as a last resort."""
-    v = (cfg.get("rx_auto_parent") or "").strip() or os.environ.get("RXAUTO_PARENT", "").strip()
-    if v:
-        return v
-    root = _rx_auto_root(cfg)
-    return os.path.dirname(root) if root else ""
-
-
 def _load_setup_vars(cfg):
     """S2 env vars: start from setup.vars, then fill any empty one with its derived default.
     User-set (non-empty) values are never overwritten."""
     sv = dict(dig(cfg, "setup.vars", {}) or {})
     root = _rx_auto_root(cfg)
-    parent = _rx_parent(cfg)
-    # rxews dirs and dashboard_db live in the PARENT dir (next to rxauto.sh /
-    # my_cmd), NOT inside RX_AUTO/. Derive them from parent, not root.
+    # rxews dirs, dashboard_db and the Makefile all live in RX_AUTO_ROOT (the dir
+    # holding rxauto.sh). Only the 01_*/02_* rx_run scripts sit in root/RX_AUTO/.
     defaults = {
         "RX_AUTO_ROOT": root,
-        "TRUNK_IP_RXEWS_RUN_DIR_PATH": f"{parent}/rxews_trunk_ip_vnet_" if parent else "",
-        "COMMON_RXEWS_RUN_DIR_PATH": f"{parent}/rxews_trunk_vnet_wk_" if parent else "",
+        "TRUNK_IP_RXEWS_RUN_DIR_PATH": f"{root}/rxews_trunk_ip_vnet_" if root else "",
+        "COMMON_RXEWS_RUN_DIR_PATH": f"{root}/rxews_trunk_vnet_wk_" if root else "",
         "DEDICATED_SV": "HOSTGR_L HOSTGR_M HOSTGR_S HOSTGR_621910",
         "RIDE_ENV_VER": "WK18",
-        "DASHBOARD_DB_LOCATION": f"{parent}/dashboard_db" if parent else "",
+        "DASHBOARD_DB_LOCATION": f"{root}/dashboard_db" if root else "",
         "COMMON_RUN_TYPE": "Trunk",
     }
     for k, v in defaults.items():
@@ -334,7 +319,6 @@ def _setup_bash_inner(cfg):
     Kept quote-free of single quotes at the tcsh layer by b64-encoding this whole blob."""
     sv = _load_setup_vars(cfg)
     root = sv.get("RX_AUTO_ROOT", "")
-    parent = _rx_parent(cfg)
     crt = sv.get("COMMON_RUN_TYPE", "Trunk")
     ti = sv.get("TRUNK_IP_RXEWS_RUN_DIR_PATH", "")
     co = sv.get("COMMON_RXEWS_RUN_DIR_PATH", "")
@@ -354,8 +338,8 @@ def _setup_bash_inner(cfg):
                                 "old": f"bs {flag} -os ${{OS_TYPE_SETUP}}",
                                 "new": f'bs {flag} -os ${{OS_TYPE_SETUP}} -m "{dsv}"'})
     # make targets (setup_run_cmd, gen_dashboard_sv_core, setup_for_auto, ...)
-    # are defined in the Makefile in the PARENT dir, so run make from there.
-    lines = [f'cd "{parent}"']
+    # are defined in the Makefile in RX_AUTO_ROOT, so run make from there.
+    lines = [f'cd "{root}"']
     # -- S4 Makefile changes: common (both dirs) + per-dir-only changes + BS changes --
     for d, extra in ((ti, trunk_ip_chg), (co, common_ip_chg)):
         if not d:
@@ -406,14 +390,13 @@ def cmd_plan_setup(cfg, cfg_path):
     user = dig(cfg, "setup.account.username", "")
     bs = cfg.get("bs") or {}
     root = _load_setup_vars(cfg).get("RX_AUTO_ROOT", "")
-    parent = _rx_parent(cfg)
     ride = bs.get("ride_setup", "my_ride_setup")
 
-    # my_ride_setup, my_cmd, my_cmd_for_common all live in the PARENT dir (next to
-    # rxauto.sh), not in RX_AUTO/. cd there to source them, then the inner bash
-    # (which cd's to RX_AUTO_ROOT itself) runs the make targets.
+    # my_ride_setup, my_cmd, my_cmd_for_common live in RX_AUTO_ROOT (next to
+    # rxauto.sh). cd there to source them, then the inner bash (also RX_AUTO_ROOT)
+    # runs the make targets from the Makefile in that same dir.
     inner_b64 = base64.b64encode(_setup_bash_inner(cfg).encode()).decode()
-    tcsh_arg = (f'cd {parent}; source {parent}/{ride}; source ./my_cmd; source ./my_cmd_for_common; '
+    tcsh_arg = (f'cd {root}; source {root}/{ride}; source ./my_cmd; source ./my_cmd_for_common; '
                 f'echo {inner_b64} | base64 -d | bash')
     outer = (f'bs -m "{bs.get("host_groups","")}" -I -os "{bs.get("os","")}" '
              f'-M "{bs.get("mem","")}" tcsh -f -c \'{tcsh_arg}\'')
@@ -429,8 +412,8 @@ def cmd_plan_splits(cfg, rx_auto_root, ip):
     jobs = [f"{prefix}_{a['username']}" for a in cfg.get("accounts", []) if a.get("username")]
     if not jobs:
         sys.exit("plan-splits: no accounts configured")
-    # rx_auto_root already points at the RX_AUTO dir (holds rx_run + SUBMIT_LIST),
-    # so do NOT append another "RX_AUTO" segment.
+    # SUBMIT_LIST lives directly under RX_AUTO_ROOT (only the 01_*/02_* rx_run
+    # scripts are in the RX_AUTO/ subdir), so glob it straight off rx_auto_root.
     if ip == "trunk":
         pat = os.path.join(rx_auto_root, "SUBMIT_LIST", "NORMAL", "normal_submit_module_list_*")
     else:
