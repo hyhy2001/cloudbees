@@ -6,20 +6,30 @@ commands to have CloudBees manage credentials, nodes, and jobs for multiple Linu
 
 ## Layout
 
+`RX_AUTO_ROOT` is the top dir that holds `rxauto.sh` + `config.yaml` — and also
+the RX AUTO shell-init files (`my_ride_setup`, `my_cmd`, `my_cmd_for_common`),
+the Makefile with the setup targets, the `rxews_*` dirs, `dashboard_db` and
+`SUBMIT_LIST`. Only the `01_*/02_*` rx_run scripts live one level down, in the
+`RX_AUTO/` subdir (which in turn holds `UTLs/Cloudbees/`).
+
 ```
-RX_AUTO/
-`--- UTLs/
-    `--- Cloudbees/
-        |--- bee              <- the bee binary
-        |--- rxauto.sh        <- single entry point (auto-detects this dir)
-        |--- config.yaml      <- the ONE file you edit
-        `--- auto_env/        <- this package
-            |--- parse_config.py
-            |--- lib.csh  provision.csh  deploy.csh  run.csh  manage.csh
-            |--- pause.csh  resume.csh
-            |--- scripts/setup_all.bash
-            `--- rxews_makefile/apply_makefile_mods.py
+RX_AUTO_ROOT/                 <- rxauto.sh, config.yaml, my_ride_setup, my_cmd,
+│                                my_cmd_for_common, Makefile, rxews_*, dashboard_db, SUBMIT_LIST
+`--- RX_AUTO/                 <- 01_*/02_* rx_run + go_rx_auto scripts
+     `--- UTLs/
+         `--- Cloudbees/
+             |--- bee                 <- the bee binary
+             |--- complete.yml        <- manifest (written by provision/deploy)
+             `--- auto_env/           <- this package
+                 |--- parse_config.py
+                 |--- lib.csh  provision.csh  deploy.csh  run.csh  manage.csh
+                 |--- pause.csh  resume.csh
+                 |--- scripts/setup_all.bash
+                 `--- rxews_makefile/apply_makefile_mods.py
 ```
+
+`rxauto.sh` exports `RXAUTO_ROOT` (the dir it lives in) so every step resolves
+these paths consistently. Override with `rx_auto_root:` in config.yaml.
 
 ## Quick start for a new user
 
@@ -74,6 +84,18 @@ unless you need to override a specific value:
 | `DASHBOARD_DB_LOCATION` | `$RX_AUTO_ROOT/dashboard_db` |
 | `COMMON_RUN_TYPE` | `Trunk` (fixed) |
 
+### Fast path: one command for everything
+
+Once config.yaml is filled in and you've logged in (step 0), you can run the
+whole pipeline in one go:
+
+```bash
+rxauto.sh all      # provision -> deploy -> rx_setup (waits for it) -> run step 3
+```
+
+`all` stops at the first failing step. Prefer it for a first run; the numbered
+steps below are for re-running or understanding each stage individually.
+
 ### 2. Provision (once, or when accounts change)
 
 ```bash
@@ -103,13 +125,17 @@ rxauto.sh run-setup general                # only one phase: makefile | general 
 # or click the job in the CloudBees UI
 ```
 
-The job runs on the dedicated setup node:
+The job runs on the dedicated setup node, from `$RX_AUTO_ROOT` (where
+`my_ride_setup` / `my_cmd` / `my_cmd_for_common` and the Makefile live):
 ```
-bs ... tcsh -f -c 'source my_ride_setup; source ./my_cmd; source ./my_cmd_for_common;
+bs ... tcsh -f -c 'cd $RX_AUTO_ROOT; source my_ride_setup; source ./my_cmd; source ./my_cmd_for_common;
   <S4 Makefile mods on both RXEWS dirs>; <make general/auto/server targets>'
 ```
+The `PHASE` build param (default `all`) selects which sub-step runs —
+`makefile | general | auto | server | all`.
 
-**Wait for this job to finish before running step 3.**
+**Wait for this job to finish before running step 3** (`rxauto.sh all` does this
+for you via `--wait`).
 
 S4 changes applied automatically (both trunk IP and common IP dirs):
 - `OS_TYPE_SETUP`: `"RHEL7"` → `"RHEL8"`
@@ -126,10 +152,11 @@ rxauto.sh run --ip trunk   # trunk only
 rxauto.sh run --ip all     # trunk AND common
 ```
 
-`run.csh` scans `SUBMIT_LIST/NORMAL|COMMON/`, distributes split files round-robin across jobs,
-and triggers one `bee job run` per file with `-p SPLIT_FILE=<path>`. Each build runs:
+`run.csh` scans `SUBMIT_LIST/NORMAL|COMMON/` under `$RX_AUTO_ROOT`, distributes split files
+round-robin across jobs, and triggers one `bee job run` per file with `-p SPLIT_FILE=<path>`.
+Each build runs (rx_run scripts live in `$RX_AUTO_ROOT/RX_AUTO/`):
 ```
-bs ... tcsh -f -c "source my_ride_setup; bash rx_run $SPLIT_FILE"
+bs ... tcsh -f -c "source $RX_AUTO_ROOT/my_ride_setup; bash $RX_AUTO_ROOT/RX_AUTO/<rx_run> $SPLIT_FILE"
 ```
 CloudBees queues builds per node (executor=1) — nodes run in parallel, each node processes
 its assigned files sequentially.
