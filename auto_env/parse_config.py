@@ -245,7 +245,8 @@ def cmd_plan_jobs(cfg):
 # non-empty user value in config always wins. RX_AUTO_ROOT itself: config
 # rx_auto_root > env RXAUTO_ROOT (exported by rxauto.sh from where it's invoked).
 # ENV_BASE vars stay EMPTY here on purpose: the real RxEnv-* dir carries a dynamic
-# SVN ${REV} (guide S4) so it's globbed at runtime by the bash that consumes it.
+# SVN ${REV} (guide S4). At runtime the setup bash reads REV from the RXEWS dir's
+# Makefile and builds the path deterministically (see _envbase_resolve_bash).
 # LOCAL_PYTHON/LOCAL_PYTHON_BIN/UPDATE_DB_SCHEDULES/USER_CUSTOM_SRC: user-fillable, no default.
 
 def _rx_auto_root(cfg):
@@ -360,7 +361,8 @@ def _setup_bash_inner(cfg):
             sed = _sed_change(d, ch)
             if sed:
                 lines.append(sed)
-    # -- ENV_BASE: user value wins; else glob the RxEnv-* dir my_cmd created (dynamic ${REV}). --
+    # -- ENV_BASE: user value wins; else read REV from the RXEWS Makefile and build
+    #    <rxews_dir>/RxEnv-*-${REV} deterministically (no glob). --
     lines.append(_envbase_resolve_bash("TIB", tib, ti, "RxEnv-Trunk-IP-VNET"))
     lines.append(_envbase_resolve_bash("COB", cob, co, "RxEnv-Trunk-VNET"))
     # -- step 2: general_setup + auto_setup + server_setup make targets --
