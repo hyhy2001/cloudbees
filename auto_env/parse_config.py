@@ -201,7 +201,10 @@ def cmd_plan_jobs(cfg):
     _check_no_space(cfg)
     base = cfg.get("base_name", "RX_AUTO")
     ips = ip_list(cfg)
-    root = cfg.get("rx_auto_root", "")
+    # Must use _rx_auto_root (config rx_auto_root OR env RXAUTO_ROOT), not a bare
+    # cfg.get: with rx_auto_root:"" the job would export an empty RX_AUTO_ROOT and
+    # run 'cd /RX_AUTO' / 'bash /RX_AUTO/02_...' -> No such file or directory.
+    root = _rx_auto_root(cfg)
     import base64
     # schedule has spaces (cron) -> b64 into one word; deploy.csh decodes. "-" = no schedule.
     sched_enc = lambda s: base64.b64encode(s.encode()).decode() if s else "-"
