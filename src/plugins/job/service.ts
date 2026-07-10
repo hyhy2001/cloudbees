@@ -432,6 +432,7 @@ export async function createFreestyleJob(
     emailKeywords = null,
     emailRegex = null,
     params = null,
+    concurrent = false,
   } = opts;
   const keywords = normalizeKeywords(emailKeywords);
   const regex = normalizeRegex(emailRegex);
@@ -445,6 +446,7 @@ export async function createFreestyleJob(
     chdir,
     node,
     schedule,
+    concurrent,
     email,
     emailCond,
     emailKeywords: keywords,
@@ -806,6 +808,7 @@ export async function getJobConfigSummary(
     chdir: "",
     node: "",
     params: [],
+    concurrent: false,
   };
 
   const xmlStr = await client.getText(`/job/${jobSeg(name)}/config.xml`);
@@ -928,6 +931,10 @@ export async function getJobConfigSummary(
       const assigned = project["assignedNode"];
       if (typeof assigned === "string" && assigned.trim()) summary.node = assigned.trim();
 
+      // 4b. Concurrent builds (<concurrentBuild>true</concurrentBuild>)
+      const cb = project["concurrentBuild"];
+      summary.concurrent = cb === true || String(cb).trim().toLowerCase() === "true";
+
       // 5. Shell command (only for freestyle)
       const builders = project["builders"] as Record<string, unknown> | undefined;
       if (builders) {
@@ -1000,6 +1007,7 @@ export async function updateJobFreestyle(
     clearEmailRegex = false,
     params,
     clearParams = false,
+    concurrent,
   } = opts;
   const xmlStr = await client.getText(`/job/${jobSeg(name)}/config.xml`);
 
@@ -1114,6 +1122,11 @@ export async function updateJobFreestyle(
         `  <builders>\n    <hudson.tasks.Shell>\n      <command>${escapeXml(shellCmd)}</command>\n    </hudson.tasks.Shell>\n  </builders>`,
       );
     }
+  }
+
+  // 3b. concurrentBuild — toggle "Execute concurrent builds if necessary".
+  if (concurrent != null) {
+    updated = replaceOrInsertElement(updated, "concurrentBuild", concurrent ? "true" : "false");
   }
 
   // 4. schedule (triggers)

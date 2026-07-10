@@ -95,6 +95,9 @@ while ( 1 )
   if ( "$kind" == "JOB" ) then
     set jn = "`cut -f2 $_row_tmp`" ; set folder = "`cut -f3 $_row_tmp`" ; set node = "`cut -f4 $_row_tmp`"
     set ip = "`cut -f5 $_row_tmp`" ; set sched = "`cut -f6 $_row_tmp`" ; set sh = "`cut -f7 $_row_tmp`"
+    set conc = "`cut -f8 $_row_tmp`"   # yes|no -> add --concurrent on create/update
+    set concopt = ""
+    if ( "$conc" == "yes" ) set concopt = "--concurrent"
     # sched is b64 (cron string has spaces) or "-" (no schedule). Decode when used.
     set sched_real = ""
     if ( "$sched" != "-" ) set sched_real = "`echo $sched | base64 -d`"
@@ -109,30 +112,30 @@ while ( 1 )
 
     if ( $?DRY ) then
       if ( $exists ) then
-        echo "[dry] $BEE job update freestyle $folder/$jn --shell <b64> $ipopt"
+        echo "[dry] $BEE job update freestyle $folder/$jn --shell <b64> $ipopt $concopt"
       else if ( "$sched" != "-" ) then
-        echo "[dry] $BEE job create freestyle $jn --folder $folder --node $node --shell <b64> $ipopt --schedule '$sched_real'"
+        echo "[dry] $BEE job create freestyle $jn --folder $folder --node $node --shell <b64> $ipopt $concopt --schedule '$sched_real'"
       else
-        echo "[dry] $BEE job create freestyle $jn --folder $folder --node $node --shell <b64> $ipopt"
+        echo "[dry] $BEE job create freestyle $jn --folder $folder --node $node --shell <b64> $ipopt $concopt"
       endif
     else
       if ( $exists ) then
         echo "job ${jn}: exists -> update"
         if ( "$ip" != "-" ) then
-          "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "IP_MODE=$ip" --param-def "SPLIT_FILE="
+          "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "IP_MODE=$ip" --param-def "SPLIT_FILE=" $concopt
         else
           # ip="-" -> the rx_setup job: expose PHASE (default all) so run-setup can pick a sub-step.
-          "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "PHASE=all"
+          "$BEE" job update freestyle "$folder/$jn" --shell "$sh" --param-def "PHASE=all" $concopt
         endif
       else if ( "$sched" != "-" ) then
         "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
-          --shell "$sh" --param-def "IP_MODE=$ip" --schedule "$sched_real"
+          --shell "$sh" --param-def "IP_MODE=$ip" --schedule "$sched_real" $concopt
       else if ( "$ip" != "-" ) then
         "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
-          --shell "$sh" --param-def "IP_MODE=$ip" --param-def "SPLIT_FILE="
+          --shell "$sh" --param-def "IP_MODE=$ip" --param-def "SPLIT_FILE=" $concopt
       else
         "$BEE" job create freestyle "$jn" --folder "$folder" --node "$node" \
-          --shell "$sh" --param-def "PHASE=all"
+          --shell "$sh" --param-def "PHASE=all" $concopt
       endif
       # only record the job in the manifest if bee actually succeeded.
       set rc = $status

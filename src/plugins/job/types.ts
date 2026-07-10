@@ -23,6 +23,8 @@ export interface JobConfigSummary {
   node: string;
   /** Existing string parameter definitions. [] when none. */
   params: StringParamDef[];
+  /** "Execute concurrent builds if necessary" (<concurrentBuild>true). false when absent. */
+  concurrent: boolean;
 }
 
 /** A single String build-parameter definition on a job. */
@@ -84,6 +86,8 @@ export interface CreateFreestyleOpts {
   emailKeywords?: string[] | null;
   emailRegex?: string | null;
   params?: StringParamDef[] | null;
+  /** "Execute concurrent builds if necessary" — <concurrentBuild>. Default false. */
+  concurrent?: boolean;
 }
 
 /** Options for updateJobFreestyle — all fields optional; omit = leave unchanged. */
@@ -100,6 +104,8 @@ export interface UpdateFreestyleOpts {
   clearEmailRegex?: boolean;
   params?: StringParamDef[] | null;
   clearParams?: boolean;
+  /** Toggle "Execute concurrent builds if necessary". null/undefined = leave unchanged. */
+  concurrent?: boolean | null;
 }
 export interface FreestyleXmlOpts {
   desc?: string;
@@ -112,4 +118,5 @@ export interface FreestyleXmlOpts {
   emailKeywords?: string[] | null;
   emailRegex?: string | null;
   params?: StringParamDef[] | null;
+  concurrent?: boolean;
 }
