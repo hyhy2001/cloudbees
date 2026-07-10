@@ -579,10 +579,13 @@ export function registerJobCommands(ctx: PluginContext): void {
 
           if (!opts.wait) return;
 
-          // Wait for a new build to appear (up to 15s)
+          // Wait for a new build to appear. A queued build (e.g. LSF/bs submit, or
+          // an agent that has to come online) can take well over 15s to leave the
+          // queue and get a number, so give the start-wait the full --timeout budget
+          // instead of a hardcoded 15s — otherwise --wait aborts on slow-starting jobs.
           let newBuildNum: number | null = null;
-          process.stdout.write("Waiting for build to start...\n");
-          const deadline = Date.now() + 15000;
+          process.stdout.write(`Waiting for build to start (up to ${timeout}s)...\n`);
+          const deadline = Date.now() + timeout * 1000;
           while (Date.now() < deadline) {
             try {
               const current = await getLastBuildNumber(client, name);
@@ -597,7 +600,9 @@ export function registerJobCommands(ctx: PluginContext): void {
           }
 
           if (newBuildNum == null) {
-            printWarning("WARN Could not determine build number. Check Jenkins manually.");
+            printWarning(
+              `WARN Build did not start within ${timeout}s (still queued?). Check Jenkins manually; raise --timeout if the queue is slow.`,
+            );
             process.exit(1);
           }
 

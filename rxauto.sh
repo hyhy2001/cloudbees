@@ -113,8 +113,11 @@ case "$cmd" in
                                csh "$AUTO/provision.csh" "$@" || { echo "rxauto: provision failed (rc=$?), aborting" >&2; exit 1; }
                                csh "$AUTO/deploy.csh" "$@" || { echo "rxauto: deploy failed (rc=$?), aborting" >&2; exit 1; }
                                # step 1-2: trigger rx_setup and BLOCK until it finishes (--wait),
-                               # so step 3 only runs once the environment is set up.
-                               "${BEE:-$CB/bee}" job run "$(setup_job_path)" -p "PHASE=all" --wait \
+                               # so step 3 only runs once the environment is set up. rx_setup can take
+                               # many minutes (populate RXEWS + make targets) and is submitted via bs
+                               # (LSF queue), so use a large timeout; override with RXAUTO_SETUP_TIMEOUT.
+                               "${BEE:-$CB/bee}" job run "$(setup_job_path)" -p "PHASE=all" \
+                                 --wait --timeout "${RXAUTO_SETUP_TIMEOUT:-3600}" \
                                  || { echo "rxauto: rx_setup job failed (rc=$?), aborting run" >&2; exit 1; }
                                exec csh "$AUTO/run.csh" "$@" ;;
   ""|-h|--help|help)
