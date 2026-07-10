@@ -122,8 +122,12 @@ Once config.yaml is filled in and you've logged in (step 0), you can run the
 whole pipeline in one go:
 
 ```bash
-rxauto.sh all      # provision -> deploy -> rx_setup (waits for it) -> run step 3
+rxauto.sh all      # provision -> deploy -> rx_setup (waits) -> run step 3
 ```
+
+In **auto** mode, `all` also pauses the `daily_*` schedule while `rx_setup` runs and
+resumes it afterwards — so the timer can't fire `go_rx_auto` on a half-built
+environment if setup takes longer than the schedule interval.
 
 `all` stops at the first failing step. Prefer it for a first run; the numbered
 steps below are for re-running or understanding each stage individually.
@@ -218,7 +222,7 @@ rxauto.sh resume   # restore schedule from config
 
 | Situation | Command |
 |---|---|
-| Everything, first run | `rxauto.sh all` (provision → deploy → rx_setup `--wait` → run) |
+| Everything, first run | `rxauto.sh all` (provision → deploy → [pause] → rx_setup `--wait` → [resume] → run; pause/resume only in auto mode) |
 | Run step 3 again | `rxauto.sh run` |
 | Environment changed (new SVN rev) | trigger `rx_setup` again, then `rxauto.sh run` |
 | Switch trunk ↔ common (manual) | `rxauto.sh run --ip trunk\|common` (no redeploy needed) |

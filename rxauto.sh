@@ -109,9 +109,16 @@ case "$cmd" in
                                echo "run-manual: $jobp  IP_MODE=$ipm  SPLIT_FILE=$sf"
                                exec "${BEE:-$CB/bee}" job run "$jobp" -p "IP_MODE=$ipm" -p "SPLIT_FILE=$sf" "$@" ;;
   bee)                         exec "${BEE:-$CB/bee}" "$@" ;;
-  all)                         # full pipeline: provision -> deploy -> rx_setup (wait) -> run
+  all)                         # full pipeline: provision -> deploy -> [pause] -> rx_setup (wait) -> [resume] -> run
                                csh "$AUTO/provision.csh" "$@" || { echo "rxauto: provision failed (rc=$?), aborting" >&2; exit 1; }
                                csh "$AUTO/deploy.csh" "$@" || { echo "rxauto: deploy failed (rc=$?), aborting" >&2; exit 1; }
+                               # RACE GUARD (auto mode): deploy just armed the daily_* schedule, but the
+                               # environment isn't ready until rx_setup finishes. If setup runs longer than
+                               # the schedule interval, the timer would fire go_rx_auto on a half-built env.
+                               # So pause the schedule now, run setup, then resume it. Only matters for auto;
+                               # manual jobs have no schedule (pause/resume are harmless no-ops there).
+                               eff_mode="$(python3 "$AUTO/parse_config.py" eff-mode "$RXAUTO_CONFIG")"
+                               [ "$eff_mode" = auto ] && csh "$AUTO/pause.csh" "$@"
                                # step 1-2: trigger rx_setup and BLOCK until it finishes (--wait),
                                # so step 3 only runs once the environment is set up. rx_setup can take
                                # many minutes (populate RXEWS + make targets) and is submitted via bs
@@ -119,6 +126,8 @@ case "$cmd" in
                                "${BEE:-$CB/bee}" job run "$(setup_job_path)" -p "PHASE=all" \
                                  --wait --timeout "${RXAUTO_SETUP_TIMEOUT:-3600}" \
                                  || { echo "rxauto: rx_setup job failed (rc=$?), aborting run" >&2; exit 1; }
+                               # setup done -> re-arm the schedule so go_rx_auto starts firing on a ready env.
+                               [ "$eff_mode" = auto ] && csh "$AUTO/resume.csh" "$@"
                                exec csh "$AUTO/run.csh" "$@" ;;
   ""|-h|--help|help)
     sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
