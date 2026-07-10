@@ -690,6 +690,14 @@ def main():
         print(eff_mode(cfg))
     elif sub == "eff-ip":
         print(eff_ip(cfg))
+    elif sub == "first-manual-job":
+        # <base>/<prefix>_<first account> — the job run-manual triggers for a
+        # one-off custom module list. Empty output if no accounts configured.
+        base = cfg.get("base_name", "RX_AUTO")
+        prefix = dig(cfg, "manual.job_prefix", "job")
+        accts = [a.get("username", "") for a in cfg.get("accounts", []) if a.get("username")]
+        if accts:
+            print(f"{base}/{prefix}_{accts[0]}")
     elif sub == "get":
         print(dig(cfg, sys.argv[3], "") if len(sys.argv) > 3 else "")
     elif sub == "write-manifest":
