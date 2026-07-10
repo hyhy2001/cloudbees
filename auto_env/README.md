@@ -186,12 +186,14 @@ rxauto.sh run --ip all     # trunk AND common
 
 **One-off custom module list** — run a single build for your own file, regardless of mode:
 ```bash
-rxauto.sh run-manual /path/to/my_module_list          # IP_MODE from config (all -> trunk)
-rxauto.sh run-manual /path/to/my_module_list --ip trunk
-rxauto.sh run-manual /path/to/my_module_list --wait   # block until it finishes
+rxauto.sh run-manual /path/to/my_module_list --ip trunk    # 01_ script
+rxauto.sh run-manual /path/to/my_module_list --ip common   # 02_ script
+rxauto.sh run-manual /path/to/my_module_list --ip trunk --wait
 ```
-Uses the first manual job (`<job_prefix>_<first account>`) with `-p SPLIT_FILE=<your file>`.
-The job must exist on CloudBees (run `rxauto.sh deploy` in manual mode at least once).
+`--ip trunk|common` is **required** — it picks which rx_run script the build uses, so you must
+state which IP type your custom list is for. Uses the first manual job
+(`<job_prefix>_<first account>`) with `-p SPLIT_FILE=<your file>`. The job must exist on
+CloudBees (run `rxauto.sh deploy` in manual mode at least once).
 
 `run.csh` scans `SUBMIT_LIST/NORMAL|COMMON/` under `$RX_AUTO_ROOT`, distributes split files
 round-robin across jobs, and triggers one `bee job run` per file with `-p SPLIT_FILE=<path>`.

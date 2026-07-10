@@ -6,7 +6,7 @@
 #   rxauto.sh provision|deploy|run|manage [args...]   -> auto_env/*.csh
 #   rxauto.sh setup [all|makefile|general|auto|server] [--dry-run]  -> scripts/setup_all.bash
 #   rxauto.sh run-setup [makefile|general|auto|server|all]  -> trigger rx_setup job (default all)
-#   rxauto.sh run-manual <split_file> [--ip trunk|common] [--wait]  -> ONE build for a custom module list
+#   rxauto.sh run-manual <split_file> --ip trunk|common [--wait]  -> ONE build for a custom module list (--ip required)
 #   rxauto.sh all                                      -> provision + deploy + rx_setup(--wait) + run
 #   rxauto.sh prune [--dry-run]                        -> DELETE infra config no longer wants
 #   rxauto.sh pause [--dry-run]                        -> clear schedule on auto jobs (stop firing)
@@ -94,14 +94,18 @@ case "$cmd" in
                                esac
                                exec "${BEE:-$CB/bee}" job run "$(setup_job_path)" -p "PHASE=$phase" "$@" ;;
   run-manual)                  # run ONE manual build for a custom module list, regardless of mode.
-                               # usage: rxauto.sh run-manual <split_file> [--wait] [--ip trunk|common]
-                               # (--ip is pulled out earlier into RXAUTO_IP; default from config)
+                               # usage: rxauto.sh run-manual <split_file> --ip trunk|common [--wait]
+                               # --ip is REQUIRED (pulled out earlier into RXAUTO_IP): it selects the
+                               # rx_run script (trunk -> 01_*, common -> 02_*), so the user must state it.
                                sf="${1:-}"; shift || true
-                               [ -n "$sf" ] || { echo "usage: rxauto.sh run-manual <split_file> [--ip trunk|common] [--wait]" >&2; exit 1; }
+                               [ -n "$sf" ] || { echo "usage: rxauto.sh run-manual <split_file> --ip trunk|common [--wait]" >&2; exit 1; }
+                               case "${RXAUTO_IP:-}" in
+                                 trunk|common) ipm="$RXAUTO_IP" ;;
+                                 "") echo "rxauto: run-manual requires --ip trunk|common (which rx_run script to use)" >&2; exit 1 ;;
+                                 *) echo "rxauto: run-manual --ip must be trunk or common (got '$RXAUTO_IP'; 'all' is not valid for a single build)" >&2; exit 1 ;;
+                               esac
                                jobp="$(python3 "$AUTO/parse_config.py" first-manual-job "$RXAUTO_CONFIG")"
                                [ -n "$jobp" ] || { echo "rxauto: no manual job (need at least one entry in accounts:)" >&2; exit 1; }
-                               ipm="$(RXAUTO_IP="${RXAUTO_IP:-}" python3 "$AUTO/parse_config.py" eff-ip "$RXAUTO_CONFIG")"
-                               [ "$ipm" = all ] && ipm=trunk   # a single build needs one concrete script
                                echo "run-manual: $jobp  IP_MODE=$ipm  SPLIT_FILE=$sf"
                                exec "${BEE:-$CB/bee}" job run "$jobp" -p "IP_MODE=$ipm" -p "SPLIT_FILE=$sf" "$@" ;;
   bee)                         exec "${BEE:-$CB/bee}" "$@" ;;
