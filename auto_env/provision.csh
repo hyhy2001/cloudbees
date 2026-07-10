@@ -44,17 +44,15 @@ while ( 1 )
   set user = "$line[2]" ; set nname = "$line[3]" ; set host = "$line[4]"
   set port = "$line[5]" ; set rdir = "$line[6]" ; set nexec = "$line[7]"
 
-  # -- cred: reuse if the manifest already has one (users rarely change), else create --
+  # -- cred: deterministic id = node name. Reuse only if it ACTUALLY exists on the
+  # server; recreate if deleted (a stale manifest id is not enough — the cred may
+  # have been removed on CloudBees). --
+  # Prefer the id recorded in the manifest; else fall back to the node-name id.
   set cid = "`$PY manifest-cred $MANIFEST $user`"
-  if ( "$cid" != "" ) then
-    echo "cred ${user}: reuse $cid"
-  else if ( $?DRY ) then
-    echo "[dry] $BEE cred create --username $user --password *** --description '$BASE $user'"
-    set cid = "DRY_CRED_$user"
+  if ( "$cid" == "" ) set cid = "$nname"
+  if ( $?DRY ) then
+    echo "[dry] $BEE cred get $cid || $BEE cred create --id $cid --username $user --password *** --description ${BASE}_${user}"
   else
-    # deterministic cred-id (--id): we set it to the node name, so no fragile stdout parsing.
-    set cid = "$nname"
-    # idempotent: skip create if a cred with this id already exists (manifest may have been lost).
     "$BEE" cred get "$cid" >& /dev/null
     if ( $status == 0 ) then
       echo "cred ${user}: exists -> reuse $cid"
@@ -65,10 +63,8 @@ while ( 1 )
       if ( $status != 0 ) then
         echo "ERROR: failed to create cred $cid for $user" >& /dev/stderr ; exit 1
       endif
-      echo "cred $user -> $cid"
+      echo "cred $user -> $cid (recreated)"
     endif
-  endif
-  if ( ! $?DRY ) then
     echo "cred	$user	$cid" >> "$CREATED"
   endif
 
