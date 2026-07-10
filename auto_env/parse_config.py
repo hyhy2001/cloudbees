@@ -420,6 +420,11 @@ def cmd_plan_setup(cfg, cfg_path):
     base = cfg.get("base_name", "RX_AUTO")
     jn = setup.get("job_name", "rx_setup")
     user = dig(cfg, "setup.account.username", "")
+    if not (user or "").strip():
+        # Without a username the node name would be "<base>_" and the job would be
+        # assigned to a node that doesn't exist -> stuck PENDING. Fail loud instead.
+        sys.exit("plan-setup: setup.account.username is empty in config.yaml "
+                 "(set setup.account: { username: ..., password: ... })")
     bs = cfg.get("bs") or {}
     root = _load_setup_vars(cfg).get("RX_AUTO_ROOT", "")
     ride = bs.get("ride_setup", "my_ride_setup")
