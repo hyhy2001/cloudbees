@@ -56,6 +56,7 @@ auto:
   account: { username: user11, password: pass11, executors: 2 }   # executor=2: trunk+common run in parallel
   job_name: daily
   schedule: "H/30 * * * *"  # every 30 min: go_rx_auto detects SVN changes and runs
+  concurrent: false         # true = "Execute concurrent builds if necessary" (allow overlapping fires)
   command: |
     cd "$RX_AUTO_ROOT/RX_AUTO"
     if [ "$IP_MODE" = trunk ]; then ./01_go_rx_auto.bash; else ./02_go_rx_auto.bash; fi

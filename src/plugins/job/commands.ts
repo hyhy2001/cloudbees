@@ -181,6 +181,7 @@ export function registerJobCommands(ctx: PluginContext): void {
           jobClass: job.jobClass,
           jobType: job.jobType,
           schedule: summary.schedule,
+          concurrent: summary.concurrent,
           email: summary.email,
           email_cond: summary.email_cond,
           email_keywords: summary.email_keywords,
@@ -207,6 +208,7 @@ export function registerJobCommands(ctx: PluginContext): void {
     .option("--chdir <dir>", "Working directory for the build script")
     .option("--node <node>", "Restrict / assign this job to a specific node or label")
     .option("--schedule <cron>", "Cron schedule to auto-trigger builds (e.g., 'H 8 * * *')")
+    .option("--concurrent", "Execute concurrent builds if necessary (allow >1 build at once)", false)
     .option("--email <emails>", "Email addresses to notify on build result (comma-separated)")
     .option(
       "--email-cond <cond>",
@@ -236,6 +238,7 @@ export function registerJobCommands(ctx: PluginContext): void {
           chdir?: string;
           node?: string;
           schedule?: string;
+          concurrent: boolean;
           email?: string;
           emailCond: string;
           emailKeyword: string[];
@@ -254,6 +257,7 @@ export function registerJobCommands(ctx: PluginContext): void {
             chdir: opts.chdir ?? null,
             node: opts.node ?? null,
             schedule: opts.schedule ?? null,
+            concurrent: opts.concurrent,
             email: opts.email ?? null,
             emailCond: opts.emailCond,
             emailKeywords: opts.emailKeyword.length > 0 ? opts.emailKeyword : null,
@@ -765,6 +769,8 @@ export function registerJobCommands(ctx: PluginContext): void {
     .option("--chdir <dir>", "Change working directory (prepended to --shell)")
     .option("--node <node>", "Change node assignment — restrict job to a specific node or label")
     .option("--schedule <cron>", "Change cron build schedule (e.g., 'H 8 * * *', or '' to remove)")
+    .option("--concurrent", "Enable 'Execute concurrent builds if necessary'")
+    .option("--no-concurrent", "Disable concurrent builds")
     .option("--email <emails>", "Add or change email notification recipients, or '' to remove")
     .option(
       "--email-cond <cond>",
@@ -795,6 +801,7 @@ export function registerJobCommands(ctx: PluginContext): void {
           chdir?: string;
           node?: string;
           schedule?: string;
+          concurrent?: boolean;
           email?: string;
           emailCond?: string;
           emailKeyword: string[];
@@ -834,6 +841,7 @@ export function registerJobCommands(ctx: PluginContext): void {
               shellCmd: shellInput,
               node: opts.node ?? null,
               schedule: opts.schedule ?? null,
+              concurrent: opts.concurrent ?? null,
               email: opts.email ?? null,
               emailCond: opts.emailCond ?? null,
               emailKeywords: emailKeywordsInput,

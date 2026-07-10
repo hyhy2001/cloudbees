@@ -216,10 +216,11 @@ def cmd_plan_jobs(cfg):
         sched = dig(cfg, "auto.schedule", "")
         if not (dig(cfg, "auto.command", "") or "").strip():
             sys.exit("plan-jobs: auto.command is empty -> job would run an empty script. Set it in config.yaml.")
+        conc = "yes" if dig(cfg, "auto.concurrent", False) else "no"
         for ip in ips:
             jn = f"{jn0}_{ip}" if len(ips) > 1 else jn0
             emit("JOB", jn, base, node_name(base, user), ip, sched_enc(sched),
-                 shell_b64(dig(cfg, "auto.command", ""), root))
+                 shell_b64(dig(cfg, "auto.command", ""), root), conc)
     else:
         # manual = work-stealing: each job claims split files at runtime (atomic mkdir).
         # No fixed index -> accounts > splits: extra workers idle; accounts < splits: keep claiming.
@@ -234,10 +235,11 @@ def cmd_plan_jobs(cfg):
         # manual: IP_MODE must be DEFINED on the job (default = first ip) so run.csh can
         # override it per-ip with -p IP_MODE=... at runtime. ip=all -> default trunk, run does both.
         ip_def = ips[0]
+        conc = "yes" if dig(cfg, "manual.concurrent", False) else "no"
         for a in cfg.get("accounts", []):
             user = a.get("username", "")
             emit("JOB", f"{prefix}_{user}", base, node_name(base, user), ip_def, "-",
-                 shell_b64(cmd, root, env))
+                 shell_b64(cmd, root, env), conc)
 
 
 # -- S2 env-var derivation (guide S2) ---------------------------------------
@@ -445,7 +447,7 @@ def cmd_plan_setup(cfg, cfg_path):
     outer = (f'export PHASE="${{PHASE:-all}}"; '
              f'bs -m "{bs.get("host_groups","")}" -I -os "{bs.get("os","")}" '
              f'-M "{bs.get("mem","")}" tcsh -f -c \'{tcsh_arg}\'')
-    emit("JOB", jn, base, node_name(base, user), "-", "-", shell_b64(outer))
+    emit("JOB", jn, base, node_name(base, user), "-", "-", shell_b64(outer), "no")
 
 
 def cmd_plan_splits(cfg, rx_auto_root, ip):

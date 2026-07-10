@@ -66,6 +66,7 @@ export function buildFreestyleXml(opts: {
   emailKeywords?: string[] | null;
   emailRegex?: string | null;
   params?: StringParamDef[] | null;
+  concurrent?: boolean;
 }): string {
   const {
     desc = "",
@@ -78,6 +79,7 @@ export function buildFreestyleXml(opts: {
     emailKeywords = null,
     emailRegex = null,
     params = null,
+    concurrent = false,
   } = opts;
 
   // Quote chdir so paths with spaces survive the shell (e.g. "cd /my dir && cmd").
@@ -105,6 +107,7 @@ export function buildFreestyleXml(opts: {
   if (timer) lines.push(timer);
 
   lines.push("  </triggers>");
+  lines.push(`  <concurrentBuild>${concurrent ? "true" : "false"}</concurrentBuild>`);
   lines.push("  <builders>");
   lines.push("    <hudson.tasks.Shell>");
   lines.push(`      <command>${escapeXml(finalCmd)}</command>`);

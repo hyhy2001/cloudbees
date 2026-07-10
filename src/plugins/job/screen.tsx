@@ -896,6 +896,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             { name: "shell_cmd", label: "Shell Command", placeholder: "freestyle only", hint: "shell to run", visible: (v) => v.job_type === "freestyle" },
             { name: "chdir", label: "Working Dir", placeholder: "cd <dir> && before command", path: true, hint: "Tab completes local FS", visible: (v) => v.job_type === "freestyle" },
             { name: "node", label: "Node/Label", options: nodeOptions, searchable: true, initial: NONE_OPTION, hint: "where it runs", visible: (v) => v.job_type !== "folder" },
+            { name: "concurrent", label: "Concurrent Builds", options: ["no", "yes"], initial: "no", hint: "run >1 build at once", visible: (v) => v.job_type === "freestyle" },
             { name: "script_file", label: "Pipeline Script", placeholder: "path to .groovy file", path: true, hint: "Tab completes local FS", visible: (v) => v.job_type === "pipeline" },
           ]}
           onResult={resolve}
@@ -948,6 +949,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             shellCmd: result.shell_cmd || "echo hello",
             chdir: result.chdir || null,
             node: result.node && result.node !== NONE_OPTION ? result.node : null,
+            concurrent: result.concurrent === "yes",
           }, currentFolder);
         trackResource("job", qualified, ctx.profile, client.baseUrl, ctx.dbPath);
         if (!result.node || result.node === NONE_OPTION) {
@@ -956,7 +958,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
           ctx.notify(`${SYM.ok} Created freestyle: ${qualified}`, "success");
         }
         const leaf = currentFolder ? qualified.slice(currentFolder.length + 1) : qualified;
-        ctx.logCommand(`bee job create freestyle ${leaf}${currentFolder ? ` --folder "${currentFolder}"` : ""}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node "${result.node}"` : ""}`);
+        ctx.logCommand(`bee job create freestyle ${leaf}${currentFolder ? ` --folder "${currentFolder}"` : ""}${result.desc ? ` --description "${result.desc}"` : ""}${result.shell_cmd ? ` --shell "${result.shell_cmd}"` : ""}${result.node && result.node !== NONE_OPTION ? ` --node "${result.node}"` : ""}${result.concurrent === "yes" ? ` --concurrent` : ""}`);
       }
       void refetch();
     } catch (err) {
@@ -1027,6 +1029,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
               { name: "shell_cmd", label: "Shell Command", initial: s?.shell_cmd || "", hint: "shell to run" },
               { name: "chdir", label: "Working Dir", initial: s?.chdir || "", path: true, hint: "Tab completes local FS" },
               { name: "node", label: "Node/Label", options: nodeOptions, searchable: true, initial: s?.node && s.node !== "-" ? s.node : NONE_OPTION, hint: "where it runs" },
+              { name: "concurrent", label: "Concurrent Builds", options: ["no", "yes"], initial: s?.concurrent ? "yes" : "no", hint: "run >1 build at once" },
             ]}
             onResult={resolve}
           />
@@ -1038,6 +1041,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         const finalShell = result.shell_cmd
           ? (result.chdir ? `cd ${result.chdir} && ${result.shell_cmd}` : result.shell_cmd)
           : null;
+        const concurrentNew = result.concurrent === "yes";
         await updateJobFreestyle(
           client,
           job.name,
@@ -1045,6 +1049,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
             desc: result.desc ?? null,
             shellCmd: finalShell,
             node: result.node && result.node !== NONE_OPTION ? result.node : null,
+            concurrent: concurrentNew,
           },
         );
         ctx.notify(`${SYM.ok} Updated: ${job.name}`, "success");
@@ -1063,6 +1068,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         }
         if (result.node !== initNode) {
           parts.push(result.node !== NONE_OPTION ? `--node "${result.node}"` : `--node ""`);
+        }
+        if (concurrentNew !== Boolean(s?.concurrent)) {
+          parts.push(concurrentNew ? `--concurrent` : `--no-concurrent`);
         }
         ctx.logCommand(parts.join(" "));
         void refetch();
