@@ -3,7 +3,7 @@
  * Ports legacy/cb/cli/commands/nodes.py with 1:1 behavior and strings.
  */
 import type { PluginContext } from "../../registry/types";
-import { printError, printInfo, printSuccess, printWarning, printMessage, tableFormatter, isJsonOutput, printJson } from "../../core/cli/output";import { confirm } from "../../core/cli/utils";
+import { printError, printInfo, printSuccess, printWarning, printMessage, tableFormatter, isJsonOutput, printJson } from "../../core/cli/output";import { confirmAction } from "../../core/cli/utils";
 import { NotFoundError } from "../../core/api/errors";
 import { getActiveProfileName } from "../../core/session/index";
 import {
@@ -181,7 +181,8 @@ export function registerNodeCommands(ctx: PluginContext): void {
           // Skip if the node already exists (mirrors Python's pre-check).
           try {
             await getNode(client, name);
-            printInfo(`INFO Node '${name}' already exists.`);
+            if (isJsonOutput()) printJson({ ok: false, name, status: "already_exists" });
+            else printInfo(`INFO Node '${name}' already exists.`);
             return;
           } catch (e) {
             if (!(e instanceof NotFoundError)) throw e;
@@ -206,8 +207,19 @@ export function registerNodeCommands(ctx: PluginContext): void {
           }
           trackResource("node", name, profile, client.baseUrl, dbPath);
 
+          const link = `${client.baseUrl.replace(/\/+$/, "")}/computer/${name}/`;
+          if (isJsonOutput()) {
+            printJson({
+              ok: true,
+              name,
+              url: link,
+              launcher: opts.host ? "ssh" : "jnlp",
+              ...(opts.host ? { host: opts.host, port: Number(opts.port), credId: opts.credId || null } : {}),
+            });
+            return;
+          }
           printSuccess(`OK Node '${name}' created.`);
-          printMessage(`  Link: ${client.baseUrl.replace(/\/+$/, "")}/computer/${name}/`);
+          printMessage(`  Link: ${link}`);
           if (opts.host) {
             printMessage(`  SSH Node will auto-connect to ${opts.host}:${opts.port} using cred: '${opts.credId || "None"}'`);
             if (!opts.credId) {
@@ -234,7 +246,8 @@ export function registerNodeCommands(ctx: PluginContext): void {
         const client = await ctx.getClient({ useController: true });
         await copyNode(client, sourceName, newName);
         trackResource("node", newName, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Node '${newName}' created (copied from '${sourceName}').`);
+        if (isJsonOutput()) printJson({ ok: true, name: newName, copiedFrom: sourceName });
+        else printSuccess(`OK Node '${newName}' created (copied from '${sourceName}').`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -251,24 +264,30 @@ export function registerNodeCommands(ctx: PluginContext): void {
         const client = await ctx.getClient({ useController: true });
         const tracked = getTrackedResources("node", profile, client.baseUrl, dbPath);
         const trackedSet = new Set(tracked);
+        const json = isJsonOutput();
+        const results: { name: string; tracked: boolean; status: string; error?: string }[] = [];
         for (const name of names) {
           try {
             await getNode(client, name);
           } catch (e) {
             if (e instanceof NotFoundError) {
-              printError(`Node '${name}' not found on server. Skipping.`);
+              if (json) results.push({ name, tracked: false, status: "not_found" });
+              else printError(`Node '${name}' not found on server. Skipping.`);
               continue;
             }
             throw e;
           }
           if (trackedSet.has(name)) {
-            printInfo(`INFO Node '${name}' is already tracked.`);
+            if (json) results.push({ name, tracked: true, status: "already_tracked" });
+            else printInfo(`INFO Node '${name}' is already tracked.`);
             continue;
           }
           trackResource("node", name, profile, client.baseUrl, dbPath);
           trackedSet.add(name);
-          printSuccess(`OK Tracked node '${name}'.`);
+          if (json) results.push({ name, tracked: true, status: "tracked" });
+          else printSuccess(`OK Tracked node '${name}'.`);
         }
+        if (json) printJson({ results });
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -283,23 +302,27 @@ export function registerNodeCommands(ctx: PluginContext): void {
     .description("Delete (remove / decommission / retire) one or more nodes (build agents / workers) permanently")
     .action(async (names: string[], opts: { yes: boolean }) => {
       try {
-        if (!opts.yes) {
-          const label = names.length === 1 ? `node '${names[0]}'` : `${names.length} nodes`;
-          if (!(await confirm(`Delete ${label}? [y/N] `))) {
-            printInfo("INFO Cancelled.");
-            return;
-          }
+        const label = names.length === 1 ? `node '${names[0]}'` : `${names.length} nodes`;
+        if (!(await confirmAction(`Delete ${label}? [y/N] `, opts.yes))) {
+          printInfo("INFO Cancelled.");
+          return;
         }
         const client = await ctx.getClient({ useController: true });
+        const json = isJsonOutput();
+        const results: { name: string; deleted: boolean; error?: string }[] = [];
         for (const name of names) {
           try {
             await deleteNode(client, name);
             untrackResource("node", name, profile, client.baseUrl, dbPath);
-            printSuccess(`OK Node '${name}' deleted.`);
+            if (json) results.push({ name, deleted: true });
+            else printSuccess(`OK Node '${name}' deleted.`);
           } catch (e) {
-            printError(`Failed to delete '${name}': ${e instanceof Error ? e.message : String(e)}`, e);
+            const msg = e instanceof Error ? e.message : String(e);
+            if (json) results.push({ name, deleted: false, error: msg });
+            else printError(`Failed to delete '${name}': ${msg}`, e);
           }
         }
+        if (json) printJson({ results });
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -317,11 +340,13 @@ export function registerNodeCommands(ctx: PluginContext): void {
         const client = await ctx.getClient({ useController: true });
         const node = await getNode(client, name);
         if (node.offline) {
-          printInfo(`INFO Node '${name}' is already offline.`);
+          if (isJsonOutput()) printJson({ ok: true, name, offline: true, status: "already_offline" });
+          else printInfo(`INFO Node '${name}' is already offline.`);
           return;
         }
         await toggleOffline(client, name, opts.reason);
-        printSuccess(`OK Node '${name}' marked offline.`);
+        if (isJsonOutput()) printJson({ ok: true, name, offline: true, status: "offline" });
+        else printSuccess(`OK Node '${name}' marked offline.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -338,11 +363,13 @@ export function registerNodeCommands(ctx: PluginContext): void {
         const client = await ctx.getClient({ useController: true });
         const node = await getNode(client, name);
         if (!node.offline) {
-          printInfo(`INFO Node '${name}' is already online.`);
+          if (isJsonOutput()) printJson({ ok: true, name, offline: false, status: "already_online" });
+          else printInfo(`INFO Node '${name}' is already online.`);
           return;
         }
         await toggleOffline(client, name, "");
-        printSuccess(`OK Node '${name}' brought online.`);
+        if (isJsonOutput()) printJson({ ok: true, name, offline: false, status: "online" });
+        else printSuccess(`OK Node '${name}' brought online.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -359,15 +386,20 @@ export function registerNodeCommands(ctx: PluginContext): void {
         const client = await ctx.getClient({ useController: true });
         const tracked = getTrackedResources("node", profile, client.baseUrl, dbPath);
         const trackedSet = new Set(tracked);
+        const json = isJsonOutput();
+        const results: { name: string; untracked: boolean; status: string }[] = [];
         for (const name of names) {
           if (!trackedSet.has(name)) {
-            printInfo(`INFO Node '${name}' is not in Mine.`);
+            if (json) results.push({ name, untracked: false, status: "not_in_mine" });
+            else printInfo(`INFO Node '${name}' is not in Mine.`);
             continue;
           }
           untrackResource("node", name, profile, client.baseUrl, dbPath);
           trackedSet.delete(name);
-          printSuccess(`OK Removed node '${name}' from Mine.`);
+          if (json) results.push({ name, untracked: true, status: "untracked" });
+          else printSuccess(`OK Removed node '${name}' from Mine.`);
         }
+        if (json) printJson({ results });
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -447,6 +479,10 @@ export function registerNodeCommands(ctx: PluginContext): void {
             idleDelay: opts.idleDelay !== undefined ? Number(opts.idleDelay) : undefined,
             controlledAgent,
           });
+          if (isJsonOutput()) {
+            printJson({ ok: true, name });
+            return;
+          }
           printSuccess(`OK Node '${name}' updated.`);
           if (launcherType === "ssh" && opts.credId === "") {
             printWarning(`WARN SSH launcher with no credential set — ensure key-based auth is configured.`);
