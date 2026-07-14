@@ -873,6 +873,12 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
 
   const cancelQueuedJob = useCallback(
     async (job: JobDTO): Promise<false | void> => {
+      // Parity with the CLI: only cancel queued builds of jobs you track, so you
+      // can't cancel another user's queued work on the shared controller.
+      if (!trackedNames.has(job.name)) {
+        ctx.notify(`Track '${job.name}' first to cancel its queued builds.`, "warning");
+        return false;
+      }
       const items = queuedItemsForJob(job);
       if (items.length === 0) {
         ctx.notify("No queued builds for this job.", "warning");
@@ -907,7 +913,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         ctx.notify(err instanceof Error ? err.message : String(err), "error");
       }
     },
-    [ctx, queuedItemsForJob, refetch, refetchQueue],
+    [ctx, queuedItemsForJob, trackedNames, refetch, refetchQueue],
   );
 
   const removeJob = useCallback(
@@ -1347,7 +1353,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { label: "View Script", icon: SYM.iconEdit,    when: () => current?.jobType === "PL", run: () => { if (current) setScriptJob(current.name); return false as const; } },
       { label: "Run",        icon: SYM.iconPlay,      run: async () => { if (!current) return false as const; return await runJob(current.name); } },
       { label: "Stop",       icon: SYM.iconStop,      run: async () => { if (!current) return false as const; return await stopJob(current); } },
-      { label: "Cancel Queued", icon: SYM.iconStop,   when: () => current !== undefined && queuedItemsForJob(current).length > 0, run: async () => { if (!current) return false as const; return await cancelQueuedJob(current); } },
+      { label: "Cancel Queued", icon: SYM.iconStop,   when: () => current !== undefined && trackedNames.has(current.name) && queuedItemsForJob(current).length > 0, run: async () => { if (!current) return false as const; return await cancelQueuedJob(current); } },
       { label: "Edit",       icon: SYM.iconEdit,      run: async () => { if (!current) return false as const; return await editJob(current); } },
       // Params/Schedule/Email use updateJobFreestyle internally — only show for FS.
       { label: "Params",     icon: SYM.iconParams,    when: () => current?.jobType === "FS", run: () => { if (current) setParamJob(current.name); return false as const; } },
@@ -1377,7 +1383,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         return false;
       } },
     ],
-    [current, summary, canCreate, isPipeline, runJob, stopJob, cancelQueuedJob, queuedItemsForJob, editJob, removeJob, moveJobCb, cloneJob],
+    [current, summary, canCreate, isPipeline, runJob, stopJob, cancelQueuedJob, queuedItemsForJob, trackedNames, editJob, removeJob, moveJobCb, cloneJob],
   );
 
   // Multi-select mode: when rows are checked via Space, the footer collapses to
