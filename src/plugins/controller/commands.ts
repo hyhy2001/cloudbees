@@ -4,7 +4,7 @@
  */
 
 import type { PluginContext } from "../../registry/types";
-import { printSuccess, printError, printInfo, printMessage, tableFormatter } from "../../core/cli/output";
+import { printSuccess, printError, printInfo, printMessage, tableFormatter, isJsonOutput, printJson } from "../../core/cli/output";
 import { CloudBeesClientImpl } from "../../core/api/index";
 import {
   listControllers,
@@ -31,6 +31,18 @@ export function registerControllerCommands(ctx: PluginContext): void {
         const controllers = await listControllers(client);
         const active = getActiveController(dbPath);
         const activeName = active ? active[0] : null;
+
+        if (isJsonOutput()) {
+          printJson(
+            controllers.map((c) => ({
+              name: c.name,
+              description: c.description ?? "",
+              online: c.online,
+              active: c.name === activeName,
+            })),
+          );
+          return;
+        }
 
         const formatter = ctx.getFormatter("table") ?? tableFormatter;
         const rows = controllers.map((c) => [
@@ -59,19 +71,22 @@ export function registerControllerCommands(ctx: PluginContext): void {
         const rawToken = client instanceof CloudBeesClientImpl ? client.token : "";
         const caps = await getControllerCapabilities(client, name, rawToken);
 
+        const info = {
+          name: caps.name,
+          url: caps.url,
+          typeLabel: caps.typeLabel,
+          online: caps.online,
+          canCreateJob: caps.canCreateJob,
+          canCreateNode: caps.canCreateNode,
+          canCreateCred: caps.canCreateCred,
+          description: caps.description,
+        };
+        if (isJsonOutput()) {
+          printJson(info);
+          return;
+        }
         const formatter = ctx.getFormatter("table") ?? tableFormatter;
-        printMessage(
-          formatter.kv({
-            name: caps.name,
-            url: caps.url,
-            typeLabel: caps.typeLabel,
-            online: caps.online,
-            canCreateJob: caps.canCreateJob,
-            canCreateNode: caps.canCreateNode,
-            canCreateCred: caps.canCreateCred,
-            description: caps.description,
-          }),
-        );
+        printMessage(formatter.kv(info));
       } catch (err) {
         printError("Failed to get controller info", err);
         process.exit(1);
@@ -109,6 +124,10 @@ export function registerControllerCommands(ctx: PluginContext): void {
     .description("Show which controller is currently active (selected instance / master)")
     .action(() => {
       const active = getActiveController(dbPath);
+      if (isJsonOutput()) {
+        printJson(active ? { name: active[0], url: active[1] } : null);
+        return;
+      }
       if (active) {
         printMessage(`Active controller: ${active[0]}`);
         printMessage(`URL              : ${active[1]}`);

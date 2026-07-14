@@ -4,7 +4,7 @@
  */
 
 import type { PluginContext } from "../../registry/types";
-import { printSuccess, printError, printInfo, printMessage, tableFormatter, readHidden } from "../../core/cli/output";
+import { printSuccess, printError, printInfo, printMessage, tableFormatter, readHidden, isJsonOutput, printJson } from "../../core/cli/output";
 import { login, logout, deleteProfile, listProfiles } from "./service";
 import { switchProfile, getActiveProfileName, clearSession, loadSessionFor } from "../../core/session/index";
 
@@ -115,11 +115,23 @@ export function registerAuthCommands(ctx: PluginContext): void {
     .description("List all saved profiles (accounts) and show which one is currently active (whoami / logged in)")
     .action(() => {
       const profiles = listProfiles(dbPath);
+      const activeName = getActiveProfileName(dbPath);
+      if (isJsonOutput()) {
+        printJson(
+          profiles.map((p) => ({
+            name: p.name,
+            server: p.serverUrl,
+            username: p.username,
+            active: p.name === activeName,
+            default: p.isDefault,
+          })),
+        );
+        return;
+      }
       if (profiles.length === 0) {
         printInfo("INFO No profiles found. Run: bee auth login");
         return;
       }
-      const activeName = getActiveProfileName(dbPath);
       const rows = profiles.map((p) => [
         p.name === activeName ? "*" : "",
         p.name,

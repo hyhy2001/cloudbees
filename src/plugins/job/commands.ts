@@ -4,7 +4,7 @@
  */
 
 import type { PluginContext } from "../../registry/types";
-import { printSuccess, printError, printInfo, printWarning, printMessage, tableFormatter } from "../../core/cli/output";
+import { printSuccess, printError, printInfo, printWarning, printMessage, tableFormatter, isJsonOutput, printJson } from "../../core/cli/output";
 import { confirm } from "../../core/cli/utils";
 import { NotFoundError } from "../../core/api/errors";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
@@ -136,6 +136,23 @@ export function registerJobCommands(ctx: PluginContext): void {
           jobs = displayJobs;
         }
 
+        if (isJsonOutput()) {
+          printJson(
+            jobs.map((j) => ({
+              name: j.name,
+              type: j.jobType || "",
+              status: mapColor(j.color),
+              color: j.color,
+              buildable: j.buildable,
+              lastBuildNumber: j.lastBuildNumber,
+              lastBuildUrl: j.lastBuildUrl,
+              url: j.url,
+              description: j.description ?? "",
+            })),
+          );
+          return;
+        }
+
         const headers = ["Name", "Type", "Status", "Build#", "Description"];
         const rows = jobs.map((j) => [
           j.name.slice(0, 30),
@@ -165,7 +182,7 @@ export function registerJobCommands(ctx: PluginContext): void {
         const job = await getJob(client, name);
 
         if (!job) {
-          console.error(`ERROR Job '${name}' not found.`);
+          printError(`Job '${name}' not found.`);
           process.exit(1);
         }
 
@@ -188,6 +205,10 @@ export function registerJobCommands(ctx: PluginContext): void {
           email_regex: summary.email_regex,
         };
 
+        if (isJsonOutput()) {
+          printJson(data);
+          return;
+        }
         const formatter = ctx.getFormatter("table") ?? tableFormatter;
         printMessage(formatter.kv(data));
       } catch (err) {
@@ -965,6 +986,10 @@ export function registerJobCommands(ctx: PluginContext): void {
       try {
         const client = await ctx.getClient({ useController: true });
         const grants = await listControlledAgents(client, folder);
+        if (isJsonOutput()) {
+          printJson(grants.map((g) => ({ agent: g.agentName ?? "", grantId: g.grantId })));
+          return;
+        }
         if (grants.length === 0) {
           printInfo("INFO No controlled-agent grants found (or Folders Plus not installed).");
           return;
