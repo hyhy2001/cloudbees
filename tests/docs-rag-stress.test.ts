@@ -282,7 +282,10 @@ describe("RAG: buildMatchExpr robustness", () => {
       if (expr !== "") {
         const parts = expr.split(" OR ");
         for (const p of parts) {
-          expect(p).toMatch(/^"[a-z0-9]+"\*$/);
+          // Every term is a quoted prefix term. Hyphens are allowed *inside* the
+          // quotes — synonyms can map to hyphenated command actions like
+          // "list-agents"; the quoting keeps them safe FTS5 strings, not operators.
+          expect(p).toMatch(/^"[a-z0-9-]+"\*$/);
         }
       }
     }
