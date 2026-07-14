@@ -35,7 +35,7 @@ interface LmConfig {
   embeddingUrl?: string;
   embeddingPath?: string;
   // Legacy keys from bee.lm.json (env-var-named)
-  CB_DATABRICK_URL?: string;
+  CB_LM_URL?: string;
   CB_API_KEY?: string;
   CB_LM_MODEL?: string;
   CB_CLIENT_ID?: string;
@@ -51,7 +51,7 @@ const lmFile = (await Bun.file("bee.lm.json")
   .json()
   .catch(() => ({}))) as LmConfig;
 
-const LM_URL = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRICK_URL ?? "";
+const LM_URL = lmFile.url ?? lmFile.CB_LM_URL ?? process.env.CB_LM_URL ?? "";
 const LM_API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
 const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env.CB_LM_MODEL ?? "";
 const LM_CLIENT_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";

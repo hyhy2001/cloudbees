@@ -84,7 +84,7 @@ async function runProvider(method: "generate" | "stream"): Promise<{ out: string
     env: {
       ...process.env,
       HOST: mockUrl,
-      CB_DATABRICK_URL: mockUrl,
+      CB_LM_URL: mockUrl,
       CB_CHAT_PATH: "/ai-gateway/mlflow/v1/chat/completions",
       CB_CLIENT_ID: "id",
       CB_CLIENT_SECRET: "secret",
@@ -141,7 +141,7 @@ describe("embedding OAuth reuses the robust Databricks token exchange", () => {
       stderr: "pipe",
       env: {
         ...process.env,
-        CB_DATABRICK_URL: mockUrl,
+        CB_LM_URL: mockUrl,
         CB_EMBEDDING_PATH: "/ai-gateway/mlflow/v1/embeddings",
         CB_CLIENT_ID: "id",
         CB_CLIENT_SECRET: "secret",

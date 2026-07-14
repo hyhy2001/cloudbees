@@ -2,7 +2,7 @@
  * LM endpoint configuration for `bee ask`.
  *
  * Priority order (highest wins):
- *   1. Runtime env  — CB_DATABRICK_URL / CB_API_KEY / CB_LM_MODEL / ...
+ *   1. Runtime env  — CB_LM_URL / CB_API_KEY / CB_LM_MODEL / ...
  *   2. Runtime file — ~/.config/bee/lm.json  or  ./bee.lm.json  (read at startup)
  *   3. Build-time   — baked at compile time via bee.lm.json (team internal builds only)
  *
@@ -31,7 +31,7 @@ interface LmFileConfig {
   clientId?: string; clientSecret?: string; chatPath?: string;
   embeddingModel?: string; embeddingUrl?: string; embeddingPath?: string;
   // legacy keys
-  CB_DATABRICK_URL?: string; CB_API_KEY?: string; CB_LM_MODEL?: string;
+  CB_LM_URL?: string; CB_API_KEY?: string; CB_LM_MODEL?: string;
   CB_CLIENT_ID?: string; CB_CLIENT_SECRET?: string; CB_REWRITE_MODEL?: string;
   CB_EMBEDDING_MODEL?: string; CB_EMBEDDING_URL?: string; CB_EMBEDDING_PATH?: string;
   CB_CHAT_PATH?: string;
@@ -72,7 +72,7 @@ function ensureProtocol(url: string): string {
 
 /**
  * Join a base URL and a path, collapsing a duplicated leading segment.
- * Users often set CB_DATABRICK_URL to ".../v1" while the default chat/embedding
+ * Users often set CB_LM_URL to ".../v1" while the default chat/embedding
  * paths also start with "/v1", which would yield ".../v1/v1/chat/completions".
  */
 export function joinUrl(base: string, path: string): string {
@@ -119,8 +119,8 @@ export { EMBEDDING_PATH };
 const BASE_URL = ensureProtocol(
   pick(
     typeof BEE_LM_URL !== "undefined" ? BEE_LM_URL : undefined,
-    _rc.url ?? _rc.CB_DATABRICK_URL,
-    "CB_DATABRICK_URL",
+    _rc.url ?? _rc.CB_LM_URL,
+    "CB_LM_URL",
   ),
 );
 export const LM_URL = BASE_URL;

@@ -20,7 +20,7 @@ describe("LM config — pick logic (env resolution)", () => {
   const saved: Record<string, string | undefined> = {};
 
   beforeAll(() => {
-    for (const key of ["CB_DATABRICK_URL", "CB_API_KEY", "CB_LM_MODEL", "CB_CLIENT_ID", "CB_CLIENT_SECRET"]) {
+    for (const key of ["CB_LM_URL", "CB_API_KEY", "CB_LM_MODEL", "CB_CLIENT_ID", "CB_CLIENT_SECRET"]) {
       saved[key] = process.env[key];
       delete process.env[key];
     }
@@ -34,22 +34,22 @@ describe("LM config — pick logic (env resolution)", () => {
   });
 
   test("no baked value, no env var → empty string", () => {
-    expect(pick(undefined, "CB_DATABRICK_URL")).toBe("");
+    expect(pick(undefined, "CB_LM_URL")).toBe("");
   });
 
   test("baked value takes priority over env var", () => {
-    process.env["CB_DATABRICK_URL"] = "http://env-host";
-    expect(pick("http://baked-host", "CB_DATABRICK_URL")).toBe("http://baked-host");
+    process.env["CB_LM_URL"] = "http://env-host";
+    expect(pick("http://baked-host", "CB_LM_URL")).toBe("http://baked-host");
   });
 
   test("fallback to env var when baked is undefined", () => {
-    process.env["CB_DATABRICK_URL"] = "http://env-host";
-    expect(pick(undefined, "CB_DATABRICK_URL")).toBe("http://env-host");
+    process.env["CB_LM_URL"] = "http://env-host";
+    expect(pick(undefined, "CB_LM_URL")).toBe("http://env-host");
   });
 
   test("fallback to env var when baked is empty string", () => {
-    process.env["CB_DATABRICK_URL"] = "http://env-host";
-    expect(pick("", "CB_DATABRICK_URL")).toBe("http://env-host");
+    process.env["CB_LM_URL"] = "http://env-host";
+    expect(pick("", "CB_LM_URL")).toBe("http://env-host");
   });
 
   test("no baked value, no env var → env fallback returns ''", () => {

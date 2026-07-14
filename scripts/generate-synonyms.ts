@@ -52,7 +52,7 @@ interface LmConfig {
   embeddingPath?: string;
   clientId?: string;
   clientSecret?: string;
-  CB_DATABRICK_URL?: string;
+  CB_LM_URL?: string;
   CB_API_KEY?: string;
   CB_LM_MODEL?: string;
   CB_CHAT_PATH?: string;
@@ -69,7 +69,7 @@ function ensureProtocol(url: string): string {
 const lmFile = (await Bun.file("bee.lm.json").json().catch(() => ({}))) as LmConfig;
 
 const BASE_URL = ensureProtocol(
-  lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env["CB_DATABRICK_URL"] ?? process.env["CB_LM_URL"] ?? "",
+  lmFile.url ?? lmFile.CB_LM_URL ?? process.env["CB_LM_URL"] ?? "",
 );
 const CHAT_PATH = lmFile.chatPath ?? lmFile.CB_CHAT_PATH ?? process.env["CB_CHAT_PATH"] ?? "/v1/chat/completions";
 const LM_API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env["CB_API_KEY"] ?? "";
@@ -79,7 +79,7 @@ const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env["CB_LM_MODEL"
 const CHAT_ENDPOINT = BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}${CHAT_PATH}` : "";
 
 if (!CHAT_ENDPOINT) {
-  console.error("Set CB_DATABRICK_URL or create bee.lm.json to use this script.");
+  console.error("Set CB_LM_URL or create bee.lm.json to use this script.");
   process.exit(1);
 }
 

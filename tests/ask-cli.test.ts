@@ -59,14 +59,13 @@ afterAll(() => {
 });
 
 async function runCli(args: string[], extraEnv: Record<string, string> = {}): Promise<{ code: number; out: string; err: string }> {
-  const lmUrl = extraEnv.CB_DATABRICK_URL ?? mockUrl;
+  const lmUrl = extraEnv.CB_LM_URL ?? mockUrl;
   // Ensure no OAuth credentials leak from parent env into subprocess.
   const env = {
     ...process.env,
     ...extraEnv,
     CB_DB_PATH: TEST_DB,
-    CB_DATABRICK_URL: lmUrl,
-    CB_LM_URL: "",
+    CB_LM_URL: lmUrl,
     CB_CLIENT_ID: "",
     CB_CLIENT_SECRET: "",
   };
@@ -109,7 +108,7 @@ describe("bee ask CLI", () => {
   });
 
   test("errors when no LM provider is configured", async () => {
-    const { code, err } = await runCli(["ask", "list", "jobs"], { CB_DATABRICK_URL: "", CB_SKIP_LM_FILE: "1" });
+    const { code, err } = await runCli(["ask", "list", "jobs"], { CB_LM_URL: "", CB_SKIP_LM_FILE: "1" });
     expect(code).toBe(1);
     expect(err.toLowerCase()).toContain("lm provider");
   });

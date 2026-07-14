@@ -14,7 +14,7 @@ export const docsPlugin: Plugin = {
   },
   async register(ctx: PluginContext): Promise<void> {
     // Wire the LM provider only when an endpoint is configured (baked at build
-    // time or supplied via CB_DATABRICK_URL at runtime). No URL → no provider →
+    // time or supplied via CB_LM_URL at runtime). No URL → no provider →
     // `bee ask` stays fully offline.
     //
     // Auth strategy:
