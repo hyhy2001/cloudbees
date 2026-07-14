@@ -40,6 +40,7 @@ import {
   triggerJob,
   triggerJobWithParams,
   stopBuild,
+  cancelQueueItem,
   deleteJob,
   createFreestyleJob,
   createFolder,
@@ -859,6 +860,62 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
     [ctx, refetch],
   );
 
+  // Queue items belonging to a job, joined on task URL (names collide across
+  // folders, so URL is the reliable key — same join as reasonByUrl).
+  const queuedItemsForJob = useCallback(
+    (job: JobDTO): QueueItemDTO[] => {
+      if (!job.url) return [];
+      const jobUrl = job.url.replace(/\/+$/, "");
+      return (queue ?? []).filter((it) => it.taskUrl.replace(/\/+$/, "") === jobUrl);
+    },
+    [queue],
+  );
+
+  const cancelQueuedJob = useCallback(
+    async (job: JobDTO): Promise<false | void> => {
+      // Parity with the CLI: only cancel queued builds of jobs you track, so you
+      // can't cancel another user's queued work on the shared controller.
+      if (!trackedNames.has(job.name)) {
+        ctx.notify(`Track '${job.name}' first to cancel its queued builds.`, "warning");
+        return false;
+      }
+      const items = queuedItemsForJob(job);
+      if (items.length === 0) {
+        ctx.notify("No queued builds for this job.", "warning");
+        return false;
+      }
+      const ok = await ctx.openModal<boolean>({
+        id: "confirm-cancel-queue",
+        render: (resolve) => (
+          <ConfirmModal
+            message={`Cancel ${items.length} queued build(s) of '${job.name}'?`}
+            onResult={resolve}
+          />
+        ),
+      });
+      if (!ok) return false;
+      try {
+        const client = await ctx.getClient({ useController: true });
+        let cancelled = 0;
+        for (const it of items) {
+          try {
+            await cancelQueueItem(client, it.id);
+            cancelled++;
+          } catch {
+            // Item may have already left the queue; keep going.
+          }
+        }
+        ctx.notify(`${SYM.ok} Cancelled ${cancelled} queued build(s) of ${job.name}`, "success");
+        ctx.logCommand(`bee job queue cancel ${job.name}`);
+        void refetchQueue();
+        void refetch();
+      } catch (err) {
+        ctx.notify(err instanceof Error ? err.message : String(err), "error");
+      }
+    },
+    [ctx, queuedItemsForJob, trackedNames, refetch, refetchQueue],
+  );
+
   const removeJob = useCallback(
     async (name: string): Promise<false | void> => {
       const ok = await ctx.openModal<boolean>({
@@ -1296,6 +1353,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { label: "View Script", icon: SYM.iconEdit,    when: () => current?.jobType === "PL", run: () => { if (current) setScriptJob(current.name); return false as const; } },
       { label: "Run",        icon: SYM.iconPlay,      run: async () => { if (!current) return false as const; return await runJob(current.name); } },
       { label: "Stop",       icon: SYM.iconStop,      run: async () => { if (!current) return false as const; return await stopJob(current); } },
+      { label: "Cancel Queued", icon: SYM.iconStop,   when: () => current !== undefined && trackedNames.has(current.name) && queuedItemsForJob(current).length > 0, run: async () => { if (!current) return false as const; return await cancelQueuedJob(current); } },
       { label: "Edit",       icon: SYM.iconEdit,      run: async () => { if (!current) return false as const; return await editJob(current); } },
       // Params/Schedule/Email use updateJobFreestyle internally — only show for FS.
       { label: "Params",     icon: SYM.iconParams,    when: () => current?.jobType === "FS", run: () => { if (current) setParamJob(current.name); return false as const; } },
@@ -1325,7 +1383,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
         return false;
       } },
     ],
-    [current, summary, canCreate, isPipeline, runJob, stopJob, editJob, removeJob, moveJobCb, cloneJob],
+    [current, summary, canCreate, isPipeline, runJob, stopJob, cancelQueuedJob, queuedItemsForJob, trackedNames, editJob, removeJob, moveJobCb, cloneJob],
   );
 
   // Multi-select mode: when rows are checked via Space, the footer collapses to
