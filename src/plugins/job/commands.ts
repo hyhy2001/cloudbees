@@ -937,7 +937,8 @@ export function registerJobCommands(ctx: PluginContext): void {
             try {
               buildNumber = await getLastBuildNumber(client, name);
               if (buildNumber == null) {
-                printInfo("INFO No builds found.");
+                if (isJsonOutput()) printJson({ name, buildNumber: null, log: null, status: "no_builds" });
+                else printInfo("INFO No builds found.");
                 return;
               }
             } catch (e) {
@@ -947,6 +948,14 @@ export function registerJobCommands(ctx: PluginContext): void {
           }
 
           try {
+            // JSON mode returns the full log as a single object; --follow streaming
+            // would break the single-object contract, so it's ignored here.
+            if (isJsonOutput()) {
+              const log = await getBuildLog(client, name, buildNumber);
+              printJson({ name, buildNumber, log });
+              return;
+            }
+
             if (!opts.follow) {
               const log = await getBuildLog(client, name, buildNumber);
               printMessage(colorizeLog(log));
@@ -997,6 +1006,11 @@ export function registerJobCommands(ctx: PluginContext): void {
         const count = Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 10;
         const client = await ctx.getClient({ useController: true });
         const builds = await getBuildHistory(client, name, count);
+
+        if (isJsonOutput()) {
+          printJson({ name, count: builds.length, builds });
+          return;
+        }
 
         if (builds.length === 0) {
           printInfo("INFO No builds found.");
