@@ -67,6 +67,14 @@ describe("global --json flag", () => {
     const parsed = JSON.parse(out.trim());
     expect(parsed).toHaveProperty("error");
   });
+
+  test("--json destructive command without --yes errors and exits non-zero", async () => {
+    // confirmAction refuses to prompt in JSON mode — --yes is mandatory.
+    const { code, out } = await runCli(["--json", "cred", "delete", "some-id"]);
+    expect(code).not.toBe(0);
+    const parsed = JSON.parse(out.trim());
+    expect(parsed.error).toContain("--yes");
+  });
 });
 
 describe("job update help surface", () => {
