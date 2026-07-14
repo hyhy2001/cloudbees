@@ -81,12 +81,15 @@ Global options:
 
 ```bash
 bee --version        # print version (also -V)
+bee --json           # machine-readable JSON output (any command, any position)
 bee --debug          # enable debug logging and full stack traces
 bee --ui             # launch the interactive TUI
 bee --install        # self-install: create bee.csh wrapper + symlink ~/.local/bin/bee
 ```
 
 Running `bee` with no subcommand prints help.
+
+`--json` switches every command to machine-readable output for scripting (errors go to stderr as `{"error":…}` with a non-zero exit). In JSON mode `bee` never prompts, so destructive commands require `--yes` and commands that would prompt for input require the values as flags. See [docs/concepts/json-output.md](docs/concepts/json-output.md).
 
 ### Help (`bee ask`)
 

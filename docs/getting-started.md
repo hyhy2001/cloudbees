@@ -97,5 +97,6 @@ bee ask "switch profile" --json
 
 - [Profiles](concepts/profiles.md) — managing multiple logins
 - [Mine vs All](concepts/mine-vs-all.md) — tracked resources
+- [JSON output](concepts/json-output.md) — `--json` for scripting and automation
 - [CLI Reference](index.md) — every command group in detail
 - [Troubleshooting](troubleshooting/auth.md) — when something doesn't work

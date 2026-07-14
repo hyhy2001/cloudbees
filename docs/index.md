@@ -12,6 +12,7 @@
 | [Controllers](concepts/controllers.md) | Selecting the active Jenkins master |
 | [Mine vs All](concepts/mine-vs-all.md) | Tracked resources |
 | [Cache](concepts/cache.md) | Response caching and TTLs |
+| [JSON output](concepts/json-output.md) | Machine-readable output with `--json` |
 | [Where data lives](concepts/data-location.md) | Database location and security |
 | **CLI Reference** | |
 | [auth](cli/auth.md) | Login, profiles, logout |
