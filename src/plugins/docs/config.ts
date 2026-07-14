@@ -1,6 +1,11 @@
 /**
  * LM endpoint configuration for `bee ask`.
  *
+ * The backend speaks the OpenAI API shape, so the chat/embedding paths are
+ * fixed at `/v1/chat/completions` and `/v1/embeddings` — CB_LM_URL is the base
+ * (host, or host + a prefix like `/v1`) and the paths are appended. Auth is a
+ * single static key sent as both `Authorization: Bearer` and `X-Api-Key`.
+ *
  * Priority order (highest wins):
  *   1. Runtime env  — CB_LM_URL / CB_API_KEY / CB_LM_MODEL / ...
  *   2. Runtime file — ~/.config/bee/lm.json  or  ./bee.lm.json  (read at startup)
@@ -18,23 +23,21 @@ import { homedir } from "node:os";
 declare const BEE_LM_URL: string | undefined;
 declare const BEE_LM_API_KEY: string | undefined;
 declare const BEE_LM_MODEL: string | undefined;
-declare const BEE_LM_CLIENT_ID: string | undefined;
-declare const BEE_LM_CLIENT_SECRET: string | undefined;
 declare const BEE_EMBEDDING_MODEL: string | undefined;
 declare const BEE_EMBEDDING_URL: string | undefined;
-declare const BEE_CHAT_PATH: string | undefined;
-declare const BEE_EMBEDDING_PATH: string | undefined;
 declare const BEE_REWRITE_MODEL: string | undefined;
+
+/** OpenAI-standard endpoint paths — fixed, not configurable. */
+export const CHAT_PATH = "/v1/chat/completions";
+export const EMBEDDING_PATH = "/v1/embeddings";
 
 interface LmFileConfig {
   url?: string; apiKey?: string; model?: string; rewriteModel?: string;
-  clientId?: string; clientSecret?: string; chatPath?: string;
-  embeddingModel?: string; embeddingUrl?: string; embeddingPath?: string;
+  embeddingModel?: string; embeddingUrl?: string;
   // legacy keys
   CB_LM_URL?: string; CB_API_KEY?: string; CB_LM_MODEL?: string;
-  CB_CLIENT_ID?: string; CB_CLIENT_SECRET?: string; CB_REWRITE_MODEL?: string;
-  CB_EMBEDDING_MODEL?: string; CB_EMBEDDING_URL?: string; CB_EMBEDDING_PATH?: string;
-  CB_CHAT_PATH?: string;
+  CB_REWRITE_MODEL?: string;
+  CB_EMBEDDING_MODEL?: string; CB_EMBEDDING_URL?: string;
 }
 
 /** Read lm.json from ~/.config/bee/lm.json or ./bee.lm.json at runtime. */
@@ -95,27 +98,6 @@ export const LM_MODEL =
 export const REWRITE_MODEL =
   pick(typeof BEE_REWRITE_MODEL !== "undefined" ? BEE_REWRITE_MODEL : undefined, _rc.rewriteModel ?? _rc.CB_REWRITE_MODEL, "CB_REWRITE_MODEL") ||
   LM_MODEL;
-export const LM_CLIENT_ID = pick(
-  typeof BEE_LM_CLIENT_ID !== "undefined" ? BEE_LM_CLIENT_ID : undefined,
-  _rc.clientId ?? _rc.CB_CLIENT_ID,
-  "CB_CLIENT_ID",
-);
-export const LM_CLIENT_SECRET = pick(
-  typeof BEE_LM_CLIENT_SECRET !== "undefined" ? BEE_LM_CLIENT_SECRET : undefined,
-  _rc.clientSecret ?? _rc.CB_CLIENT_SECRET,
-  "CB_CLIENT_SECRET",
-);
-const CHAT_PATH = pick(
-  typeof BEE_CHAT_PATH !== "undefined" ? BEE_CHAT_PATH : undefined,
-  _rc.chatPath ?? _rc.CB_CHAT_PATH,
-  "CB_CHAT_PATH",
-) || "/v1/chat/completions";
-const EMBEDDING_PATH = pick(
-  typeof BEE_EMBEDDING_PATH !== "undefined" ? BEE_EMBEDDING_PATH : undefined,
-  _rc.embeddingPath ?? _rc.CB_EMBEDDING_PATH,
-  "CB_EMBEDDING_PATH",
-) || "/v1/embeddings";
-export { EMBEDDING_PATH };
 const BASE_URL = ensureProtocol(
   pick(
     typeof BEE_LM_URL !== "undefined" ? BEE_LM_URL : undefined,

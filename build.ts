@@ -28,22 +28,14 @@ interface LmConfig {
   url?: string;
   apiKey?: string;
   model?: string;
-  clientId?: string;
-  clientSecret?: string;
-  chatPath?: string;
   embeddingModel?: string;
   embeddingUrl?: string;
-  embeddingPath?: string;
   // Legacy keys from bee.lm.json (env-var-named)
   CB_LM_URL?: string;
   CB_API_KEY?: string;
   CB_LM_MODEL?: string;
-  CB_CLIENT_ID?: string;
-  CB_CLIENT_SECRET?: string;
   CB_EMBEDDING_MODEL?: string;
   CB_EMBEDDING_URL?: string;
-  CB_EMBEDDING_PATH?: string;
-  CB_CHAT_PATH?: string;
   CB_REWRITE_MODEL?: string;
   rewriteModel?: string;
 }
@@ -54,12 +46,9 @@ const lmFile = (await Bun.file("bee.lm.json")
 const LM_URL = lmFile.url ?? lmFile.CB_LM_URL ?? process.env.CB_LM_URL ?? "";
 const LM_API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
 const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env.CB_LM_MODEL ?? "";
-const LM_CLIENT_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
-const LM_CLIENT_SECRET = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";
 const EMBEDDING_MODEL = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "default";
-const EMBEDDING_PATH = lmFile.embeddingPath ?? lmFile.CB_EMBEDDING_PATH ?? process.env.CB_EMBEDDING_PATH ?? "/v1/embeddings";
 const EMBEDDING_URL = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ??
-  (LM_URL ? `${LM_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}` : "");
+  (LM_URL ? `${LM_URL.replace(/\/+$/, "")}/v1/embeddings` : "");
 const REWRITE_MODEL = lmFile.rewriteModel ?? lmFile.CB_REWRITE_MODEL ?? process.env.CB_REWRITE_MODEL ?? LM_MODEL;
 if (EMBEDDING_URL) process.stderr.write(`  Embedding: ${EMBEDDING_MODEL} @ ${EMBEDDING_URL}\n`);
 if (REWRITE_MODEL && REWRITE_MODEL !== LM_MODEL) process.stderr.write(`  Rewrite model: ${REWRITE_MODEL}\n`);
@@ -102,7 +91,7 @@ if (!SKIP_CODEGEN) {
 // Never log the key — only whether the LM is wired and to which endpoint.
 console.log(
   LM_URL
-    ? `  LM provider: ENABLED → ${LM_URL}${LM_CLIENT_ID ? " (OAuth client credentials)" : LM_API_KEY ? " (authenticated)" : " (no key)"}`
+    ? `  LM provider: ENABLED → ${LM_URL}${LM_API_KEY ? " (authenticated)" : " (no key)"}`
     : "  LM provider: disabled (offline-only binary)",
 );
 
@@ -124,13 +113,9 @@ const result = await Bun.build({
     BEE_LM_URL: JSON.stringify(obf(LM_URL)),
     BEE_LM_API_KEY: JSON.stringify(obf(LM_API_KEY)),
     BEE_LM_MODEL: JSON.stringify(obf(LM_MODEL)),
-    BEE_LM_CLIENT_ID: JSON.stringify(obf(LM_CLIENT_ID)),
-    BEE_LM_CLIENT_SECRET: JSON.stringify(obf(LM_CLIENT_SECRET)),
     BEE_EMBEDDING_MODEL: JSON.stringify(obf(EMBEDDING_MODEL)),
     BEE_EMBEDDING_URL: JSON.stringify(obf(EMBEDDING_URL)),
-    BEE_EMBEDDING_PATH: JSON.stringify(obf(EMBEDDING_PATH)),
     BEE_REWRITE_MODEL: JSON.stringify(obf(REWRITE_MODEL)),
-    BEE_CHAT_PATH: JSON.stringify(obf(lmFile.chatPath ?? lmFile.CB_CHAT_PATH ?? process.env.CB_CHAT_PATH ?? "/v1/chat/completions")),
   },
   jsx: {
     runtime: "automatic",
