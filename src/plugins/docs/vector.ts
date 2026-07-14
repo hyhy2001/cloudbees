@@ -92,6 +92,7 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[] | null>
               headers: { "content-type": "application/x-www-form-urlencoded" },
               body: `grant_type=client_credentials&scope=all-apis&client_id=${LM_CLIENT_ID}&client_secret=${LM_CLIENT_SECRET}`,
               signal: AbortSignal.timeout(10000),
+              tls: { rejectUnauthorized: false },
             });
             if (r.ok) bearer = ((await r.json()) as { access_token: string }).access_token;
           }
@@ -111,6 +112,7 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[] | null>
             headers,
             body: JSON.stringify({ input: t.slice(0, 2048), model: EMBEDDING_MODEL }),
             signal: AbortSignal.timeout(30000),
+            tls: { rejectUnauthorized: false },
           });
           if (r.ok) {
             const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };

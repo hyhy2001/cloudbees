@@ -42,6 +42,7 @@ async function chatCall(model: string, token: string, prompt: string, maxTokens 
       temperature: 0,
     }),
     signal: AbortSignal.timeout(60000),
+    tls: { rejectUnauthorized: false },
   });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
@@ -152,6 +153,7 @@ export class DatabricksOAuthProvider {
         stream: true,
       }),
       signal: AbortSignal.timeout(60000),
+      tls: { rejectUnauthorized: false },
     });
     if (!response.ok) {
       throw new Error(`Databricks LM error (HTTP ${response.status})`);
@@ -222,6 +224,7 @@ export class DatabricksOAuthProvider {
         stream: true,
       }),
       signal: AbortSignal.timeout(60000),
+      tls: { rejectUnauthorized: false },
     });
     if (!response.ok) {
       throw new Error(`Databricks LM error (HTTP ${response.status})`);
@@ -334,12 +337,12 @@ export class DatabricksOAuthProvider {
   private async discoverTokenEndpoint(): Promise<void> {
     for (const path of ["/.well-known/databricks-config", "/oidc/.well-known/oauth-authorization-server"]) {
       try {
-        const r = await fetch(`${this.host}${path}`, { signal: AbortSignal.timeout(5000) });
+        const r = await fetch(`${this.host}${path}`, { signal: AbortSignal.timeout(5000), tls: { rejectUnauthorized: false } });
         if (!r.ok) continue;
         if (path.includes("databricks-config")) {
           const meta = (await r.json()) as { oidc_endpoint?: string };
           if (!meta.oidc_endpoint) continue;
-          const ep = await fetch(meta.oidc_endpoint, { signal: AbortSignal.timeout(5000) });
+          const ep = await fetch(meta.oidc_endpoint, { signal: AbortSignal.timeout(5000), tls: { rejectUnauthorized: false } });
           if (!ep.ok) continue;
           const oidc = (await ep.json()) as { token_endpoint?: string };
           if (oidc.token_endpoint) { this.tokenEndpoint = oidc.token_endpoint; return; }
@@ -359,7 +362,7 @@ export class DatabricksOAuthProvider {
     for (const path of ["/aad/auth", "/oidc/v1/authorize"]) {
       try {
         const r = await fetch(`${this.host}${path}`, {
-          method: "GET", redirect: "manual", signal: AbortSignal.timeout(10000),
+          method: "GET", redirect: "manual", signal: AbortSignal.timeout(10000), tls: { rejectUnauthorized: false },
         });
         const location = r.headers.get("location") ?? r.headers.get("Location") ?? "";
         const m = location.match(/login\.microsoftonline\.com\/([^/?]+)/);
@@ -377,6 +380,7 @@ export class DatabricksOAuthProvider {
       headers: { "content-type": "application/x-www-form-urlencoded", authorization: `Basic ${basic}` },
       body: new URLSearchParams({ grant_type: "client_credentials", scope: "all-apis" }).toString(),
       signal: AbortSignal.timeout(10000),
+      tls: { rejectUnauthorized: false },
     });
     return this.parseTokenResponse(r, "basic");
   }
