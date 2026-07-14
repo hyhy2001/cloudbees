@@ -7,7 +7,7 @@
 import { Command } from "commander";
 import { initDb } from "./core/db/connection";
 import { initPlugins } from "./registry";
-import { printError } from "./core/cli/output";
+import { printError, setJsonOutput } from "./core/cli/output";
 import { existsSync, chmodSync, mkdirSync, writeFileSync } from "fs";
 import { symlinkSync, unlinkSync } from "fs";
 import { dirname, join } from "path";
@@ -51,6 +51,16 @@ async function main(): Promise<void> {
     return;
   }
 
+  // 0. Global --json: machine-readable output for any command. Detected in argv
+  //    (so it works in any position, e.g. `bee --json node list` or
+  //    `bee node list --json`) and stripped before dispatch so subcommands that
+  //    don't declare it won't reject it. Registered as a root option below only
+  //    for --help visibility.
+  if (argv.includes("--json")) {
+    setJsonOutput(true);
+    process.argv = process.argv.filter((a) => a !== "--json");
+  }
+
   // 1. Ensure the local SQLite DB + schema exist.
   initDb();
 
@@ -59,6 +69,7 @@ async function main(): Promise<void> {
     .name("bee")
     .description("bee — CloudBees command-line tool")
     .version(VERSION, "-V, --version", "output the version number")
+    .option("--json", "output machine-readable JSON instead of formatted text")
     .option("--debug", "enable debug logging and full stack traces")
     .option("--ui", "launch the interactive TUI")
     .option("--install", "install bee: create wrapper + symlink to ~/.local/bin/bee");

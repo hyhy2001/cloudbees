@@ -4,7 +4,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { PluginContext } from "../../registry/types";
-import { printError, printSuccess, printInfo, printWarning, printMessage, readHidden, tableFormatter } from "../../core/cli/output";
+import { printError, printSuccess, printInfo, printWarning, printMessage, readHidden, tableFormatter, isJsonOutput, printJson } from "../../core/cli/output";
 import { confirm } from "../../core/cli/utils";
 import { NotFoundError, ValidationError } from "../../core/api/errors";
 import { loadSession, getActiveProfileName } from "../../core/session/index";
@@ -98,8 +98,8 @@ export function registerCredentialCommands(ctx: PluginContext): void {
           }
         }
 
-        if (opts.output === "json") {
-          printMessage(JSON.stringify(creds, null, 2));
+        if (opts.output === "json" || isJsonOutput()) {
+          printJson(creds);
         } else {
           const headers = ["ID", "Type", "Description", "Scope"];
           const rows = creds.map((c) => [
@@ -133,6 +133,10 @@ export function registerCredentialCommands(ctx: PluginContext): void {
         const data: Record<string, unknown> = { ...cred };
         for (const k of Object.keys(data)) {
           if (/(password|secret|key|token)/i.test(k)) data[k] = "[HIDDEN]";
+        }
+        if (isJsonOutput()) {
+          printJson(data);
+          return;
         }
         const fmt = ctx.getFormatter("table") ?? tableFormatter;
         printMessage(fmt.kv(data));

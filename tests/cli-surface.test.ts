@@ -42,6 +42,33 @@ describe("job create help surface", () => {
   });
 });
 
+describe("global --json flag", () => {
+  test("root --help documents --json", async () => {
+    const { code, out } = await runCli(["--help"]);
+    expect(code).toBe(0);
+    expect(out).toContain("--json");
+  });
+
+  test("--json emits parseable JSON (flag before subcommand)", async () => {
+    const { out } = await runCli(["--json", "controller", "current"]);
+    // No controller selected in the throwaway DB → null, but still valid JSON.
+    expect(() => JSON.parse(out.trim())).not.toThrow();
+  });
+
+  test("--json emits parseable JSON (flag after subcommand)", async () => {
+    const { out } = await runCli(["auth", "profiles", "--json"]);
+    const parsed = JSON.parse(out.trim());
+    expect(Array.isArray(parsed)).toBe(true);
+  });
+
+  test("--json error path emits { error } and exits non-zero", async () => {
+    const { code, out } = await runCli(["--json", "node", "get", "nope"]);
+    expect(code).not.toBe(0);
+    const parsed = JSON.parse(out.trim());
+    expect(parsed).toHaveProperty("error");
+  });
+});
+
 describe("job update help surface", () => {
   test("update group has 'pipeline' subcommand", async () => {
     const { code, out } = await runCli(["job", "update", "--help"]);

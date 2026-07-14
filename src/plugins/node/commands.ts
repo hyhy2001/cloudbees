@@ -3,7 +3,7 @@
  * Ports legacy/cb/cli/commands/nodes.py with 1:1 behavior and strings.
  */
 import type { PluginContext } from "../../registry/types";
-import { printError, printInfo, printSuccess, printWarning, printMessage, tableFormatter } from "../../core/cli/output";import { confirm } from "../../core/cli/utils";
+import { printError, printInfo, printSuccess, printWarning, printMessage, tableFormatter, isJsonOutput, printJson } from "../../core/cli/output";import { confirm } from "../../core/cli/utils";
 import { NotFoundError } from "../../core/api/errors";
 import { getActiveProfileName } from "../../core/session/index";
 import {
@@ -58,6 +58,19 @@ export function registerNodeCommands(ctx: PluginContext): void {
               });
             }
           }
+        }
+
+        if (isJsonOutput()) {
+          printJson(
+            nodes.map((n) => ({
+              name: n.name,
+              offline: n.offline,
+              executors: n.numExecutors,
+              labels: n.labels || "",
+              description: n.description || "",
+            })),
+          );
+          return;
         }
 
         const headers = ["Name", "Status", "Executors", "Labels", "Description"];
@@ -118,6 +131,10 @@ export function registerNodeCommands(ctx: PluginContext): void {
           fields["controlled_agent"] = cfg.controlledAgent;
         }
 
+        if (isJsonOutput()) {
+          printJson(fields);
+          return;
+        }
         printMessage(tableFormatter.kv(fields));
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);

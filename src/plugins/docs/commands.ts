@@ -8,7 +8,7 @@
  */
 
 import type { PluginContext } from "../../registry/types";
-import { printMessage, printError } from "../../core/cli/output";
+import { printMessage, printError, isJsonOutput } from "../../core/cli/output";
 import { buildCorpus } from "./corpus";
 import { answer, getProvider, stripThinkBlock } from "./answer";
 import { presentAnswer } from "./presenter";
@@ -46,7 +46,7 @@ export function registerDocsCommands(ctx: PluginContext): void {
     .action(async (queryParts: string[], opts: { limit: string; json: boolean; stream: boolean; debug: boolean }) => {
       try {
         const cleanParts: string[] = [];
-        let jsonFlag = opts.json;
+        let jsonFlag = opts.json || isJsonOutput();
         let limitFlag = opts.limit;
         let streamFlag = opts.stream;
         let debugFlag = opts.debug;

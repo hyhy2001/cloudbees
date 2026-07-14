@@ -3,7 +3,7 @@
  * Tests table, kv, and message formatters for both table and JSON output modes.
  */
 import { describe, test, expect } from "bun:test";
-import { tableFormatter, jsonFormatter, theme, printError } from "../src/core/cli/output";
+import { tableFormatter, jsonFormatter, theme, printError, setJsonOutput, isJsonOutput, printJson } from "../src/core/cli/output";
 import { AuthError } from "../src/core/api/errors";
 
 describe("tableFormatter", () => {
@@ -65,6 +65,42 @@ describe("jsonFormatter", () => {
   test("message renders as JSON with message key", () => {
     const out = jsonFormatter.message("done", "info" as const);
     expect(JSON.parse(out)).toEqual({ message: "done" });
+  });
+});
+
+describe("global JSON output mode", () => {
+  test("setJsonOutput toggles isJsonOutput", () => {
+    setJsonOutput(true);
+    expect(isJsonOutput()).toBe(true);
+    setJsonOutput(false);
+    expect(isJsonOutput()).toBe(false);
+  });
+
+  test("printJson writes pretty JSON to stdout", () => {
+    const orig = console.log;
+    let captured = "";
+    console.log = (s?: unknown) => { captured = String(s); };
+    try {
+      printJson({ name: "job-A", count: 2 });
+    } finally {
+      console.log = orig;
+    }
+    expect(JSON.parse(captured)).toEqual({ name: "job-A", count: 2 });
+    expect(captured).toContain("\n"); // pretty-printed
+  });
+
+  test("printError emits { error } JSON in JSON mode", () => {
+    const orig = console.error;
+    let captured = "";
+    console.error = (s?: unknown) => { captured = String(s); };
+    setJsonOutput(true);
+    try {
+      printError("boom", new Error("boom"));
+    } finally {
+      console.error = orig;
+      setJsonOutput(false);
+    }
+    expect(JSON.parse(captured)).toEqual({ error: "boom" });
   });
 });
 

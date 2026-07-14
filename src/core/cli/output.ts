@@ -21,10 +21,41 @@ function debugTracebackEnabled(): boolean {
   return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
+// --- Global JSON output mode ---
+// Set once at startup from the global --json flag (see src/main.ts). Read by
+// commands to switch to structured output, and by printError so failures stay
+// machine-parseable.
+let jsonOutput = false;
+
+/** Enable/disable global JSON output mode. */
+export function setJsonOutput(on: boolean): void {
+  jsonOutput = on;
+}
+
+/** True when the global --json flag was passed. */
+export function isJsonOutput(): boolean {
+  return jsonOutput;
+}
+
+/** Print a JSON payload to stdout (pretty-printed, 2-space indent). */
+export function printJson(payload: unknown): void {
+  console.log(JSON.stringify(payload, null, 2));
+}
+
 /** Print a styled error. Full stack only in debug mode. Auth errors get a friendly line. */
 export function printError(msg: string, err?: unknown): void {
+  const errText =
+    err !== undefined && err !== null
+      ? (err instanceof Error ? err.message : String(err)) || msg
+      : msg;
+
+  // In JSON mode, emit a parseable error object to stderr instead of styled text.
+  if (jsonOutput) {
+    console.error(JSON.stringify({ error: errText }));
+    return;
+  }
+
   if (err !== undefined && err !== null) {
-    const errText = (err instanceof Error ? err.message : String(err)) || msg;
     if (err instanceof AuthError || errText.includes("Not logged in")) {
       console.error(theme.error("AUTH ERROR:") + " " + errText);
       return;
