@@ -5,7 +5,7 @@
 
 import type { PluginContext } from "../../registry/types";
 import { printSuccess, printError, printInfo, printWarning, printMessage, tableFormatter, isJsonOutput, printJson } from "../../core/cli/output";
-import { confirm } from "../../core/cli/utils";
+import { confirmAction } from "../../core/cli/utils";
 import { NotFoundError } from "../../core/api/errors";
 import { getTrackedResources, trackResource, untrackResource } from "../../core/db/repositories/resource-repo";
 import { colorForLine } from "../../core/tui/data/log-buffer";
@@ -288,12 +288,16 @@ export function registerJobCommands(ctx: PluginContext): void {
 
           const qualified = folder ? `${folder}/${name}` : name;
           trackResource("job", qualified, profile, client.baseUrl, dbPath);
+          const url = `${client.baseUrl.replace(/\/$/, "")}/job/${qualified.split("/").join("/job/")}/`;
+          if (isJsonOutput()) {
+            printJson({ ok: true, name: qualified, type: "freestyle", node: opts.node ?? null, url });
+            return;
+          }
           const nodeMsg = opts.node ? ` on node '${opts.node}'` : "";
           printSuccess(`OK Freestyle job '${qualified}' created.${nodeMsg}`);
           if (!opts.node) {
             printWarning(`WARN No node assigned — job will run on any available agent.`);
           }
-          const url = `${client.baseUrl.replace(/\/$/, "")}/job/${qualified.split("/").join("/job/")}/`;
           printMessage(`  Link: ${url}`);
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
@@ -315,8 +319,12 @@ export function registerJobCommands(ctx: PluginContext): void {
         await createFolder(client, name, opts.description, folder);
         const qualified = folder ? `${folder}/${name}` : name;
         trackResource("job", qualified, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Folder '${qualified}' created.`);
         const url = `${client.baseUrl.replace(/\/$/, "")}/job/${qualified.split("/").join("/job/")}/`;
+        if (isJsonOutput()) {
+          printJson({ ok: true, name: qualified, type: "folder", url });
+          return;
+        }
+        printSuccess(`OK Folder '${qualified}' created.`);
         printMessage(`  Link: ${url}`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
@@ -396,9 +404,13 @@ export function registerJobCommands(ctx: PluginContext): void {
 
           const qualified = folder ? `${folder}/${name}` : name;
           trackResource("job", qualified, profile, client.baseUrl, dbPath);
+          const url = `${client.baseUrl.replace(/\/$/, "")}/job/${qualified.split("/").join("/job/")}/`;
+          if (isJsonOutput()) {
+            printJson({ ok: true, name: qualified, type: "pipeline", node: opts.node ?? null, url });
+            return;
+          }
           const nodeMsg = opts.node ? ` on node '${opts.node}'` : "";
           printSuccess(`OK Pipeline job '${qualified}' created.${nodeMsg}`);
-          const url = `${client.baseUrl.replace(/\/$/, "")}/job/${qualified.split("/").join("/job/")}/`;
           printMessage(`  Link: ${url}`);
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
@@ -415,33 +427,41 @@ export function registerJobCommands(ctx: PluginContext): void {
     .option("--yes", "Skip confirmation", false)
     .action(async (names: string[], opts: { yes: boolean }) => {
       try {
-        if (!opts.yes) {
-          const label = names.length === 1 ? `job '${names[0]}'` : `${names.length} jobs`;
-          const ok = await confirm(`Delete ${label}? [y/N] `);
-          if (!ok) {
-            printInfo("INFO Cancelled.");
-            return;
-          }
+        const label = names.length === 1 ? `job '${names[0]}'` : `${names.length} jobs`;
+        if (!(await confirmAction(`Delete ${label}? [y/N] `, opts.yes))) {
+          printInfo("INFO Cancelled.");
+          return;
         }
 
         const client = await ctx.getClient({ useController: true });
+        const json = isJsonOutput();
+        const results: { name: string; serverDeleted: boolean; localRemoved: boolean; note?: string }[] = [];
 
         for (const name of names) {
+          let serverDeleted = false;
+          let note: string | undefined;
           try {
             await deleteJob(client, name);
-            printSuccess(`OK Job '${name}' deleted from server.`);
+            serverDeleted = true;
+            if (!json) printSuccess(`OK Job '${name}' deleted from server.`);
           } catch (e) {
             if (e instanceof NotFoundError) {
-              printInfo(`INFO Job '${name}' not found on server, removing from local tracking only.`);
+              note = "not_found_on_server";
+              if (!json) printInfo(`INFO Job '${name}' not found on server, removing from local tracking only.`);
             } else {
               const msg = e instanceof Error ? e.message : String(e);
-              printWarning(`WARN Could not delete job '${name}' on server: ${msg}`);
-              printInfo("INFO Proceeding with local removal anyway.");
+              note = `server_error: ${msg}`;
+              if (!json) {
+                printWarning(`WARN Could not delete job '${name}' on server: ${msg}`);
+                printInfo("INFO Proceeding with local removal anyway.");
+              }
             }
           }
           untrackResource("job", name, profile, client.baseUrl, dbPath);
-          printSuccess(`OK Job '${name}' removed from local database.`);
+          if (json) results.push({ name, serverDeleted, localRemoved: true, ...(note ? { note } : {}) });
+          else printSuccess(`OK Job '${name}' removed from local database.`);
         }
+        if (json) printJson({ results });
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -459,8 +479,12 @@ export function registerJobCommands(ctx: PluginContext): void {
         const client = await ctx.getClient({ useController: true });
         await copyJob(client, source, destination);
         trackResource("job", destination, profile, client.baseUrl, dbPath);
-        printSuccess(`OK Job '${source}' cloned to '${destination}'.`);
         const url = `${client.baseUrl.replace(/\/$/, "")}/job/${destination}/`;
+        if (isJsonOutput()) {
+          printJson({ ok: true, name: destination, copiedFrom: source, url });
+          return;
+        }
+        printSuccess(`OK Job '${source}' cloned to '${destination}'.`);
         printMessage(`  Link: ${url}`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
@@ -482,6 +506,10 @@ export function registerJobCommands(ctx: PluginContext): void {
         untrackResource("job", source, profile, client.baseUrl, dbPath);
         trackResource("job", qualified, profile, client.baseUrl, dbPath);
         const destLabel = destFolder ?? "/";
+        if (isJsonOutput()) {
+          printJson({ ok: true, source, name: qualified, folder: destFolder });
+          return;
+        }
         printSuccess(`OK Job '${source}' moved to '${destLabel}' as '${qualified}'.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
@@ -499,20 +527,26 @@ export function registerJobCommands(ctx: PluginContext): void {
         const client = await ctx.getClient({ useController: true });
         const tracked = getTrackedResources("job", profile, client.baseUrl, dbPath);
         const trackedSet = new Set(tracked);
+        const json = isJsonOutput();
+        const results: { name: string; tracked: boolean; status: string }[] = [];
         for (const name of names) {
           const job = await getJob(client, name);
           if (!job) {
-            printError(`Job '${name}' not found on server. Skipping.`);
+            if (json) results.push({ name, tracked: false, status: "not_found" });
+            else printError(`Job '${name}' not found on server. Skipping.`);
             continue;
           }
           if (trackedSet.has(name)) {
-            printInfo(`INFO Job '${name}' is already tracked.`);
+            if (json) results.push({ name, tracked: true, status: "already_tracked" });
+            else printInfo(`INFO Job '${name}' is already tracked.`);
             continue;
           }
           trackResource("job", name, profile, client.baseUrl, dbPath);
           trackedSet.add(name);
-          printSuccess(`OK Tracked job '${name}'.`);
+          if (json) results.push({ name, tracked: true, status: "tracked" });
+          else printSuccess(`OK Tracked job '${name}'.`);
         }
+        if (json) printJson({ results });
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -529,15 +563,20 @@ export function registerJobCommands(ctx: PluginContext): void {
         const client = await ctx.getClient({ useController: true });
         const tracked = getTrackedResources("job", profile, client.baseUrl, dbPath);
         const trackedSet = new Set(tracked);
+        const json = isJsonOutput();
+        const results: { name: string; untracked: boolean; status: string }[] = [];
         for (const name of names) {
           if (!trackedSet.has(name)) {
-            printInfo(`INFO Job '${name}' is not in Mine.`);
+            if (json) results.push({ name, untracked: false, status: "not_in_mine" });
+            else printInfo(`INFO Job '${name}' is not in Mine.`);
             continue;
           }
           untrackResource("job", name, profile, client.baseUrl, dbPath);
           trackedSet.delete(name);
-          printSuccess(`OK Removed job '${name}' from Mine.`);
+          if (json) results.push({ name, untracked: true, status: "untracked" });
+          else printSuccess(`OK Removed job '${name}' from Mine.`);
         }
+        if (json) printJson({ results });
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -596,20 +635,23 @@ export function registerJobCommands(ctx: PluginContext): void {
             } else {
               await triggerJob(client, name);
             }
-            printSuccess(`OK Triggered: ${name}`);
+            if (!isJsonOutput()) printSuccess(`OK Triggered: ${name}`);
           } catch (e) {
             printError(`Could not trigger job: ${e instanceof Error ? e.message : e}`);
             process.exit(1);
           }
 
-          if (!opts.wait) return;
+          if (!opts.wait) {
+            if (isJsonOutput()) printJson({ ok: true, name, triggered: true, waited: false });
+            return;
+          }
 
           // Wait for a new build to appear. A queued build (e.g. LSF/bs submit, or
           // an agent that has to come online) can take well over 15s to leave the
           // queue and get a number, so give the start-wait the full --timeout budget
           // instead of a hardcoded 15s — otherwise --wait aborts on slow-starting jobs.
           let newBuildNum: number | null = null;
-          process.stdout.write(`Waiting for build to start (up to ${timeout}s)...\n`);
+          if (!isJsonOutput()) process.stdout.write(`Waiting for build to start (up to ${timeout}s)...\n`);
           const deadline = Date.now() + timeout * 1000;
           while (Date.now() < deadline) {
             try {
@@ -625,18 +667,28 @@ export function registerJobCommands(ctx: PluginContext): void {
           }
 
           if (newBuildNum == null) {
-            printWarning(
-              `WARN Build did not start within ${timeout}s (still queued?). Check Jenkins manually; raise --timeout if the queue is slow.`,
-            );
+            if (isJsonOutput()) {
+              printJson({ ok: false, name, triggered: true, waited: true, status: "not_started", timeout });
+            } else {
+              printWarning(
+                `WARN Build did not start within ${timeout}s (still queued?). Check Jenkins manually; raise --timeout if the queue is slow.`,
+              );
+            }
             process.exit(1);
           }
 
           try {
-            process.stdout.write(
-              `Build #${newBuildNum} -- waiting for completion (timeout=${timeout}s)...\n`,
-            );
+            if (!isJsonOutput()) {
+              process.stdout.write(
+                `Build #${newBuildNum} -- waiting for completion (timeout=${timeout}s)...\n`,
+              );
+            }
             const build = await waitForBuild(client, name, newBuildNum, timeout);
             const result = build.result || "IN_PROGRESS";
+            if (isJsonOutput()) {
+              printJson({ ok: true, name, triggered: true, waited: true, buildNumber: newBuildNum, result });
+              return;
+            }
             printMessage(`  Result: ${result}`);
           } catch (e) {
             printError(`Error while waiting for build: ${e instanceof Error ? e.message : e}`);
@@ -664,7 +716,8 @@ export function registerJobCommands(ctx: PluginContext): void {
         }
         const client = await ctx.getClient({ useController: true });
         await stopBuild(client, name, buildNumber);
-        printSuccess(`OK Stop requested: ${name} #${buildNumber}`);
+        if (isJsonOutput()) printJson({ ok: true, name, buildNumber, status: "stop_requested" });
+        else printSuccess(`OK Stop requested: ${name} #${buildNumber}`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -874,6 +927,10 @@ export function registerJobCommands(ctx: PluginContext): void {
             },
           );
 
+          if (isJsonOutput()) {
+            printJson({ ok: true, name, type: "freestyle" });
+            return;
+          }
           printSuccess(`OK Freestyle job '${name}' updated.`);
           if (opts.node === "") {
             printWarning(`WARN Node cleared — job will run on any available agent.`);
@@ -968,7 +1025,8 @@ export function registerJobCommands(ctx: PluginContext): void {
             clearParams: opts.clearParams,
           });
 
-          printSuccess(`OK Pipeline job '${name}' updated.`);
+          if (isJsonOutput()) printJson({ ok: true, name, type: "pipeline" });
+          else printSuccess(`OK Pipeline job '${name}' updated.`);
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
           process.exit(1);
@@ -1011,9 +1069,10 @@ export function registerJobCommands(ctx: PluginContext): void {
     .action(async (folder: string, agent: string) => {
       try {
         const client = await ctx.getClient({ useController: true });
-        printMessage(`  Running handshake: folder='${folder}' agent='${agent}'…`);
+        if (!isJsonOutput()) printMessage(`  Running handshake: folder='${folder}' agent='${agent}'…`);
         await approveAgentForFolder(client, folder, agent);
-        printSuccess(`OK Agent '${agent}' approved for folder '${folder}'.`);
+        if (isJsonOutput()) printJson({ ok: true, folder, agent, status: "approved" });
+        else printSuccess(`OK Agent '${agent}' approved for folder '${folder}'.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -1028,13 +1087,13 @@ export function registerJobCommands(ctx: PluginContext): void {
     .option("--yes", "Skip confirmation", false)
     .action(async (folder: string, agent: string, opts: { yes: boolean }) => {
       try {
-        if (!opts.yes) {
-          const ok = await confirm(`Remove agent '${agent}' from '${folder}'? [y/N] `);
-          if (!ok) { printInfo("INFO Cancelled."); return; }
+        if (!(await confirmAction(`Remove agent '${agent}' from '${folder}'? [y/N] `, opts.yes))) {
+          printInfo("INFO Cancelled."); return;
         }
         const client = await ctx.getClient({ useController: true });
         await removeAgentFromFolder(client, folder, agent);
-        printSuccess(`OK Agent '${agent}' removed from '${folder}'.`);
+        if (isJsonOutput()) printJson({ ok: true, folder, agent, status: "removed" });
+        else printSuccess(`OK Agent '${agent}' removed from '${folder}'.`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
