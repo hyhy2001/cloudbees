@@ -185,6 +185,66 @@ bee job run deploy -p ENV=prod -p VERSION=1.2.3
 bee job run build-api --wait --timeout 300       # wait up to 5 min, print result
 ```
 
+### Queued builds
+
+When the target node is at its executor limit (e.g. a 2-executor node already
+running 2 builds), Jenkins does **not** start the build immediately — it places
+it in the **build queue** until an executor frees up. `run` captures the queue
+item and reports it: `OK Triggered: build-api (queue #37)`.
+
+With `--wait`, `run` tracks the queue item and only starts timing the build once
+an executor picks it up. Exit codes distinguish the outcomes so scripts can react:
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Build finished (or triggered without `--wait`) |
+| `1` | Trigger failed, or the queued build was cancelled while waiting |
+| `2` | Build is still waiting in the queue after `--timeout` (not a failure — raise `--timeout` or free an executor) |
+
+Use `bee job queue list` to inspect pending items and `bee job queue cancel <id>`
+to remove one.
+
+---
+
+## queue
+
+Inspect and manage the build queue — the pending builds waiting for a free
+executor.
+
+```bash
+bee job queue list [name]          # show pending items; optionally filter to one job
+bee job queue cancel <id|name>     # cancel by queue id, or all queued items of a job
+```
+
+- `queue list` shows each waiting item's queue **ID** (used by `cancel` and
+  reported by `run`), the **Job** name, the **Reason** it's waiting (e.g.
+  "Waiting for next available executor"), and whether it is **Stuck**. Pass a
+  job name to filter to just that job's queued items.
+- `queue cancel` accepts either a numeric queue **id** (cancels that one item)
+  or a **job name** (cancels every queued item belonging to that job). Job-name
+  matching uses the item's task URL, not just its name, so a job in one folder
+  is never confused with a same-named job in another. Once a build has left the
+  queue to run, use `bee job stop <name> <build_number>` instead.
+- **Safety gate:** you can only cancel queued builds of jobs you **track**
+  (see `bee job track`). This holds for both forms — an id whose job isn't
+  tracked is refused, just like an untracked name. It stops you from cancelling
+  another user's queued work on the shared controller. Track the job first if
+  you really mean to cancel it.
+
+```bash
+bee job queue list                 # everything waiting
+bee job queue list build-api       # only build-api's queued items
+bee job queue list team/build-api  # folder-qualified name works too
+bee job queue cancel 37            # cancel queue item #37
+bee job queue cancel build-api     # cancel all of build-api's queued items
+```
+
+Both honor the global `--json` flag for scripting. A by-name cancel keeps going
+if one item can't be removed, so the JSON result carries both a `cancelled`
+array (queue ids removed) and a `failed` array (`{id, error}` for any that
+couldn't be). An item that already left the queue counts as cancelled, not
+failed. The command exits non-zero only when `failed` is non-empty.
+
 ---
 
 ## stop

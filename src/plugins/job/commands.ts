@@ -11,6 +11,57 @@ import { getTrackedResources, trackResource, untrackResource } from "../../core/
 import { colorForLine } from "../../core/tui/data/log-buffer";
 import chalk from "chalk";
 
+/**
+ * True if a queue item belongs to the named job. Matches on `taskUrl` rather
+ * than `taskName` — two jobs in different folders can share a name, but the URL
+ * path (`.../job/Folder/job/build_x/`) is unique. We compare the normalized
+ * `/job/<segments>/` suffix so a plain name and a full folder path both work.
+ */
+function queueItemMatchesJob(item: { taskName: string; taskUrl: string }, name: string): boolean {
+  const suffix = `/job/${jobPathSegments(name)}/`;
+  const url = item.taskUrl.endsWith("/") ? item.taskUrl : `${item.taskUrl}/`;
+  if (url.includes(suffix)) return true;
+  // Fallback for older/edge responses with no usable taskUrl: exact name match.
+  return item.taskUrl === "" && item.taskName === name;
+}
+
+/**
+ * Returns the tracked job name that a queue item belongs to, or null if the
+ * item's job is not in the caller's tracked set. Cancelling a queue item is
+ * gated on this: you may only cancel builds of jobs you track, so one user
+ * cannot cancel another user's queued work on the shared controller.
+ */
+function trackedJobForQueueItem(
+  item: { taskName: string; taskUrl: string },
+  tracked: string[],
+): string | null {
+  return tracked.find((name) => queueItemMatchesJob(item, name)) ?? null;
+}
+
+/**
+ * Fallback for when we can't track a queue item: poll `lastBuild` until a build
+ * number greater than `before` appears. Returns the new build number, or null if
+ * none started within `timeout` seconds.
+ */
+async function resolveStartedBuild(
+  client: CloudBeesClient,
+  name: string,
+  before: number,
+  timeout: number,
+): Promise<number | null> {
+  const deadline = Date.now() + timeout * 1000;
+  while (Date.now() < deadline) {
+    try {
+      const current = await getLastBuildNumber(client, name);
+      if (current != null && current > before) return current;
+    } catch {
+      // ignore transient errors while polling
+    }
+    await Bun.sleep(2000);
+  }
+  return null;
+}
+
 /** Apply color to each line of build log output. No-op when stdout is not a TTY (pipe/redirect). */
 function colorizeLog(text: string): string {
   if (!process.stdout.isTTY) return text;
@@ -20,6 +71,7 @@ function colorizeLog(text: string): string {
   }).join("\n");
 }
 import { getActiveProfileName } from "../../core/session/index";
+import type { CloudBeesClient } from "../../core/api/types";
 import {
   listJobs,
   listJobsRecursive,
@@ -33,6 +85,10 @@ import {
   streamBuildLog,
   getBuildHistory,
   waitForBuild,
+  listQueue,
+  cancelQueueItem,
+  waitForQueueStart,
+  jobPathSegments,
   createFreestyleJob,
   createFolder,
   createPipelineJob,
@@ -620,6 +676,7 @@ export function registerJobCommands(ctx: PluginContext): void {
             }
           }
 
+          let queueId: number | null = null;
           try {
             if (opts.param.length > 0) {
               const paramDict: Record<string, string> = {};
@@ -631,39 +688,58 @@ export function registerJobCommands(ctx: PluginContext): void {
                   paramDict[p] = "";
                 }
               }
-              await triggerJobWithParams(client, name, paramDict);
+              queueId = await triggerJobWithParams(client, name, paramDict);
             } else {
-              await triggerJob(client, name);
+              queueId = await triggerJob(client, name);
             }
-            if (!isJsonOutput()) printSuccess(`OK Triggered: ${name}`);
+            if (!isJsonOutput()) {
+              printSuccess(queueId != null ? `OK Triggered: ${name} (queue #${queueId})` : `OK Triggered: ${name}`);
+            }
           } catch (e) {
             printError(`Could not trigger job: ${e instanceof Error ? e.message : e}`);
             process.exit(1);
           }
 
           if (!opts.wait) {
-            if (isJsonOutput()) printJson({ ok: true, name, triggered: true, waited: false });
+            if (isJsonOutput()) printJson({ ok: true, name, triggered: true, waited: false, queueId });
             return;
           }
 
-          // Wait for a new build to appear. A queued build (e.g. LSF/bs submit, or
-          // an agent that has to come online) can take well over 15s to leave the
-          // queue and get a number, so give the start-wait the full --timeout budget
-          // instead of a hardcoded 15s — otherwise --wait aborts on slow-starting jobs.
+          // Track the queue item to know when an executor picks it up. When the
+          // node is at its executor limit, the build legitimately waits here —
+          // distinct from a failure. We only fall back to polling lastBuild if
+          // Jenkins didn't hand us a queue id (older versions / stripped header)
+          // or the item was already dropped from the queue.
           let newBuildNum: number | null = null;
           if (!isJsonOutput()) process.stdout.write(`Waiting for build to start (up to ${timeout}s)...\n`);
-          const deadline = Date.now() + timeout * 1000;
-          while (Date.now() < deadline) {
-            try {
-              const current = await getLastBuildNumber(client, name);
-              if (current != null && current > before) {
-                newBuildNum = current;
-                break;
+
+          if (queueId != null) {
+            const outcome = await waitForQueueStart(client, queueId, timeout);
+            if (outcome === "cancelled") {
+              if (isJsonOutput()) {
+                printJson({ ok: false, name, triggered: true, waited: true, status: "cancelled", queueId });
+              } else {
+                printWarning(`WARN Build (queue #${queueId}) was cancelled while waiting.`);
               }
-            } catch {
-              // ignore
+              process.exit(1);
+            } else if (outcome === "queued") {
+              if (isJsonOutput()) {
+                printJson({ ok: false, name, triggered: true, waited: true, status: "still_queued", queueId, timeout });
+              } else {
+                printWarning(
+                  `WARN Build still queued (waiting for an executor) after ${timeout}s — run 'bee job queue list' to inspect, or raise --timeout.`,
+                );
+              }
+              process.exit(2);
+            } else if (outcome === "gone") {
+              // Item already left the queue and was dropped; resolve via lastBuild.
+              newBuildNum = await resolveStartedBuild(client, name, before, timeout);
+            } else {
+              newBuildNum = outcome;
             }
-            await Bun.sleep(2000);
+          } else {
+            // No queue id — fall back to the original lastBuild polling.
+            newBuildNum = await resolveStartedBuild(client, name, before, timeout);
           }
 
           if (newBuildNum == null) {
@@ -674,7 +750,7 @@ export function registerJobCommands(ctx: PluginContext): void {
                 `WARN Build did not start within ${timeout}s (still queued?). Check Jenkins manually; raise --timeout if the queue is slow.`,
               );
             }
-            process.exit(1);
+            process.exit(2);
           }
 
           try {
@@ -718,6 +794,120 @@ export function registerJobCommands(ctx: PluginContext): void {
         await stopBuild(client, name, buildNumber);
         if (isJsonOutput()) printJson({ ok: true, name, buildNumber, status: "stop_requested" });
         else printSuccess(`OK Stop requested: ${name} #${buildNumber}`);
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
+  // ── queue ─────────────────────────────────────────────────────────────────
+  const queueGrp = grp
+    .command("queue")
+    .description("Inspect and manage the build queue (pending builds waiting for an executor)");
+
+  queueGrp
+    .command("list")
+    .description("List pending builds waiting in the queue (e.g. when all node executors are busy); pass a job name to filter to that job")
+    .argument("[name]", "Filter to queued items for this job only")
+    .action(async (name: string | undefined) => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        const all = await listQueue(client);
+        const items = name ? all.filter((it) => queueItemMatchesJob(it, name)) : all;
+        if (isJsonOutput()) {
+          printJson({ ok: true, count: items.length, items, ...(name ? { job: name } : {}) });
+          return;
+        }
+        if (items.length === 0) {
+          printInfo(name ? `INFO No queued builds for '${name}'.` : "INFO Queue is empty.");
+          return;
+        }
+        const rows = items.map((it) => [
+          String(it.id),
+          it.taskName,
+          it.why ?? "(starting)",
+          it.stuck ? "yes" : "no",
+        ]);
+        printMessage(tableFormatter.table(["ID", "Job", "Reason", "Stuck"], rows));
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
+  queueGrp
+    .command("cancel")
+    .description("Cancel pending build(s) in the queue — by queue id or by job name. Only jobs you track can be cancelled (see 'queue list', 'job track')")
+    .argument("<id_or_name>", "Queue item id, or a job name to cancel all its queued items")
+    .action(async (arg: string) => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        // Safety gate: you may only cancel queued builds of jobs you track, so
+        // one user can't cancel another user's work on the shared controller.
+        const tracked = getTrackedResources("job", profile, client.baseUrl, dbPath);
+        const queue = await listQueue(client);
+
+        // All-digits → treat as a queue id. The item must exist in the queue and
+        // belong to a tracked job before we cancel it.
+        if (/^\d+$/.test(arg.trim())) {
+          const id = parseInt(arg, 10);
+          const item = queue.find((it) => it.id === id);
+          if (!item) {
+            printError(`Queue item #${id} not found (already started or cancelled?). Run 'bee job queue list'.`);
+            process.exit(1);
+          }
+          const owningJob = trackedJobForQueueItem(item, tracked);
+          if (!owningJob) {
+            printError(`Refusing to cancel #${id}: job '${item.taskName}' is not tracked. Track it first with 'bee job track ${item.taskName}'.`);
+            process.exit(1);
+          }
+          await cancelQueueItem(client, id);
+          if (isJsonOutput()) printJson({ ok: true, job: owningJob, cancelled: [id] });
+          else printSuccess(`OK Cancelled queue item #${id} (${owningJob})`);
+          return;
+        }
+
+        // Job name: it must be tracked, then cancel every queued item of it.
+        if (!tracked.some((name) => name === arg)) {
+          printError(`Refusing to cancel: job '${arg}' is not tracked. Track it first with 'bee job track ${arg}'.`);
+          process.exit(1);
+        }
+
+        // Cancel every queued item belonging to it. Keep going on a per-item
+        // failure so one bad item doesn't strand the rest — a bulk cancel should
+        // cancel as much as it can and report what it couldn't.
+        const matches = queue.filter((it) => queueItemMatchesJob(it, arg));
+        if (matches.length === 0) {
+          if (isJsonOutput()) printJson({ ok: true, job: arg, cancelled: [], failed: [] });
+          else printInfo(`INFO No queued builds for '${arg}'.`);
+          return;
+        }
+        const cancelled: number[] = [];
+        const failed: { id: number; error: string }[] = [];
+        for (const it of matches) {
+          try {
+            await cancelQueueItem(client, it.id);
+            cancelled.push(it.id);
+          } catch (e) {
+            // An item that already left the queue (ran/dropped) is not a real
+            // failure — the goal state (not queued) is already met.
+            if (e instanceof NotFoundError) {
+              cancelled.push(it.id);
+            } else {
+              failed.push({ id: it.id, error: e instanceof Error ? e.message : String(e) });
+            }
+          }
+        }
+
+        if (isJsonOutput()) {
+          printJson({ ok: failed.length === 0, job: arg, cancelled, failed });
+        } else {
+          if (cancelled.length > 0) {
+            printSuccess(`OK Cancelled ${cancelled.length} queued item(s) for '${arg}': ${cancelled.map((n) => `#${n}`).join(", ")}`);
+          }
+          for (const f of failed) printError(`Could not cancel #${f.id}: ${f.error}`);
+        }
+        if (failed.length > 0) process.exit(1);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);

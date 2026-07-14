@@ -363,7 +363,10 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
     if (resp.status === 401 || resp.status === 403) {
       throw new AuthError(resp.status, "Access denied — check permissions or CSRF crumb.");
     }
-    if (![301, 302, 303, 307, 308].includes(resp.status)) {
+    // 201 Created is what Jenkins returns when a build trigger is queued (the
+    // `Location` header is the queue item URL); 30x are the redirect cases used
+    // by node creation. Both carry a `Location` we want to return.
+    if (![201, 301, 302, 303, 307, 308].includes(resp.status)) {
       const body = await resp.text();
       throw new APIError(resp.status, body.slice(0, 300));
     }

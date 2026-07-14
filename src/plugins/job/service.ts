@@ -5,8 +5,8 @@
 
 import type { CloudBeesClient } from "../../core/api/types";
 import { NotFoundError, APIError, ValidationError } from "../../core/api/errors";
-import { jobFromDict, buildFromDict, queueItemFromDict } from "../../core/dtos/index";
-import type { JobDTO, BuildDTO, QueueItemDTO } from "../../core/dtos/index";
+import { jobFromDict, buildFromDict, queueItemFromDict, queueItemStateFromDict } from "../../core/dtos/index";
+import type { JobDTO, BuildDTO, QueueItemDTO, QueueItemState } from "../../core/dtos/index";
 import {
   buildFreestyleXml,
   buildFolderXml,
@@ -208,29 +208,48 @@ export async function getJob(client: CloudBeesClient, name: string): Promise<Job
 // Trigger / Stop
 // ---------------------------------------------------------------------------
 
-export async function triggerJob(client: CloudBeesClient, name: string): Promise<void> {
-  await client.post(`/job/${jobSeg(name)}/build`, {
+/**
+ * Triggers a build via `/job/<name>/build`. Jenkins replies with a 201/302 whose
+ * `Location` header is the new queue item URL (`.../queue/item/<id>/`). Returns
+ * the parsed queue id, or `null` when the header is absent (older Jenkins builds
+ * or a proxy that strips it) — callers that only need "did it trigger" can ignore
+ * the return value.
+ */
+export async function triggerJob(client: CloudBeesClient, name: string): Promise<number | null> {
+  const location = await client.postRedirect(`/job/${jobSeg(name)}/build`, {
     body: "",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     invalidate: "jobs.",
   });
+  return parseQueueId(location);
 }
 
-/** Triggers a parameterised build via `/job/<name>/buildWithParameters` (form-encoded POST). */
+/**
+ * Triggers a parameterised build via `/job/<name>/buildWithParameters` (form-encoded POST).
+ * Returns the queue id parsed from the `Location` header, or `null` if absent.
+ */
 export async function triggerJobWithParams(
   client: CloudBeesClient,
   name: string,
   params: Record<string, string>,
-): Promise<void> {
+): Promise<number | null> {
   // Build form-encoded body
   const body = Object.entries(params)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join("&");
-  await client.post(`/job/${jobSeg(name)}/buildWithParameters`, {
+  const location = await client.postRedirect(`/job/${jobSeg(name)}/buildWithParameters`, {
     body,
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     invalidate: "jobs.",
   });
+  return parseQueueId(location);
+}
+
+/** Extracts the numeric queue id from a Jenkins `Location` header like `.../queue/item/42/`. */
+function parseQueueId(location: string | null): number | null {
+  if (!location) return null;
+  const m = location.match(/queue\/item\/(\d+)/);
+  return m ? Number(m[1]) : null;
 }
 
 /** Sends a stop request to `/job/<jobName>/<buildNumber>/stop`. Invalidates the `jobs.` cache. */
@@ -259,6 +278,59 @@ export async function listQueue(client: CloudBeesClient): Promise<QueueItemDTO[]
   } catch {
     return [];
   }
+}
+
+/**
+ * Fetches the state of a single queue item via `/queue/item/<id>/api/json`.
+ * Returns `null` on 404 — Jenkins drops items from the queue a few minutes after
+ * they run or get cancelled, so a missing item means "no longer waiting" rather
+ * than an error.
+ */
+export async function getQueueItem(
+  client: CloudBeesClient,
+  id: number,
+): Promise<QueueItemState | null> {
+  try {
+    const data = await client.get<Record<string, unknown>>(
+      `/queue/item/${id}/api/json?tree=id,why,stuck,cancelled,blocked,executable[number,url]`,
+    );
+    return queueItemStateFromDict((data as Record<string, unknown>) ?? {});
+  } catch (e) {
+    if (e instanceof NotFoundError) return null;
+    throw e;
+  }
+}
+
+/** Cancels a pending queue item via `/queue/cancelItem?id=<id>`. Invalidates the `jobs.` cache. */
+export async function cancelQueueItem(client: CloudBeesClient, id: number): Promise<void> {
+  await client.post(`/queue/cancelItem?id=${id}`, { invalidate: "jobs." });
+}
+
+/**
+ * Polls a queue item until an executor claims it (build starts), it is cancelled,
+ * or `timeout` seconds elapse. Returns:
+ *  - the build number once the item leaves the queue to run;
+ *  - `'cancelled'` if the item was cancelled while waiting;
+ *  - `'queued'` if it is still waiting after the timeout (a valid, non-error state
+ *    when all executors are busy);
+ *  - `'gone'` if the item vanished (404) — it already left the queue to run and
+ *    was dropped, so the caller should fall back to `getLastBuildNumber`.
+ */
+export async function waitForQueueStart(
+  client: CloudBeesClient,
+  queueId: number,
+  timeout = 120,
+  pollInterval = 2,
+): Promise<number | "queued" | "cancelled" | "gone"> {
+  const deadline = Date.now() + timeout * 1000;
+  while (Date.now() < deadline) {
+    const state = await getQueueItem(client, queueId);
+    if (state === null) return "gone"; // dropped — caller falls back to lastBuild
+    if (state.cancelled) return "cancelled";
+    if (state.executableNumber != null) return state.executableNumber;
+    await Bun.sleep(pollInterval * 1000);
+  }
+  return "queued";
 }
 
 // ---------------------------------------------------------------------------
