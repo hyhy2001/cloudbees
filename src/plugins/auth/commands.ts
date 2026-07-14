@@ -44,6 +44,13 @@ export function registerAuthCommands(ctx: PluginContext): void {
         let username = opts.username;
         let token = opts.token;
 
+        // In JSON mode we can't prompt (would corrupt stdout / hang a script):
+        // require url, username, and token to be passed as flags.
+        if (isJsonOutput() && (!url || !username || !token)) {
+          printError("--url, --username, and --token are all required in --json mode (cannot prompt).");
+          process.exit(1);
+        }
+
         if (!url) {
           url = await readVisible("Server URL: ");
         }
@@ -65,6 +72,10 @@ export function registerAuthCommands(ctx: PluginContext): void {
         const isDefault =
           existing.length === 0 || existing.some((p) => p.name === opts.profile && p.isDefault);
         const p = await login(url, username, token, opts.profile, isDefault, dbPath);
+        if (isJsonOutput()) {
+          printJson({ ok: true, profile: p.name, username: p.username, server: p.serverUrl });
+          return;
+        }
         printSuccess(`OK Logged in as '${p.username}' on ${p.serverUrl}`);
         console.log(`     Profile: ${p.name}`);
       } catch (err) {
@@ -84,6 +95,10 @@ export function registerAuthCommands(ctx: PluginContext): void {
       const target = opts.profile ?? getActiveProfileName(dbPath);
       const hadSession = loadSessionFor(target, dbPath) !== null;
       logout(opts.profile, dbPath);
+      if (isJsonOutput()) {
+        printJson({ ok: true, profile: target, hadSession });
+        return;
+      }
       if (hadSession) {
         printSuccess(`OK Logged out of '${target}'.`);
       } else {
@@ -102,7 +117,8 @@ export function registerAuthCommands(ctx: PluginContext): void {
         // the active pointer off it) so a "deleted" profile can't stay logged in.
         clearSession(opts.profile, dbPath);
         deleteProfile(opts.profile, dbPath);
-        printSuccess(`OK Profile '${opts.profile}' deleted.`);
+        if (isJsonOutput()) printJson({ ok: true, profile: opts.profile, deleted: true });
+        else printSuccess(`OK Profile '${opts.profile}' deleted.`);
       } catch (err) {
         printError(`Failed to delete profile`, err);
         process.exit(1);
@@ -150,7 +166,8 @@ export function registerAuthCommands(ctx: PluginContext): void {
     .description("Switch / change the active profile for subsequent commands — use a different login profile")
     .action((profileName: string) => {
       if (switchProfile(profileName, dbPath)) {
-        printSuccess(`OK Active profile: ${profileName}`);
+        if (isJsonOutput()) printJson({ ok: true, profile: profileName, active: true });
+        else printSuccess(`OK Active profile: ${profileName}`);
       } else {
         printError(`Profile '${profileName}' has no saved session. Run: bee auth login --profile ${profileName}`);
         process.exit(1);
