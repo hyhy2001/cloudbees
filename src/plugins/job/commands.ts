@@ -11,6 +11,30 @@ import { getTrackedResources, trackResource, untrackResource } from "../../core/
 import { colorForLine } from "../../core/tui/data/log-buffer";
 import chalk from "chalk";
 
+/**
+ * Fallback for when we can't track a queue item: poll `lastBuild` until a build
+ * number greater than `before` appears. Returns the new build number, or null if
+ * none started within `timeout` seconds.
+ */
+async function resolveStartedBuild(
+  client: CloudBeesClient,
+  name: string,
+  before: number,
+  timeout: number,
+): Promise<number | null> {
+  const deadline = Date.now() + timeout * 1000;
+  while (Date.now() < deadline) {
+    try {
+      const current = await getLastBuildNumber(client, name);
+      if (current != null && current > before) return current;
+    } catch {
+      // ignore transient errors while polling
+    }
+    await Bun.sleep(2000);
+  }
+  return null;
+}
+
 /** Apply color to each line of build log output. No-op when stdout is not a TTY (pipe/redirect). */
 function colorizeLog(text: string): string {
   if (!process.stdout.isTTY) return text;
@@ -20,6 +44,7 @@ function colorizeLog(text: string): string {
   }).join("\n");
 }
 import { getActiveProfileName } from "../../core/session/index";
+import type { CloudBeesClient } from "../../core/api/types";
 import {
   listJobs,
   listJobsRecursive,
@@ -33,6 +58,9 @@ import {
   streamBuildLog,
   getBuildHistory,
   waitForBuild,
+  listQueue,
+  cancelQueueItem,
+  waitForQueueStart,
   createFreestyleJob,
   createFolder,
   createPipelineJob,
@@ -620,6 +648,7 @@ export function registerJobCommands(ctx: PluginContext): void {
             }
           }
 
+          let queueId: number | null = null;
           try {
             if (opts.param.length > 0) {
               const paramDict: Record<string, string> = {};
@@ -631,39 +660,58 @@ export function registerJobCommands(ctx: PluginContext): void {
                   paramDict[p] = "";
                 }
               }
-              await triggerJobWithParams(client, name, paramDict);
+              queueId = await triggerJobWithParams(client, name, paramDict);
             } else {
-              await triggerJob(client, name);
+              queueId = await triggerJob(client, name);
             }
-            if (!isJsonOutput()) printSuccess(`OK Triggered: ${name}`);
+            if (!isJsonOutput()) {
+              printSuccess(queueId != null ? `OK Triggered: ${name} (queue #${queueId})` : `OK Triggered: ${name}`);
+            }
           } catch (e) {
             printError(`Could not trigger job: ${e instanceof Error ? e.message : e}`);
             process.exit(1);
           }
 
           if (!opts.wait) {
-            if (isJsonOutput()) printJson({ ok: true, name, triggered: true, waited: false });
+            if (isJsonOutput()) printJson({ ok: true, name, triggered: true, waited: false, queueId });
             return;
           }
 
-          // Wait for a new build to appear. A queued build (e.g. LSF/bs submit, or
-          // an agent that has to come online) can take well over 15s to leave the
-          // queue and get a number, so give the start-wait the full --timeout budget
-          // instead of a hardcoded 15s — otherwise --wait aborts on slow-starting jobs.
+          // Track the queue item to know when an executor picks it up. When the
+          // node is at its executor limit, the build legitimately waits here —
+          // distinct from a failure. We only fall back to polling lastBuild if
+          // Jenkins didn't hand us a queue id (older versions / stripped header)
+          // or the item was already dropped from the queue.
           let newBuildNum: number | null = null;
           if (!isJsonOutput()) process.stdout.write(`Waiting for build to start (up to ${timeout}s)...\n`);
-          const deadline = Date.now() + timeout * 1000;
-          while (Date.now() < deadline) {
-            try {
-              const current = await getLastBuildNumber(client, name);
-              if (current != null && current > before) {
-                newBuildNum = current;
-                break;
+
+          if (queueId != null) {
+            const outcome = await waitForQueueStart(client, queueId, timeout);
+            if (outcome === "cancelled") {
+              if (isJsonOutput()) {
+                printJson({ ok: false, name, triggered: true, waited: true, status: "cancelled", queueId });
+              } else {
+                printWarning(`WARN Build (queue #${queueId}) was cancelled while waiting.`);
               }
-            } catch {
-              // ignore
+              process.exit(1);
+            } else if (outcome === "queued") {
+              if (isJsonOutput()) {
+                printJson({ ok: false, name, triggered: true, waited: true, status: "still_queued", queueId, timeout });
+              } else {
+                printWarning(
+                  `WARN Build still queued (waiting for an executor) after ${timeout}s — run 'bee job queue list' to inspect, or raise --timeout.`,
+                );
+              }
+              process.exit(2);
+            } else if (outcome === "gone") {
+              // Item already left the queue and was dropped; resolve via lastBuild.
+              newBuildNum = await resolveStartedBuild(client, name, before, timeout);
+            } else {
+              newBuildNum = outcome;
             }
-            await Bun.sleep(2000);
+          } else {
+            // No queue id — fall back to the original lastBuild polling.
+            newBuildNum = await resolveStartedBuild(client, name, before, timeout);
           }
 
           if (newBuildNum == null) {
@@ -674,7 +722,7 @@ export function registerJobCommands(ctx: PluginContext): void {
                 `WARN Build did not start within ${timeout}s (still queued?). Check Jenkins manually; raise --timeout if the queue is slow.`,
               );
             }
-            process.exit(1);
+            process.exit(2);
           }
 
           try {
@@ -718,6 +766,60 @@ export function registerJobCommands(ctx: PluginContext): void {
         await stopBuild(client, name, buildNumber);
         if (isJsonOutput()) printJson({ ok: true, name, buildNumber, status: "stop_requested" });
         else printSuccess(`OK Stop requested: ${name} #${buildNumber}`);
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
+  // ── queue ─────────────────────────────────────────────────────────────────
+  const queueGrp = grp
+    .command("queue")
+    .description("Inspect and manage the build queue (pending builds waiting for an executor)");
+
+  queueGrp
+    .command("list")
+    .description("List pending builds waiting in the queue (e.g. when all node executors are busy)")
+    .action(async () => {
+      try {
+        const client = await ctx.getClient({ useController: true });
+        const items = await listQueue(client);
+        if (isJsonOutput()) {
+          printJson({ ok: true, count: items.length, items });
+          return;
+        }
+        if (items.length === 0) {
+          printInfo("INFO Queue is empty.");
+          return;
+        }
+        const rows = items.map((it) => [
+          String(it.id),
+          it.taskName,
+          it.why ?? "(starting)",
+          it.stuck ? "yes" : "no",
+        ]);
+        printMessage(tableFormatter.table(["ID", "Job", "Reason", "Stuck"], rows));
+      } catch (err) {
+        printError(String(err instanceof Error ? err.message : err), err);
+        process.exit(1);
+      }
+    });
+
+  queueGrp
+    .command("cancel")
+    .description("Cancel a pending build in the queue by its queue id (see 'queue list')")
+    .argument("<id>", "Queue item id")
+    .action(async (idStr: string) => {
+      try {
+        const id = parseInt(idStr, 10);
+        if (!Number.isInteger(id) || String(id) !== idStr.trim() || id < 0) {
+          printError(`Invalid queue id: '${idStr}' — must be a non-negative integer`);
+          process.exit(1);
+        }
+        const client = await ctx.getClient({ useController: true });
+        await cancelQueueItem(client, id);
+        if (isJsonOutput()) printJson({ ok: true, cancelled: id });
+        else printSuccess(`OK Cancelled queue item #${id}`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);

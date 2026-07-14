@@ -44,6 +44,22 @@ export interface QueueItemDTO {
   stuck: boolean;
 }
 
+/**
+ * Detailed state of a single queue item from `/queue/item/<id>/api/json`.
+ * Used to track a build waiting for an executor after `run` triggers it.
+ * `executableNumber` is null while the item is still waiting and becomes the
+ * build number once an executor picks it up (the item has left the queue).
+ * `cancelled` is true if the item was removed before running.
+ */
+export interface QueueItemState {
+  id: number;
+  why: string | null;
+  stuck: boolean;
+  cancelled: boolean;
+  blocked: boolean;
+  executableNumber: number | null;
+}
+
 /** Subset of job config fields returned by the job config API, used for update flows. */
 export interface JobConfigDTO {
   name: string;
@@ -138,6 +154,28 @@ export function queueItemFromDict(data: Record<string, unknown>): QueueItemDTO {
     taskUrl: str(nested(task, "url")),
     why: data["why"] != null ? str(data["why"]) : null,
     stuck: bool(data["stuck"], false),
+  };
+}
+
+/**
+ * Maps a single-item `/queue/item/<id>/api/json` response to QueueItemState.
+ * `executable` is present only once an executor claims the item; its `number`
+ * is the resulting build number. While waiting, `executable` is absent and
+ * `executableNumber` stays null.
+ */
+export function queueItemStateFromDict(data: Record<string, unknown>): QueueItemState {
+  const executable = data["executable"];
+  const executableNumber =
+    executable !== null && executable !== undefined && typeof executable === "object"
+      ? num(nested(executable as Record<string, unknown>, "number"), 0) || null
+      : null;
+  return {
+    id: num(data["id"], 0),
+    why: data["why"] != null ? str(data["why"]) : null,
+    stuck: bool(data["stuck"], false),
+    cancelled: bool(data["cancelled"], false),
+    blocked: bool(data["blocked"], false),
+    executableNumber,
   };
 }
 

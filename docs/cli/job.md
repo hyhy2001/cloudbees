@@ -185,6 +185,50 @@ bee job run deploy -p ENV=prod -p VERSION=1.2.3
 bee job run build-api --wait --timeout 300       # wait up to 5 min, print result
 ```
 
+### Queued builds
+
+When the target node is at its executor limit (e.g. a 2-executor node already
+running 2 builds), Jenkins does **not** start the build immediately — it places
+it in the **build queue** until an executor frees up. `run` captures the queue
+item and reports it: `OK Triggered: build-api (queue #37)`.
+
+With `--wait`, `run` tracks the queue item and only starts timing the build once
+an executor picks it up. Exit codes distinguish the outcomes so scripts can react:
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Build finished (or triggered without `--wait`) |
+| `1` | Trigger failed, or the queued build was cancelled while waiting |
+| `2` | Build is still waiting in the queue after `--timeout` (not a failure — raise `--timeout` or free an executor) |
+
+Use `bee job queue list` to inspect pending items and `bee job queue cancel <id>`
+to remove one.
+
+---
+
+## queue
+
+Inspect and manage the build queue — the pending builds waiting for a free
+executor.
+
+```bash
+bee job queue list                 # show pending items: ID, Job, Reason, Stuck
+bee job queue cancel <id>          # cancel a pending item by its queue id
+```
+
+- `queue list` shows each waiting item's queue **ID** (used by `cancel` and
+  reported by `run`), the **Job** name, the **Reason** it's waiting (e.g.
+  "Waiting for next available executor"), and whether it is **Stuck**.
+- `queue cancel <id>` removes an item that hasn't started yet. Once a build has
+  left the queue to run, use `bee job stop <name> <build_number>` instead.
+
+```bash
+bee job queue list
+bee job queue cancel 37
+```
+
+Both honor the global `--json` flag for scripting.
+
 ---
 
 ## stop
