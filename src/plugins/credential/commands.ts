@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import type { PluginContext } from "../../registry/types";
 import { printError, printSuccess, printInfo, printWarning, printMessage, readHidden, tableFormatter, isJsonOutput, printJson } from "../../core/cli/output";
-import { confirm } from "../../core/cli/utils";
+import { confirmAction } from "../../core/cli/utils";
 import { NotFoundError, ValidationError } from "../../core/api/errors";
 import { loadSession, getActiveProfileName } from "../../core/session/index";
 import {
@@ -194,6 +194,9 @@ export function registerCredentialCommands(ctx: PluginContext): void {
             if (!opts.username) {
               throw new ValidationError("--username is required for Username+Password credentials (or use --secret-text for SecretText).");
             }
+            if (opts.password === undefined && isJsonOutput()) {
+              throw new ValidationError("--password is required in --json mode (cannot prompt).");
+            }
             const password = opts.password ?? (await readHidden(`Password for '${opts.username}': `));
             await createUsernamePassword(
               client,
@@ -208,12 +211,16 @@ export function registerCredentialCommands(ctx: PluginContext): void {
           }
           trackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
 
-          printSuccess(`OK Credential '${credId}' created in ${opts.store} store.`);
           const base = client.baseUrl.replace(/\/+$/, "");
           const url =
             opts.store === "user"
               ? `${base}/user/${username}/credentials/store/user/domain/_/credential/${credId}/`
               : `${base}/credentials/store/system/domain/_/credential/${credId}/`;
+          if (isJsonOutput()) {
+            printJson({ ok: true, id: credId, store: opts.store, url });
+            return;
+          }
+          printSuccess(`OK Credential '${credId}' created in ${opts.store} store.`);
           printMessage(`  Link: ${url}`);
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
@@ -233,23 +240,26 @@ export function registerCredentialCommands(ctx: PluginContext): void {
       try {
         validateStore(opts.store);
         warnUserStoreFallback(opts.store, dbPath);
-        if (!opts.yes) {
-          const label = credIds.length === 1 ? `credential '${credIds[0]}'` : `${credIds.length} credentials`;
-          if (!(await confirm(`Delete ${label} from ${opts.store} store? [y/N] `))) {
-            printInfo("INFO Cancelled.");
-            return;
-          }
+        const label = credIds.length === 1 ? `credential '${credIds[0]}'` : `${credIds.length} credentials`;
+        if (!(await confirmAction(`Delete ${label} from ${opts.store} store? [y/N] `, opts.yes))) {
+          printInfo("INFO Cancelled.");
+          return;
         }
         const client = await ctx.getClient({ useController: true });
+        const results: { id: string; deleted: boolean; error?: string }[] = [];
         for (const credId of credIds) {
           try {
             await deleteCredential(client, credId, sessionUsername(dbPath), opts.store);
             untrackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
-            printSuccess(`OK Credential '${credId}' deleted from ${opts.store} store.`);
+            if (isJsonOutput()) results.push({ id: credId, deleted: true });
+            else printSuccess(`OK Credential '${credId}' deleted from ${opts.store} store.`);
           } catch (e) {
-            printError(`Failed to delete '${credId}': ${e instanceof Error ? e.message : String(e)}`, e);
+            const msg = e instanceof Error ? e.message : String(e);
+            if (isJsonOutput()) results.push({ id: credId, deleted: false, error: msg });
+            else printError(`Failed to delete '${credId}': ${msg}`, e);
           }
         }
+        if (isJsonOutput()) printJson({ store: opts.store, results });
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -269,27 +279,34 @@ export function registerCredentialCommands(ctx: PluginContext): void {
         const client = await ctx.getClient({ useController: true });
         const tracked = getTrackedResources("credential", profile, `${client.baseUrl}.${opts.store}`, dbPath);
         const trackedSet = new Set(tracked);
+        const json = isJsonOutput();
+        const results: { id: string; tracked: boolean; status: string; error?: string }[] = [];
         for (const credId of credIds) {
           // Verify the credential exists on the server before tracking it.
           try {
             await getCredential(client, credId, sessionUsername(dbPath), opts.store);
           } catch (e) {
-            if (e instanceof NotFoundError) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (json) {
+              results.push({ id: credId, tracked: false, status: e instanceof NotFoundError ? "not_found" : "error", error: msg });
+            } else if (e instanceof NotFoundError) {
               printError(`Credential '${credId}' not found in ${opts.store} store. Skipping.`, e);
             } else {
-              const msg = e instanceof Error ? e.message : String(e);
               printError(`Could not verify credential '${credId}': ${msg}`, e);
             }
             continue;
           }
           if (trackedSet.has(credId)) {
-            printInfo(`INFO Credential '${credId}' is already tracked.`);
+            if (json) results.push({ id: credId, tracked: true, status: "already_tracked" });
+            else printInfo(`INFO Credential '${credId}' is already tracked.`);
             continue;
           }
           trackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
           trackedSet.add(credId);
-          printSuccess(`OK Tracked '${credId}' into Mine.`);
+          if (json) results.push({ id: credId, tracked: true, status: "tracked" });
+          else printSuccess(`OK Tracked '${credId}' into Mine.`);
         }
+        if (json) printJson({ store: opts.store, results });
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
@@ -327,7 +344,8 @@ export function registerCredentialCommands(ctx: PluginContext): void {
             sessionUsername(dbPath),
             opts.store,
           );
-          printSuccess(`OK Credential '${credId}' updated.`);
+          if (isJsonOutput()) printJson({ ok: true, id: credId, store: opts.store });
+          else printSuccess(`OK Credential '${credId}' updated.`);
         } catch (err) {
           printError(String(err instanceof Error ? err.message : err), err);
           process.exit(1);
@@ -347,15 +365,20 @@ export function registerCredentialCommands(ctx: PluginContext): void {
         const client = await ctx.getClient({ useController: true });
         const tracked = getTrackedResources("credential", profile, `${client.baseUrl}.${opts.store}`, dbPath);
         const trackedSet = new Set(tracked);
+        const json = isJsonOutput();
+        const results: { id: string; untracked: boolean; status: string }[] = [];
         for (const credId of credIds) {
           if (!trackedSet.has(credId)) {
-            printInfo(`INFO Credential '${credId}' is not in Mine.`);
+            if (json) results.push({ id: credId, untracked: false, status: "not_in_mine" });
+            else printInfo(`INFO Credential '${credId}' is not in Mine.`);
             continue;
           }
           untrackResource("credential", credId, profile, `${client.baseUrl}.${opts.store}`, dbPath);
           trackedSet.delete(credId);
-          printSuccess(`OK Removed '${credId}' from Mine.`);
+          if (json) results.push({ id: credId, untracked: true, status: "untracked" });
+          else printSuccess(`OK Removed '${credId}' from Mine.`);
         }
+        if (json) printJson({ store: opts.store, results });
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);
