@@ -20,7 +20,7 @@ describe("LM config — pick logic (env resolution)", () => {
   const saved: Record<string, string | undefined> = {};
 
   beforeAll(() => {
-    for (const key of ["CB_LM_URL", "CB_API_KEY", "CB_LM_MODEL", "CB_CLIENT_ID", "CB_CLIENT_SECRET"]) {
+    for (const key of ["CB_LM_URL", "CB_API_KEY", "CB_LM_MODEL"]) {
       saved[key] = process.env[key];
       delete process.env[key];
     }

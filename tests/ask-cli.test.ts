@@ -60,14 +60,11 @@ afterAll(() => {
 
 async function runCli(args: string[], extraEnv: Record<string, string> = {}): Promise<{ code: number; out: string; err: string }> {
   const lmUrl = extraEnv.CB_LM_URL ?? mockUrl;
-  // Ensure no OAuth credentials leak from parent env into subprocess.
   const env = {
     ...process.env,
     ...extraEnv,
     CB_DB_PATH: TEST_DB,
     CB_LM_URL: lmUrl,
-    CB_CLIENT_ID: "",
-    CB_CLIENT_SECRET: "",
   };
   const proc = Bun.spawn(["bun", "run", MAIN, ...args], { stdout: "pipe", stderr: "pipe", env });
   const out = await new Response(proc.stdout).text();

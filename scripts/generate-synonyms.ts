@@ -18,8 +18,8 @@ import { Command } from "commander";
 const { initPlugins } = await import("../src/registry");
 const { buildCorpus } = await import("../src/plugins/docs/corpus");
 
-/** Extract text from Databricks chat completion content.
- * ref: https://learn.microsoft.com/en-us/azure/databricks/machine-learning/model-serving/query-reason-models */
+/** Extract text from a chat completion — handles a plain string, or a
+ * content-array with reasoning/text blocks emitted by some reasoning models. */
 function extractContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -48,16 +48,9 @@ interface LmConfig {
   url?: string;
   apiKey?: string;
   model?: string;
-  chatPath?: string;
-  embeddingPath?: string;
-  clientId?: string;
-  clientSecret?: string;
   CB_LM_URL?: string;
   CB_API_KEY?: string;
   CB_LM_MODEL?: string;
-  CB_CHAT_PATH?: string;
-  CB_CLIENT_ID?: string;
-  CB_CLIENT_SECRET?: string;
 }
 
 function ensureProtocol(url: string): string {
@@ -71,34 +64,20 @@ const lmFile = (await Bun.file("bee.lm.json").json().catch(() => ({}))) as LmCon
 const BASE_URL = ensureProtocol(
   lmFile.url ?? lmFile.CB_LM_URL ?? process.env["CB_LM_URL"] ?? "",
 );
-const CHAT_PATH = lmFile.chatPath ?? lmFile.CB_CHAT_PATH ?? process.env["CB_CHAT_PATH"] ?? "/v1/chat/completions";
 const LM_API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env["CB_API_KEY"] ?? "";
-const CLI_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env["CB_CLIENT_ID"] ?? "";
-const CLI_SEC = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env["CB_CLIENT_SECRET"] ?? "";
 const LM_MODEL = lmFile.model ?? lmFile.CB_LM_MODEL ?? process.env["CB_LM_MODEL"] ?? "oc/deepseek-v4-flash-free";
-const CHAT_ENDPOINT = BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}${CHAT_PATH}` : "";
+const CHAT_ENDPOINT = BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}/v1/chat/completions` : "";
 
 if (!CHAT_ENDPOINT) {
   console.error("Set CB_LM_URL or create bee.lm.json to use this script.");
   process.exit(1);
 }
 
-// Auth: OAuth (client_id + client_secret) → Bearer token, else static API_KEY
-let BEARER = LM_API_KEY;
-if (CLI_ID && CLI_SEC && !BEARER) {
-  try {
-    const r = await fetch(`${BASE_URL.replace(/\/+$/, "")}/oidc/v1/token`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: `grant_type=client_credentials&scope=all-apis&client_id=${CLI_ID}&client_secret=${CLI_SEC}`,
-      signal: AbortSignal.timeout(10000),
-    });
-    if (r.ok) BEARER = ((await r.json()) as { access_token: string }).access_token;
-  } catch { /* fall through */ }
-}
-
 const headers: Record<string, string> = { "content-type": "application/json" };
-if (BEARER) headers["authorization"] = `Bearer ${BEARER}`;
+if (LM_API_KEY) {
+  headers["authorization"] = `Bearer ${LM_API_KEY}`;
+  headers["x-api-key"] = LM_API_KEY;
+}
 
 // Quick connectivity: check endpoint is reachable.
 // We don't exit on HTTP errors (400/401/404) — the per-command loop handles them.
@@ -107,7 +86,7 @@ try {
   const health = await fetch(CHAT_ENDPOINT, {
     method: "POST",
     headers,
-    body: JSON.stringify({ model: LM_MODEL, messages: [{ role: "user", content: "hi" }], max_tokens: 1, temperature: 0 }),
+    body: JSON.stringify({ model: LM_MODEL, messages: [{ role: "user", content: "hi" }], max_tokens: 1, temperature: 0, enable_thinking: false }),
     signal: AbortSignal.timeout(10000),
   });
   if (health.status === 404) {
@@ -173,6 +152,9 @@ for (const item of corpus) {
           messages: [{ role: "user", content: prompt }],
           temperature: 0,
           max_tokens: 512,
+          // Reasoning models (e.g. deepseek-v4) otherwise burn the whole budget
+          // on reasoning_content and return an empty content — see bee ask.
+          enable_thinking: false,
         }),
         signal: AbortSignal.timeout(30000),
       });
@@ -260,7 +242,8 @@ for (const [flag, { cmds, desc }] of flagSet) {
         model: LM_MODEL,
         messages: [{ role: "user", content: flagPrompt }],
         temperature: 0,
-        max_tokens: 256,
+        max_tokens: 512,
+        enable_thinking: false,
       }),
       signal: AbortSignal.timeout(30000),
     });

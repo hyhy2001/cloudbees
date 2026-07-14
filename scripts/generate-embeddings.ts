@@ -16,26 +16,9 @@ const lmFile = (await Bun.file("bee.lm.json").json().catch(() => ({}))) as Recor
 const MODEL_NAME = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "default";
 const BASE_URL = lmFile.url ?? lmFile.CB_LM_URL ?? process.env.CB_LM_URL ?? "";
 const API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
-const CLI_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
-const CLI_SEC = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";
-const EMBEDDING_PATH = lmFile.embeddingPath ?? lmFile.CB_EMBEDDING_PATH ?? process.env.CB_EMBEDDING_PATH ?? "/v1/embeddings";
 const EMBEDDING_URL_OVERRIDE = lmFile.embeddingUrl ?? lmFile.CB_EMBEDDING_URL ?? process.env.CB_EMBEDDING_URL ?? "";
 const API_URL = EMBEDDING_URL_OVERRIDE ||
-  (BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}${EMBEDDING_PATH}` : "");
-
-// Auth: OAuth → Bearer, else static API_KEY
-let BEARER = API_KEY;
-if (CLI_ID && CLI_SEC && !BEARER) {
-  try {
-    const r = await fetch(`${BASE_URL.replace(/\/+$/, "")}/oidc/v1/token`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: `grant_type=client_credentials&scope=all-apis&client_id=${CLI_ID}&client_secret=${CLI_SEC}`,
-      signal: AbortSignal.timeout(10000),
-    });
-    if (r.ok) BEARER = ((await r.json()) as { access_token: string }).access_token;
-  } catch { /* fall through */ }
-}
+  (BASE_URL ? `${BASE_URL.replace(/\/+$/, "")}/v1/embeddings` : "");
 
 const { initPlugins } = await import("../src/registry");
 const { buildCorpus } = await import("../src/plugins/docs/corpus");
@@ -52,30 +35,22 @@ if (!API_URL) {
 }
 
 const headers: Record<string, string> = { "content-type": "application/json" };
-if (BEARER) headers["authorization"] = `Bearer ${BEARER}`;
-const urlCandidates = [API_URL];
-if (EMBEDDING_PATH.startsWith("/ai-gateway/")) {
-  urlCandidates.push(`${BASE_URL.replace(/\/+$/, "")}/v1/embeddings`);
-  urlCandidates.push(`${BASE_URL.replace(/\/+$/, "")}/serving-endpoints/${encodeURIComponent(MODEL_NAME)}/invocations`);
+if (API_KEY) {
+  headers["authorization"] = `Bearer ${API_KEY}`;
+  headers["x-api-key"] = API_KEY;
 }
 const embed = async (t: string): Promise<number[]> => {
-  for (const url of urlCandidates) {
-    const r = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ input: t.slice(0, 2048), model: MODEL_NAME }),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (r.ok) {
-      const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };
-      return j.data?.[0]?.embedding ?? [];
-    }
-    if (r.status !== 404) {
-      throw new Error(`Embedding API returned ${r.status} at ${url}`);
-    }
-    process.stderr.write(`  Embedding API 404 at ${url} — trying next candidate\n`);
+  const r = await fetch(API_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ input: t.slice(0, 2048), model: MODEL_NAME }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (r.ok) {
+    const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };
+    return j.data?.[0]?.embedding ?? [];
   }
-  throw new Error(`Embedding API returned 404 for all candidates`);
+  throw new Error(`Embedding API returned ${r.status} at ${API_URL}`);
 };
 console.log("Using API embedding…");
 const first = await embed(corpus[0]!.title);

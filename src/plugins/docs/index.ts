@@ -1,9 +1,8 @@
 import type { Plugin, PluginContext } from "../../registry/types";
 import { registerDocsCommands } from "./commands";
-import { LM_URL, LM_API_KEY, LM_MODEL, REWRITE_MODEL, LM_CLIENT_ID, LM_CLIENT_SECRET, CHAT_ENDPOINT } from "./config";
-import { setProvider, setRewriteProvider, getProvider } from "./answer";
+import { LM_URL, LM_API_KEY, LM_MODEL, REWRITE_MODEL, CHAT_ENDPOINT } from "./config";
+import { setProvider, setRewriteProvider } from "./answer";
 import { OpenAICompatProvider } from "./providers/openai";
-import { DatabricksOAuthProvider, isDatabricksHost } from "./providers/databricks";
 
 export const docsPlugin: Plugin = {
   meta: {
@@ -17,32 +16,13 @@ export const docsPlugin: Plugin = {
     // time or supplied via CB_LM_URL at runtime). No URL → no provider →
     // `bee ask` stays fully offline.
     //
-    // Auth strategy:
-    //   - If LM_URL looks like a Databricks workspace AND client credentials
-    //     are present → use Databricks OAuth M2M.
-    //   - Otherwise → use OpenAI-compatible provider (with API key if set,
-    //     unauthenticated for local llama.cpp).
-    //
-    // Client credentials from env (CB_CLIENT_ID / CB_CLIENT_SECRET) may belong
-    // to another tool — only attempt OAuth when the URL is clearly Databricks.
+    // The backend speaks the OpenAI API shape. Auth is a single static key
+    // (CB_API_KEY) sent as Authorization: Bearer + X-Api-Key; a local
+    // llama.cpp server runs unauthenticated with no key.
     if (LM_URL) {
-      if (isDatabricksHost(LM_URL) && LM_CLIENT_ID && LM_CLIENT_SECRET) {
-        const prov = new DatabricksOAuthProvider(LM_URL, LM_CLIENT_ID, LM_CLIENT_SECRET, LM_MODEL);
-        if (await prov.validate()) {
-          setProvider(prov);
-          // Rewrite provider — same OAuth but different model if CB_REWRITE_MODEL set
-          if (REWRITE_MODEL !== LM_MODEL) {
-            setRewriteProvider(new DatabricksOAuthProvider(LM_URL, LM_CLIENT_ID, LM_CLIENT_SECRET, REWRITE_MODEL));
-          }
-        } else {
-          process.stderr.write("[docs] WARN Databricks OAuth token exchange failed — check client_id and client_secret.\n");
-        }
-      }
-      if (!getProvider()) {
-        setProvider(new OpenAICompatProvider(CHAT_ENDPOINT, LM_API_KEY, LM_MODEL));
-        if (REWRITE_MODEL !== LM_MODEL) {
-          setRewriteProvider(new OpenAICompatProvider(CHAT_ENDPOINT, LM_API_KEY, REWRITE_MODEL));
-        }
+      setProvider(new OpenAICompatProvider(CHAT_ENDPOINT, LM_API_KEY, LM_MODEL));
+      if (REWRITE_MODEL !== LM_MODEL) {
+        setRewriteProvider(new OpenAICompatProvider(CHAT_ENDPOINT, LM_API_KEY, REWRITE_MODEL));
       }
     }
     registerDocsCommands(ctx);

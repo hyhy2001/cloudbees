@@ -833,9 +833,9 @@ Before compiling, `build.ts` runs code-generation scripts:
 
 Set `CB_SKIP_CODEGEN=1` to skip all code-generation steps — this is what `make quick` does internally for fast iterative rebuilds when the corpus, embeddings, or synonyms haven't changed.
 
-If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. Chat and embedding endpoints are built from `CB_LM_URL` + `CB_CHAT_PATH` (default `/v1/chat/completions`) and `CB_EMBEDDING_PATH` (default `/v1/embeddings`) separately — both share the same auth. Supported auth: static Bearer token (`CB_API_KEY`) or Databricks OAuth M2M (`CB_CLIENT_ID` + `CB_CLIENT_SECRET`). The build logs which auth method was detected; it never logs the secret itself.
+If a `bee.lm.json` config file (or `CB_*` env vars) is present, the LM credentials are injected via `--define` so the binary carries its own endpoint config. The backend speaks the OpenAI API shape, so the chat and embedding endpoints are fixed at `CB_LM_URL` + `/v1/chat/completions` and `CB_LM_URL` + `/v1/embeddings`. Auth is a single static key (`CB_API_KEY`) sent as both `Authorization: Bearer <key>` and `X-Api-Key: <key>`; an unauthenticated local server (e.g. llama.cpp) runs with no key. The build logs whether a key was detected; it never logs the key itself. TLS verification is relaxed on LM calls so self-signed / internal-CA endpoints work without extra trust-store setup.
 
-Embedding is always API-based — no local model is bundled. `generate-embeddings.ts` calls the configured embedding endpoint to pre-compute 1024-dim corpus vectors (dimension auto-detected from the first response). Set `CB_EMBEDDING_URL` to use a separate embedding host, or leave unset to derive it from `CB_LM_URL + CB_EMBEDDING_PATH`.
+Embedding is always API-based — no local model is bundled. `generate-embeddings.ts` calls the configured embedding endpoint to pre-compute 1024-dim corpus vectors (dimension auto-detected from the first response). Set `CB_EMBEDDING_URL` to use a separate embedding host, or leave unset to derive it from `CB_LM_URL` + `/v1/embeddings`.
 
 ## Security
 
@@ -858,13 +858,9 @@ This is a developer-tool threat model: the OS directory permission on `data/<use
 | `BEE_DEBUG_TRACEBACK` | Set to `1` to enable debug logging and full stack traces (same as `--debug`) |
 | `BEE_ASCII` | Set to `1` to force ASCII symbols/borders in the TUI instead of Unicode |
 | `CB_SKIP_CODEGEN` | Set to `1` to skip all build-time codegen steps (what `make quick` does) |
-| `CB_LM_URL` | LM endpoint base URL (Databricks workspace or any OpenAI-compatible host). Both chat (`CB_CHAT_PATH`) and embedding (`CB_EMBEDDING_PATH`) use this as the base |
-| `CB_CHAT_PATH` | Chat endpoint path (default: `/v1/chat/completions`). Append to `CB_LM_URL` |
-| `CB_EMBEDDING_PATH` | Embedding endpoint path (default: `/v1/embeddings`). Append to `CB_LM_URL` |
-| `CB_EMBEDDING_URL` | Explicit full embedding endpoint URL. Overrides the `CB_LM_URL` + `CB_EMBEDDING_PATH` composition — use when embedding is served from a different host than chat |
-| `CB_API_KEY` | Static Bearer token / PAT |
-| `CB_CLIENT_ID` | OAuth client ID for Databricks M2M |
-| `CB_CLIENT_SECRET` | OAuth client secret for Databricks M2M |
+| `CB_LM_URL` | LM endpoint base URL (any OpenAI-compatible host). Chat is served at `<base>/v1/chat/completions` and embedding at `<base>/v1/embeddings` |
+| `CB_EMBEDDING_URL` | Explicit full embedding endpoint URL. Overrides the `CB_LM_URL` + `/v1/embeddings` composition — use when embedding is served from a different host than chat |
+| `CB_API_KEY` | Static API key. Sent as both `Authorization: Bearer <key>` and `X-Api-Key: <key>`; omit for an unauthenticated local server |
 | `CB_LM_MODEL` | Main LM model for answer generation (`generateJson`) |
 | `CB_REWRITE_MODEL` | Model for query rewriting (optional — falls back to `CB_LM_MODEL`). Use a smaller/faster model since rewrite only needs 32 tokens |
 | `CB_EMBEDDING_MODEL` | Embedding model name passed to the embedding API (informational — the actual dimension is auto-detected from the first response) |
@@ -909,8 +905,7 @@ cloudbees/
 │   ├── plugins/          # auth · controller · job · node · credential · system · foldersplus
 │   │   └── docs/         # bee ask — BM25 retrieval, presenter, LM provider, config
 │   │       └── providers/
-│   │           ├── openai.ts      # OpenAI-compatible / static Bearer token
-│   │           └── databricks.ts  # Databricks OAuth M2M (client_id + client_secret)
+│   │           └── openai.ts      # OpenAI-compatible transport (Bearer + X-Api-Key)
 │   └── registry/         # Plugin contract, BUILTIN_PLUGINS, TUI screen collection
 └── data/                 # runtime SQLite DB (created next to the binary on first run)
 ```

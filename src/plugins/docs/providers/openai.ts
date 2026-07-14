@@ -2,10 +2,11 @@
  * OpenAI-compatible chat provider for `bee ask`.
  *
  * One transport covers every backend that speaks the OpenAI
- * `/v1/chat/completions` shape — Databricks model-serving endpoints AND a local
- * llama.cpp `llama-server` (default :8080) both do. The only per-deployment
- * differences are the base URL, the bearer token (empty for an unauthenticated
- * local server), and the model name, all injected at construction.
+ * `/v1/chat/completions` shape — a hosted gateway AND a local llama.cpp
+ * `llama-server` (default :8080) both do. The only per-deployment differences
+ * are the base URL, the API key (empty for an unauthenticated local server),
+ * and the model name, all injected at construction. The key is sent as both
+ * `Authorization: Bearer` and `X-Api-Key`.
  *
  * The prompt is split into two role messages: a hardened `system` instruction
  * (scope guard — see context.ts) and a `user` message carrying the retrieved
@@ -26,13 +27,26 @@ export class OpenAICompatProvider {
   }
 
   /**
+   * Request headers. The key is sent both as `Authorization: Bearer` and as
+   * `X-Api-Key` for broad gateway compatibility; omitted entirely for an
+   * unauthenticated local server (empty key).
+   */
+  private headers(): Record<string, string> {
+    const h: Record<string, string> = { "content-type": "application/json" };
+    if (this.apiKey) {
+      h["authorization"] = `Bearer ${this.apiKey}`;
+      h["x-api-key"] = this.apiKey;
+    }
+    return h;
+  }
+
+  /**
    * `prompt` is the assembled USER content (context + question), not the system
    * instruction — the system prompt is attached here so every call is grounded
    * the same way regardless of caller.
    */
   async generate(prompt: string, maxTokens = 8192): Promise<string> {
-    const headers: Record<string, string> = { "content-type": "application/json" };
-    if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
+    const headers = this.headers();
 
     const response = await fetch(this.endpoint, {
       method: "POST",
@@ -68,8 +82,7 @@ export class OpenAICompatProvider {
   }
 
   async generateWithUsage(prompt: string, maxTokens = 8192): Promise<{ text: string; usage?: TokenUsage }> {
-    const headers: Record<string, string> = { "content-type": "application/json" };
-    if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
+    const headers = this.headers();
     const response = await fetch(this.endpoint, {
       method: "POST", headers,
       body: JSON.stringify({ model: this.model, messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }], temperature: 0, max_tokens: maxTokens, enable_thinking: false }),
@@ -87,8 +100,7 @@ export class OpenAICompatProvider {
   }
 
   async generateJson(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null> {
-    const headers: Record<string, string> = { "content-type": "application/json" };
-    if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
+    const headers = this.headers();
 
     let content = "";
     let usage: TokenUsage | undefined;
@@ -142,8 +154,8 @@ export class OpenAICompatProvider {
   /**
    * Streaming variant: returns tokens via SSE as they arrive from the API.
    */
-  async *stream(prompt: string): AsyncGenerator<string, void, unknown> {    const headers: Record<string, string> = { "content-type": "application/json" };
-    if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
+  async *stream(prompt: string): AsyncGenerator<string, void, unknown> {
+    const headers = this.headers();
     if (process.env.BEE_DEBUG_TRACEBACK) {
       process.stderr.write(`[bee ask] stream prompt (first 300): ${prompt.slice(0, 300)}\n`);
     }
@@ -209,7 +221,6 @@ function providerLabel(baseUrl: string): string {
   try {
     const host = new URL(baseUrl).hostname;
     if (host === "localhost" || host === "127.0.0.1") return "local-lm";
-    if (host.includes("databricks")) return "databricks";
     return host;
   } catch {
     return "lm";
