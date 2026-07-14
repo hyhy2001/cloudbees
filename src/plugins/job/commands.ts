@@ -26,6 +26,19 @@ function queueItemMatchesJob(item: { taskName: string; taskUrl: string }, name: 
 }
 
 /**
+ * Returns the tracked job name that a queue item belongs to, or null if the
+ * item's job is not in the caller's tracked set. Cancelling a queue item is
+ * gated on this: you may only cancel builds of jobs you track, so one user
+ * cannot cancel another user's queued work on the shared controller.
+ */
+function trackedJobForQueueItem(
+  item: { taskName: string; taskUrl: string },
+  tracked: string[],
+): string | null {
+  return tracked.find((name) => queueItemMatchesJob(item, name)) ?? null;
+}
+
+/**
  * Fallback for when we can't track a queue item: poll `lastBuild` until a build
  * number greater than `before` appears. Returns the new build number, or null if
  * none started within `timeout` seconds.
@@ -824,25 +837,46 @@ export function registerJobCommands(ctx: PluginContext): void {
 
   queueGrp
     .command("cancel")
-    .description("Cancel pending build(s) in the queue by queue id, or by job name to cancel all of that job's waiting items (see 'queue list')")
+    .description("Cancel pending build(s) in the queue — by queue id or by job name. Only jobs you track can be cancelled (see 'queue list', 'job track')")
     .argument("<id_or_name>", "Queue item id, or a job name to cancel all its queued items")
     .action(async (arg: string) => {
       try {
         const client = await ctx.getClient({ useController: true });
+        // Safety gate: you may only cancel queued builds of jobs you track, so
+        // one user can't cancel another user's work on the shared controller.
+        const tracked = getTrackedResources("job", profile, client.baseUrl, dbPath);
+        const queue = await listQueue(client);
 
-        // All-digits → treat as a queue id; otherwise treat as a job name.
+        // All-digits → treat as a queue id. The item must exist in the queue and
+        // belong to a tracked job before we cancel it.
         if (/^\d+$/.test(arg.trim())) {
           const id = parseInt(arg, 10);
+          const item = queue.find((it) => it.id === id);
+          if (!item) {
+            printError(`Queue item #${id} not found (already started or cancelled?). Run 'bee job queue list'.`);
+            process.exit(1);
+          }
+          const owningJob = trackedJobForQueueItem(item, tracked);
+          if (!owningJob) {
+            printError(`Refusing to cancel #${id}: job '${item.taskName}' is not tracked. Track it first with 'bee job track ${item.taskName}'.`);
+            process.exit(1);
+          }
           await cancelQueueItem(client, id);
-          if (isJsonOutput()) printJson({ ok: true, cancelled: [id] });
-          else printSuccess(`OK Cancelled queue item #${id}`);
+          if (isJsonOutput()) printJson({ ok: true, job: owningJob, cancelled: [id] });
+          else printSuccess(`OK Cancelled queue item #${id} (${owningJob})`);
           return;
         }
 
-        // Job name: cancel every queued item belonging to it. Keep going on a
-        // per-item failure so one bad item doesn't strand the rest — a bulk
-        // cancel should cancel as much as it can and report what it couldn't.
-        const matches = (await listQueue(client)).filter((it) => queueItemMatchesJob(it, arg));
+        // Job name: it must be tracked, then cancel every queued item of it.
+        if (!tracked.some((name) => name === arg)) {
+          printError(`Refusing to cancel: job '${arg}' is not tracked. Track it first with 'bee job track ${arg}'.`);
+          process.exit(1);
+        }
+
+        // Cancel every queued item belonging to it. Keep going on a per-item
+        // failure so one bad item doesn't strand the rest — a bulk cancel should
+        // cancel as much as it can and report what it couldn't.
+        const matches = queue.filter((it) => queueItemMatchesJob(it, arg));
         if (matches.length === 0) {
           if (isJsonOutput()) printJson({ ok: true, job: arg, cancelled: [], failed: [] });
           else printInfo(`INFO No queued builds for '${arg}'.`);

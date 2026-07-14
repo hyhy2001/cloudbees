@@ -225,6 +225,11 @@ bee job queue cancel <id|name>     # cancel by queue id, or all queued items of 
   matching uses the item's task URL, not just its name, so a job in one folder
   is never confused with a same-named job in another. Once a build has left the
   queue to run, use `bee job stop <name> <build_number>` instead.
+- **Safety gate:** you can only cancel queued builds of jobs you **track**
+  (see `bee job track`). This holds for both forms — an id whose job isn't
+  tracked is refused, just like an untracked name. It stops you from cancelling
+  another user's queued work on the shared controller. Track the job first if
+  you really mean to cancel it.
 
 ```bash
 bee job queue list                 # everything waiting
