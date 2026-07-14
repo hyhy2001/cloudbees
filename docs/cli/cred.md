@@ -29,13 +29,14 @@ bee cred list [--all] [--store system|user] [-o table|json]
 |---|---|---|
 | `--all` | false | Show all credentials (default: Mine list only) |
 | `--store` | `system` | Which store to query |
-| `-o` / `--output` | `table` | Output format: `table` or `json` |
+| `-o` / `--output` | `table` | Output format: `table` or `json` (equivalent to the global [`--json`](../concepts/json-output.md)) |
 
 ```bash
 bee cred list                        # mine, system store
 bee cred list --all                  # everything in system store
 bee cred list --all --store user     # everything in your user store
 bee cred list --all -o json          # JSON output for scripting
+bee cred list --all --json           # same, via the global flag
 ```
 
 ---
