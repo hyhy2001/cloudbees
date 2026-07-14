@@ -271,11 +271,13 @@ bee job log <name> [build_number] [-f|--follow]
 
 - Omit `build_number` to use the last build.
 - `-f` / `--follow` streams new output until the build completes (polls every 3s, only fetches new bytes).
+- With the global `--json` flag, returns `{name, buildNumber, log}` (a single object; `--follow` is ignored in JSON mode).
 
 ```bash
 bee job log build-api                # last build's full log
 bee job log build-api 42             # build #42
 bee job log build-api -f             # follow last build live
+bee job log build-api --json         # {name, buildNumber, log} for scripting
 ```
 
 ---
@@ -288,9 +290,12 @@ Show recent build history.
 bee job status <name> [--count <n>]
 ```
 
+- With the global `--json` flag, returns `{name, count, builds}` where each build has `number`, `result`, `building`, `duration`, `timestamp`, and `url`.
+
 ```bash
 bee job status build-api             # last 10 builds
 bee job status build-api --count 25
+bee job status build-api --json      # structured build history for scripting
 ```
 
 ---
