@@ -178,6 +178,11 @@ const STOP_WORDS = new Set([
   "please","guide","tell","show","help","explain","describe","teach",
   "want","need","trying","try","let","give","find","know","understand",
   "using","use","via",
+  // "manage" is a generic umbrella verb ("manage jenkins nodes and jobs") that
+  // carries no discriminating signal — every command "manages" something. Worse,
+  // GENERATED_SYNONYMS mapped manage→profiles, so any query containing it pulled
+  // the auth/profiles cluster above the real target. Same class as name→select.
+  "manage",
 ]);
 
 /**
@@ -404,7 +409,7 @@ const RESERVED_TOKENS = new Set([
   "track","untrack","status","select","use","login","logout","info",
   // Domain nouns that should match themselves
   "job","node","credential","controller","auth","profile","environment",
-  "troubleshooting","concept","pipeline","folder","multibranch",
+  "troubleshooting","concept","pipeline","folder","folders","multibranch",
   // Common English words that would cause false positives if redirected
   "show","view","set","change","edit","add","remove","find","search",
   "open","close","start","end","begin","finish","install","configure",
