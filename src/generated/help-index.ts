@@ -1271,5 +1271,39 @@ export const HELP_FACTS: HelpFact[] = [
       "bee job track <name>",
       "bee job stop <name> <build_number>"
     ]
+  },
+  {
+    "id": "concept.json-output",
+    "kind": "concept",
+    "title": "machine-readable JSON output for scripting",
+    "terms": [
+      "json output",
+      "machine readable",
+      "machine-readable output",
+      "scriptable output",
+      "parse output",
+      "parse bee output",
+      "output json",
+      "json flag",
+      "--json",
+      "use in a script",
+      "scripting",
+      "automation output",
+      "pipe to jq",
+      "get json",
+      "structured output",
+      "programmatic output"
+    ],
+    "answer": "Pass the global --json flag to make any bee command emit machine-readable JSON instead of formatted text. It works with every command and in any position (bee --json node list is the same as bee node list --json). Read commands return the data as a JSON array or object; mutating commands return a status object like {\"ok\":true,...}. In JSON mode, commands that would prompt (delete, login) require their values as flags — destructive ones need --yes — so output stays a single parseable object.",
+    "commands": [
+      "bee --json node list",
+      "bee job list --json",
+      "bee --json job run <name> --wait"
+    ],
+    "related": [
+      "bee job queue list",
+      "bee node list",
+      "bee cred list"
+    ]
   }
 ];

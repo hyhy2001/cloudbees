@@ -68,10 +68,9 @@ export function registerCredentialCommands(ctx: PluginContext): void {
   grp
     .command("list")
     .description("List stored credentials (secrets, tokens, passwords) from the selected store")
-    .option("-o, --output <fmt>", "Output format (table|json)", "table")
     .option("--all", "Show all credentials (by default, only shows yours)", false)
     .option("--store <store>", "Credential store to list from: 'system' (default) or 'user'", "system")
-    .action(async (opts: { output: string; all: boolean; store: string }) => {
+    .action(async (opts: { all: boolean; store: string }) => {
       try {
         validateStore(opts.store);
         warnUserStoreFallback(opts.store, dbPath);
@@ -98,7 +97,7 @@ export function registerCredentialCommands(ctx: PluginContext): void {
           }
         }
 
-        if (opts.output === "json" || isJsonOutput()) {
+        if (isJsonOutput()) {
           printJson(creds);
         } else {
           const headers = ["ID", "Type", "Description", "Scope"];
