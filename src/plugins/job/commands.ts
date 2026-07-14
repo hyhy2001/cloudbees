@@ -839,20 +839,41 @@ export function registerJobCommands(ctx: PluginContext): void {
           return;
         }
 
-        // Job name: cancel every queued item belonging to it.
+        // Job name: cancel every queued item belonging to it. Keep going on a
+        // per-item failure so one bad item doesn't strand the rest — a bulk
+        // cancel should cancel as much as it can and report what it couldn't.
         const matches = (await listQueue(client)).filter((it) => queueItemMatchesJob(it, arg));
         if (matches.length === 0) {
-          if (isJsonOutput()) printJson({ ok: true, job: arg, cancelled: [] });
+          if (isJsonOutput()) printJson({ ok: true, job: arg, cancelled: [], failed: [] });
           else printInfo(`INFO No queued builds for '${arg}'.`);
           return;
         }
         const cancelled: number[] = [];
+        const failed: { id: number; error: string }[] = [];
         for (const it of matches) {
-          await cancelQueueItem(client, it.id);
-          cancelled.push(it.id);
+          try {
+            await cancelQueueItem(client, it.id);
+            cancelled.push(it.id);
+          } catch (e) {
+            // An item that already left the queue (ran/dropped) is not a real
+            // failure — the goal state (not queued) is already met.
+            if (e instanceof NotFoundError) {
+              cancelled.push(it.id);
+            } else {
+              failed.push({ id: it.id, error: e instanceof Error ? e.message : String(e) });
+            }
+          }
         }
-        if (isJsonOutput()) printJson({ ok: true, job: arg, cancelled });
-        else printSuccess(`OK Cancelled ${cancelled.length} queued item(s) for '${arg}': ${cancelled.map((n) => `#${n}`).join(", ")}`);
+
+        if (isJsonOutput()) {
+          printJson({ ok: failed.length === 0, job: arg, cancelled, failed });
+        } else {
+          if (cancelled.length > 0) {
+            printSuccess(`OK Cancelled ${cancelled.length} queued item(s) for '${arg}': ${cancelled.map((n) => `#${n}`).join(", ")}`);
+          }
+          for (const f of failed) printError(`Could not cancel #${f.id}: ${f.error}`);
+        }
+        if (failed.length > 0) process.exit(1);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);

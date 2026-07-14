@@ -234,8 +234,11 @@ bee job queue cancel 37            # cancel queue item #37
 bee job queue cancel build-api     # cancel all of build-api's queued items
 ```
 
-Both honor the global `--json` flag for scripting. When cancelling, the JSON
-result carries a `cancelled` array of the queue ids that were removed.
+Both honor the global `--json` flag for scripting. A by-name cancel keeps going
+if one item can't be removed, so the JSON result carries both a `cancelled`
+array (queue ids removed) and a `failed` array (`{id, error}` for any that
+couldn't be). An item that already left the queue counts as cancelled, not
+failed. The command exits non-zero only when `failed` is non-empty.
 
 ---
 
