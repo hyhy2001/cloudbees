@@ -5,7 +5,7 @@
 
 const lmFile = await Bun.file("bee.lm.json").json().catch(() => ({})) as Record<string, string>;
 
-const BASE    = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRICK_URL ?? "";
+const BASE    = lmFile.url ?? lmFile.CB_LM_URL ?? process.env.CB_LM_URL ?? "";
 const API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
 const CLI_ID  = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
 const CLI_SEC = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";

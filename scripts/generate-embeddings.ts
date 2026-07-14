@@ -14,7 +14,7 @@ import { Command } from "commander";
 
 const lmFile = (await Bun.file("bee.lm.json").json().catch(() => ({}))) as Record<string, string>;
 const MODEL_NAME = lmFile.embeddingModel ?? lmFile.CB_EMBEDDING_MODEL ?? process.env.CB_EMBEDDING_MODEL ?? "default";
-const BASE_URL = lmFile.url ?? lmFile.CB_DATABRICK_URL ?? process.env.CB_DATABRICK_URL ?? "";
+const BASE_URL = lmFile.url ?? lmFile.CB_LM_URL ?? process.env.CB_LM_URL ?? "";
 const API_KEY = lmFile.apiKey ?? lmFile.CB_API_KEY ?? process.env.CB_API_KEY ?? "";
 const CLI_ID = lmFile.clientId ?? lmFile.CB_CLIENT_ID ?? process.env.CB_CLIENT_ID ?? "";
 const CLI_SEC = lmFile.clientSecret ?? lmFile.CB_CLIENT_SECRET ?? process.env.CB_CLIENT_SECRET ?? "";
@@ -47,7 +47,7 @@ await initPlugins(program);
 const corpus = buildCorpus(program);
 
 if (!API_URL) {
-  console.error("ERROR: No embedding API configured. Set CB_EMBEDDING_URL or CB_DATABRICK_URL in bee.lm.json or env.");
+  console.error("ERROR: No embedding API configured. Set CB_EMBEDDING_URL or CB_LM_URL in bee.lm.json or env.");
   process.exit(1);
 }
 
