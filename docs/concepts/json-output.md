@@ -34,6 +34,6 @@ JSON mode never prompts, because a prompt would corrupt stdout and hang a script
 
 - **Commands that would prompt for input require the values as flags.** For example `bee login` must be given `--url`, `--username`, and `--token`; `bee cred create` (Username+Password) must be given `--password`.
 
-## Relationship to `cred -o json`
-
-`bee cred list` and `bee cred get` also accept a local `-o json` / `--output json`. Both that flag and the global `--json` take the JSON path — they are equivalent, and the global flag is preferred for consistency across commands.
+The global `--json` flag is the single, consistent way to get JSON from any
+command. (Earlier builds had a local `-o json` / `--output` flag on `bee cred
+list`; it has been removed in favor of `--json`.)
