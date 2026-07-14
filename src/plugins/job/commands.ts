@@ -12,6 +12,20 @@ import { colorForLine } from "../../core/tui/data/log-buffer";
 import chalk from "chalk";
 
 /**
+ * True if a queue item belongs to the named job. Matches on `taskUrl` rather
+ * than `taskName` — two jobs in different folders can share a name, but the URL
+ * path (`.../job/Folder/job/build_x/`) is unique. We compare the normalized
+ * `/job/<segments>/` suffix so a plain name and a full folder path both work.
+ */
+function queueItemMatchesJob(item: { taskName: string; taskUrl: string }, name: string): boolean {
+  const suffix = `/job/${jobPathSegments(name)}/`;
+  const url = item.taskUrl.endsWith("/") ? item.taskUrl : `${item.taskUrl}/`;
+  if (url.includes(suffix)) return true;
+  // Fallback for older/edge responses with no usable taskUrl: exact name match.
+  return item.taskUrl === "" && item.taskName === name;
+}
+
+/**
  * Fallback for when we can't track a queue item: poll `lastBuild` until a build
  * number greater than `before` appears. Returns the new build number, or null if
  * none started within `timeout` seconds.
@@ -61,6 +75,7 @@ import {
   listQueue,
   cancelQueueItem,
   waitForQueueStart,
+  jobPathSegments,
   createFreestyleJob,
   createFolder,
   createPipelineJob,
@@ -779,17 +794,19 @@ export function registerJobCommands(ctx: PluginContext): void {
 
   queueGrp
     .command("list")
-    .description("List pending builds waiting in the queue (e.g. when all node executors are busy)")
-    .action(async () => {
+    .description("List pending builds waiting in the queue (e.g. when all node executors are busy); pass a job name to filter to that job")
+    .argument("[name]", "Filter to queued items for this job only")
+    .action(async (name: string | undefined) => {
       try {
         const client = await ctx.getClient({ useController: true });
-        const items = await listQueue(client);
+        const all = await listQueue(client);
+        const items = name ? all.filter((it) => queueItemMatchesJob(it, name)) : all;
         if (isJsonOutput()) {
-          printJson({ ok: true, count: items.length, items });
+          printJson({ ok: true, count: items.length, items, ...(name ? { job: name } : {}) });
           return;
         }
         if (items.length === 0) {
-          printInfo("INFO Queue is empty.");
+          printInfo(name ? `INFO No queued builds for '${name}'.` : "INFO Queue is empty.");
           return;
         }
         const rows = items.map((it) => [
@@ -807,19 +824,35 @@ export function registerJobCommands(ctx: PluginContext): void {
 
   queueGrp
     .command("cancel")
-    .description("Cancel a pending build in the queue by its queue id (see 'queue list')")
-    .argument("<id>", "Queue item id")
-    .action(async (idStr: string) => {
+    .description("Cancel pending build(s) in the queue by queue id, or by job name to cancel all of that job's waiting items (see 'queue list')")
+    .argument("<id_or_name>", "Queue item id, or a job name to cancel all its queued items")
+    .action(async (arg: string) => {
       try {
-        const id = parseInt(idStr, 10);
-        if (!Number.isInteger(id) || String(id) !== idStr.trim() || id < 0) {
-          printError(`Invalid queue id: '${idStr}' — must be a non-negative integer`);
-          process.exit(1);
-        }
         const client = await ctx.getClient({ useController: true });
-        await cancelQueueItem(client, id);
-        if (isJsonOutput()) printJson({ ok: true, cancelled: id });
-        else printSuccess(`OK Cancelled queue item #${id}`);
+
+        // All-digits → treat as a queue id; otherwise treat as a job name.
+        if (/^\d+$/.test(arg.trim())) {
+          const id = parseInt(arg, 10);
+          await cancelQueueItem(client, id);
+          if (isJsonOutput()) printJson({ ok: true, cancelled: [id] });
+          else printSuccess(`OK Cancelled queue item #${id}`);
+          return;
+        }
+
+        // Job name: cancel every queued item belonging to it.
+        const matches = (await listQueue(client)).filter((it) => queueItemMatchesJob(it, arg));
+        if (matches.length === 0) {
+          if (isJsonOutput()) printJson({ ok: true, job: arg, cancelled: [] });
+          else printInfo(`INFO No queued builds for '${arg}'.`);
+          return;
+        }
+        const cancelled: number[] = [];
+        for (const it of matches) {
+          await cancelQueueItem(client, it.id);
+          cancelled.push(it.id);
+        }
+        if (isJsonOutput()) printJson({ ok: true, job: arg, cancelled });
+        else printSuccess(`OK Cancelled ${cancelled.length} queued item(s) for '${arg}': ${cancelled.map((n) => `#${n}`).join(", ")}`);
       } catch (err) {
         printError(String(err instanceof Error ? err.message : err), err);
         process.exit(1);

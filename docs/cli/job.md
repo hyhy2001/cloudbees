@@ -212,22 +212,30 @@ Inspect and manage the build queue — the pending builds waiting for a free
 executor.
 
 ```bash
-bee job queue list                 # show pending items: ID, Job, Reason, Stuck
-bee job queue cancel <id>          # cancel a pending item by its queue id
+bee job queue list [name]          # show pending items; optionally filter to one job
+bee job queue cancel <id|name>     # cancel by queue id, or all queued items of a job
 ```
 
 - `queue list` shows each waiting item's queue **ID** (used by `cancel` and
   reported by `run`), the **Job** name, the **Reason** it's waiting (e.g.
-  "Waiting for next available executor"), and whether it is **Stuck**.
-- `queue cancel <id>` removes an item that hasn't started yet. Once a build has
-  left the queue to run, use `bee job stop <name> <build_number>` instead.
+  "Waiting for next available executor"), and whether it is **Stuck**. Pass a
+  job name to filter to just that job's queued items.
+- `queue cancel` accepts either a numeric queue **id** (cancels that one item)
+  or a **job name** (cancels every queued item belonging to that job). Job-name
+  matching uses the item's task URL, not just its name, so a job in one folder
+  is never confused with a same-named job in another. Once a build has left the
+  queue to run, use `bee job stop <name> <build_number>` instead.
 
 ```bash
-bee job queue list
-bee job queue cancel 37
+bee job queue list                 # everything waiting
+bee job queue list build-api       # only build-api's queued items
+bee job queue list team/build-api  # folder-qualified name works too
+bee job queue cancel 37            # cancel queue item #37
+bee job queue cancel build-api     # cancel all of build-api's queued items
 ```
 
-Both honor the global `--json` flag for scripting.
+Both honor the global `--json` flag for scripting. When cancelling, the JSON
+result carries a `cancelled` array of the queue ids that were removed.
 
 ---
 
