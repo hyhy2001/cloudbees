@@ -1209,5 +1209,67 @@ export const HELP_FACTS: HelpFact[] = [
       "bee job create folder <name>",
       "bee job move <source> <folder>"
     ]
+  },
+  {
+    "id": "concept.build-queue",
+    "kind": "concept",
+    "title": "build queue and pending builds",
+    "terms": [
+      "build queue",
+      "queued build",
+      "pending build",
+      "waiting for executor",
+      "executors full",
+      "executor limit",
+      "node busy",
+      "all executors busy",
+      "build waiting",
+      "queue list",
+      "see queued builds",
+      "list pending builds",
+      "build stuck in queue",
+      "why is my build waiting",
+      "build not starting"
+    ],
+    "answer": "When every executor on the target node is busy, a triggered build waits in the controller's build queue until an executor frees up (it does not fail). Use 'bee job queue list' to see pending builds and why each is waiting; pass a job name to filter. With 'bee job run --wait', the build is tracked through the queue and only times out as still-queued (exit code 2), distinct from a failure (exit 1).",
+    "commands": [
+      "bee job queue list",
+      "bee job queue list <name>",
+      "bee job run <name> --wait"
+    ],
+    "related": [
+      "bee job queue cancel <id|name>",
+      "bee job run <name> --wait",
+      "bee node list"
+    ]
+  },
+  {
+    "id": "concept.cancel-queued-build",
+    "kind": "concept",
+    "title": "cancel queued or pending builds",
+    "terms": [
+      "cancel queued build",
+      "cancel pending build",
+      "remove from queue",
+      "cancel all queued builds",
+      "cancel all builds of a job",
+      "clear queue",
+      "abort queued build",
+      "delete from queue",
+      "stop waiting build",
+      "cancel queue item",
+      "how to cancel a build in the queue"
+    ],
+    "answer": "Use 'bee job queue cancel' to remove pending builds from the queue. Pass a numeric queue id to cancel one item, or a job name to cancel every queued build of that job at once. You can only cancel builds of jobs you track (bee job track), which prevents cancelling another user's queued work. This is for builds still waiting in the queue; to stop a build that has already started, use 'bee job stop <name> <build_number>'.",
+    "commands": [
+      "bee job queue cancel <id>",
+      "bee job queue cancel <name>",
+      "bee job queue list"
+    ],
+    "related": [
+      "bee job queue list",
+      "bee job track <name>",
+      "bee job stop <name> <build_number>"
+    ]
   }
 ];
