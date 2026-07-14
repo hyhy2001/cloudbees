@@ -110,6 +110,10 @@ export function registerControllerCommands(ctx: PluginContext): void {
 
         const url = await resolveControllerUrl(client, match.url);
         selectController(match.name, url, dbPath);
+        if (isJsonOutput()) {
+          printJson({ ok: true, name: match.name, url });
+          return;
+        }
         printSuccess(`OK Active controller: ${match.name}`);
         printMessage(`     Resolved URL: ${url}`);
       } catch (err) {
