@@ -71,12 +71,25 @@ export function printError(msg: string, err?: unknown): void {
 }
 
 export function printInfo(msg: string): void {
+  // In JSON mode, route to stderr so stdout stays a single parseable object —
+  // an info line printed before printJson would otherwise break JSON.parse.
+  if (jsonOutput) {
+    console.error(theme.info(msg));
+    return;
+  }
   console.log(theme.info(msg));
 }
 export function printSuccess(msg: string): void {
   console.log(theme.success(msg));
 }
 export function printWarning(msg: string): void {
+  // In JSON mode, route to stderr: warnings (invalid-flag, store fallback) are
+  // emitted before printJson on some paths, and on stdout they corrupt the JSON
+  // a machine consumer parses.
+  if (jsonOutput) {
+    console.error(theme.warning(msg));
+    return;
+  }
   console.log(theme.warning(msg));
 }
 /** Plain stdout line — no colour, for neutral status messages (e.g. "Cancelled."). */
