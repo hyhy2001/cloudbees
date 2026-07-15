@@ -181,7 +181,16 @@ export async function updateCredential(
   };
 
   if (usernameCred !== undefined) xml = setElement(xml, "username", usernameCred);
-  if (password !== undefined) xml = setElement(xml, "password", password);
+  if (password !== undefined) {
+    // The secret value lives in a different tag per credential type: SecretText
+    // (StringCredentialsImpl) stores it in <secret>, UsernamePassword in
+    // <password>. Writing the wrong tag inserts a dead element Jenkins ignores
+    // while the real secret stays unchanged — a silent no-op that reports success
+    // (e.g. rotating a leaked token would leave it live). Target whichever tag the
+    // fetched config.xml actually has.
+    const secretTag = /<secret(?:\s[^>]*)?>/.test(xml) ? "secret" : "password";
+    xml = setElement(xml, secretTag, password);
+  }
   if (desc !== undefined) xml = setElement(xml, "description", desc);
 
   await client.postXml(`${userSeg}/credential/${credId}/config.xml`, xml, {
