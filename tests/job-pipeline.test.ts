@@ -284,6 +284,11 @@ describe("injectAgent", () => {
     const result = injectAgent(MIN_SCRIPT, "my-node");
     expect(result).toContain("agent { label 'my-node' }");
     expect(result).not.toContain("agent any");
+    // Regression: the bare-directive branch used to re-append the last matched
+    // char, producing `agent { label 'my-node' }y; stages …` which fails to
+    // compile. Assert the replacement is followed by the original separator.
+    expect(result).toContain("agent { label 'my-node' };");
+    expect(result).not.toMatch(/}\s*y/);
   });
 
   test("replaces bare agent none", () => {
@@ -291,6 +296,18 @@ describe("injectAgent", () => {
     const result = injectAgent(s, "my-node");
     expect(result).toContain("agent { label 'my-node' }");
     expect(result).not.toContain("agent none");
+    // Regression: `agent none` (len 9) used to leave a trailing `e`.
+    expect(result).toContain("agent { label 'my-node' };");
+    expect(result).not.toMatch(/}\s*e;/);
+  });
+
+  test("bare agent any on its own line leaves following newline+content intact", () => {
+    const s = `pipeline {\n  agent any\n  stages { stage('B') { steps { echo '' } } }\n}`;
+    const result = injectAgent(s, "linux");
+    expect(result).toContain("agent { label 'linux' }");
+    // No stray char glued to the closing brace, and stages survives verbatim.
+    expect(result).not.toMatch(/}\S/);
+    expect(result).toContain("\n  stages { stage('B')");
   });
 
   test("injects after pipeline { when no agent directive", () => {
