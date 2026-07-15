@@ -235,7 +235,6 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
         headers: this._headers(),
         redirect: "follow",
         signal: AbortSignal.timeout(this._timeout * 1000),
-        tls: { rejectUnauthorized: false },
       });
     } catch (err: unknown) {
       throw new CBConnectionError(err instanceof Error ? err.message : String(err));
@@ -310,7 +309,6 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
         headers: this._headers(),
         redirect: "manual",
         signal: AbortSignal.timeout(5000),
-        tls: { rejectUnauthorized: false },
       });
       if ([301, 302, 303, 307, 308].includes(resp.status)) {
         return resp.headers.get("Location");
@@ -345,7 +343,6 @@ export class CloudBeesClientImpl implements CloudBeesClient, CrumbClient {
         body: opts?.body,
         redirect: "manual",
         signal: AbortSignal.timeout(this._timeout * 1000),
-        tls: { rejectUnauthorized: false },
       });
     };
 

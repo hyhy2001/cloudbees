@@ -62,7 +62,6 @@ export class OpenAICompatProvider {
         enable_thinking: false,
       }),
       signal: AbortSignal.timeout(60000),
-      tls: { rejectUnauthorized: false },
     });
 
     if (!response.ok) {
@@ -87,7 +86,6 @@ export class OpenAICompatProvider {
       method: "POST", headers,
       body: JSON.stringify({ model: this.model, messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }], temperature: 0, max_tokens: maxTokens, enable_thinking: false }),
       signal: AbortSignal.timeout(60000),
-      tls: { rejectUnauthorized: false },
     });
     if (!response.ok) throw new Error(`LM HTTP ${response.status}`);
     const raw = await response.text();
@@ -119,7 +117,6 @@ export class OpenAICompatProvider {
         response_format: { type: "json_object" },
       }),
       signal: AbortSignal.timeout(60000),
-      tls: { rejectUnauthorized: false },
     });
 
     if (!response.ok) {
@@ -175,7 +172,6 @@ export class OpenAICompatProvider {
         stream: true,
       }),
       signal: AbortSignal.timeout(60000),
-      tls: { rejectUnauthorized: false },
     });
 
     if (!response.ok) {
