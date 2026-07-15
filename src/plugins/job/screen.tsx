@@ -1397,7 +1397,7 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Enter", label: isFolder ? "open" : current?.jobType === "FS" || current?.jobType === "PL" ? "menu" : "n/a", group: "action", hidden: multi, when: () => !multi && current !== undefined && !menuOpen, run: () => {
         if (!current) return;
         if (isFolder) { drillIn(current.name); return; }
-        if (current.jobType === "FS" || current.jobType === "PL") { setMenuOpen(true); return; }
+        if (current.jobType === "FS" || current.jobType === "PL") { setMenuOpen(true); void refetchQueue(); return; }
         const cls = current.jobClass ? current.jobClass.split(".").at(-1)! : current.jobType;
         ctx.notify(`${SYM.warn} ${cls} isn't supported yet — only Freestyle, Pipeline, and Folder.`, "warning");
       } },
@@ -1423,9 +1423,9 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       { key: "Esc", label: "clear", group: "action", hidden: !multi && !search.active,
         when: () => multi || search.active,
         run: () => { if (multi) setSelected(new Set()); else search.clear(); } },
-      { key: "r", label: "refresh", hidden: multi, when: () => !multi, run: () => void refetch() },
+      { key: "r", label: "refresh", hidden: multi, when: () => !multi, run: () => { void refetch(); void refetchQueue(); } },
     ],
-    [current, menuOpen, selected, multi, canCreate, bulkRemoveJobs, newJob, cloneJob, moveJobCb, bulkImport, bulkUnimport, isFolder, drillIn, goUp, folderStack, search, refetch, ctx],
+    [current, menuOpen, selected, multi, canCreate, bulkRemoveJobs, newJob, cloneJob, moveJobCb, bulkImport, bulkUnimport, isFolder, drillIn, goUp, folderStack, search, refetch, refetchQueue, ctx],
   );
 
   // While typing in the search box, the search hook owns input — suspend the
