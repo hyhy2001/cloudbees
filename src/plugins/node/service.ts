@@ -653,7 +653,10 @@ export async function listApprovedFolders(
     const tokenId = tokenMatch[1]!;
 
     // folderName from a /job/<name>/ href in this row
-    const folderMatch = row.match(/href="[^"]*\/job\/([^"?#]+\/)"[^>]*>\s*([^<]+)\s*<\/a>/);
+    // Lazy `[^"]*?` so the FIRST /job/ anchors the capture — a greedy quantifier
+    // would skip to the LAST /job/ and drop the parent segment(s) of a nested
+    // folder (`/job/TeamA/job/ProjectX/` → `ProjectX` instead of `TeamA/ProjectX`).
+    const folderMatch = row.match(/href="[^"]*?\/job\/([^"?#]+\/)"[^>]*>\s*([^<]+)\s*<\/a>/);
     const folderName = folderMatch
       ? decodeURIComponent(
           folderMatch[1]!
