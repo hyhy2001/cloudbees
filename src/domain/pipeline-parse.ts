@@ -123,8 +123,11 @@ export function injectAgent(script: string, nodeLabel: string): string {
       }
       return script.slice(0, start) + replacement + script.slice(end + 1);
     }
-    // Bare `agent any` or `agent none`.
-    return script.slice(0, start) + replacement + script.slice(start + agentMatch[0].length - 1);
+    // Bare `agent any` or `agent none`. Unlike the block case (where the last
+    // matched char is `{` and belongs to the brace-counted span), here the full
+    // match is the whole directive — resume right after it. The old `- 1` re-kept
+    // the directive's last char, producing `agent { label 'x' }y` (invalid Groovy).
+    return script.slice(0, start) + replacement + script.slice(start + agentMatch[0].length);
   }
 
   // Inject after the first `pipeline {`
