@@ -661,6 +661,11 @@ const JobsScreen: FC<TuiScreenProps> = ({ ctx, active }) => {
       setSummary(cached);
       return;
     }
+    // Clear the previous job's summary before the async fetch: otherwise moving
+    // the cursor to an uncached job B leaves job A's config in `summary` during
+    // the fetch window, so an edit/run acting in that window uses job A's config
+    // for job B — silent cross-job data corruption.
+    setSummary(null);
     void (async () => {
       try {
         const client = await ctx.getClient({ useController: true });
