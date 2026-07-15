@@ -542,18 +542,32 @@ export async function validatePipelineScript(
 ): Promise<{ valid: true } | { valid: false; errors: string[] }> {
   try {
     const body = new URLSearchParams({ jenkinsfile: script }).toString();
-    const result = await client.post<Record<string, unknown>>(
+    const result = await client.post<unknown>(
       "/pipeline-model-converter/validate",
       {
         body,
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       },
     );
-    if ((result as Record<string, unknown>)?.["result"] === "success") {
+
+    // The endpoint replies with plain text on most Jenkins versions
+    // ("Jenkinsfile successfully validated." / "Errors encountered validating
+    // Jenkinsfile:\n..."), and JSON ({result:"success"|"failure", errors:[...]})
+    // on others. client.post returns a string for the text form and an object
+    // for the JSON form, so handle both — treating the text form as JSON made
+    // every valid pipeline read as a failure and blocked all pipeline creation.
+    if (typeof result === "string") {
+      if (/successfully validated/i.test(result)) return { valid: true };
+      const msg = result.trim();
+      return { valid: false, errors: [msg.length > 0 ? msg : "Pipeline script validation failed."] };
+    }
+
+    const obj = (result ?? {}) as Record<string, unknown>;
+    if (obj["result"] === "success") {
       return { valid: true };
     }
     const errors: string[] = [];
-    const rawErrors = (result as Record<string, unknown>)?.["errors"];
+    const rawErrors = obj["errors"];
     if (Array.isArray(rawErrors)) {
       for (const e of rawErrors) {
         errors.push(typeof e === "string" ? e : String((e as Record<string, unknown>)?.["message"] ?? e));
