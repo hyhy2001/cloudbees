@@ -12,15 +12,29 @@ import { colorForLine } from "../../core/tui/data/log-buffer";
 import chalk from "chalk";
 
 /**
+ * Extract the folder-qualified job path from a queue item's task URL, e.g.
+ * `https://host/job/TeamA/job/build_x/` → `TeamA/build_x`. Returns null when the
+ * URL carries no `/job/` segments (older/edge responses).
+ */
+export function jobPathFromTaskUrl(taskUrl: string): string | null {
+  const segs: string[] = [];
+  const re = /\/job\/([^/]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(taskUrl)) !== null) segs.push(decodeURIComponent(m[1]!));
+  return segs.length > 0 ? segs.join("/") : null;
+}
+
+/**
  * True if a queue item belongs to the named job. Matches on `taskUrl` rather
  * than `taskName` — two jobs in different folders can share a name, but the URL
- * path (`.../job/Folder/job/build_x/`) is unique. We compare the normalized
- * `/job/<segments>/` suffix so a plain name and a full folder path both work.
+ * path (`.../job/Folder/job/build_x/`) is unique. We compare the FULL extracted
+ * job path for exact equality: a plain name and a folder-qualified name both
+ * work, but a nested job like `a/b/c` must not match a shorter tracked name
+ * `b/c` (a substring/suffix match would defeat the cancel ownership gate).
  */
-function queueItemMatchesJob(item: { taskName: string; taskUrl: string }, name: string): boolean {
-  const suffix = `/job/${jobPathSegments(name)}/`;
-  const url = item.taskUrl.endsWith("/") ? item.taskUrl : `${item.taskUrl}/`;
-  if (url.includes(suffix)) return true;
+export function queueItemMatchesJob(item: { taskName: string; taskUrl: string }, name: string): boolean {
+  const itemPath = jobPathFromTaskUrl(item.taskUrl);
+  if (itemPath !== null) return itemPath === name;
   // Fallback for older/edge responses with no usable taskUrl: exact name match.
   return item.taskUrl === "" && item.taskName === name;
 }
@@ -88,7 +102,6 @@ import {
   listQueue,
   cancelQueueItem,
   waitForQueueStart,
-  jobPathSegments,
   createFreestyleJob,
   createFolder,
   createPipelineJob,
