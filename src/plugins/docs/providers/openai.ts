@@ -122,7 +122,7 @@ export class OpenAICompatProvider {
         ],
         temperature: 0,
         max_tokens: 2048,
-        enable_thinking: this.enableThinking,
+        enable_thinking: false,
         response_format: { type: "json_object" },
       }),
       signal: AbortSignal.timeout(60000),
@@ -131,11 +131,15 @@ export class OpenAICompatProvider {
 
     if (!response.ok) {
       if (response.status === 400 || response.status === 422 || response.status === 500) {
-        // Model doesn't support response_format — collect via stream() and parse JSON from text
+        // Model doesn't support response_format — collect via stream() and parse JSON from text.
+        // Temporarily disable thinking so we don't mix reasoning tokens into the JSON.
+        const savedThinking = this.enableThinking;
+        this.enableThinking = false;
         const chunks: string[] = [];
         for await (const chunk of this.stream(prompt + "\n\nRespond with JSON only.")) {
           chunks.push(chunk);
         }
+        this.enableThinking = savedThinking;
         content = chunks.join("");
       } else {
         const body = await response.text().catch(() => "");
