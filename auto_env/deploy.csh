@@ -24,11 +24,9 @@ if ( -e "$MANIFEST" ) then
     if ( $#p == 0 ) break
     sed -i '1d' "$_stale_tmp"
     if ( "$p[1]" != "STALE_JOB" ) continue
-    # Only clear a timer that ACTUALLY exists. Read the job's schedule row from
-    # `bee job get` (a table: "│ schedule │ <cron or -> │"). Pull field 3 with awk
-    # on the │ separator; a real cron has digits/*, an empty one shows "-". This
-    # never guesses from the job name, so it's correct even if job_name changed.
-    set _sched = "`$BEE job get $p[2] |& grep -i '│ schedule' | awk -F'│' '{print $3}' | tr -d ' '`"
+    # Only clear a timer that ACTUALLY exists. Read schedule from
+    # `bee job get --json`; jq.py returns "-" when schedule is null/empty.
+    set _sched = "`$BEE job get $p[2] --json 2>/dev/null | python3 $AUTO_DIR/jq.py schedule --default '-'`"
     if ( "$_sched" == "" || "$_sched" == "-" ) then
       continue
     endif
