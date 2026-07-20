@@ -22,9 +22,9 @@ RX_AUTO_ROOT/                 <- rxauto.sh, config.yaml, my_ride_setup, my_cmd,
              |--- complete.yml        <- manifest (written by provision/deploy)
              `--- auto_env/           <- this package
                  |--- parse_config.py
-                 |--- lib.csh  provision.csh  deploy.csh  run.csh  manage.csh
-                 |--- pause.csh  resume.csh
-                 |--- scripts/setup_all.bash
+                  |--- jq.py  lib.csh  provision.csh  deploy.csh  run.csh  manage.csh
+                  |--- pause.csh  resume.csh
+                  |--- scripts/setup_all.bash
                  `--- rxews_makefile/apply_makefile_mods.py
 ```
 
@@ -131,6 +131,21 @@ environment if setup takes longer than the schedule interval.
 
 `all` stops at the first failing step. Prefer it for a first run; the numbered
 steps below are for re-running or understanding each stage individually.
+
+### Runtime overrides (`--mode` / `--ip`)
+
+Temporary override without editing `config.yaml`. Pass anywhere in the args:
+
+```bash
+rxauto.sh deploy --mode auto --ip all       # override both (2 scheduled jobs: daily_trunk + daily_common)
+rxauto.sh run --ip all                      # manual: trigger BOTH trunk + common
+rxauto.sh deploy --mode manual              # force manual, keep ip_mode from config
+```
+
+| Flag | Values | Notes |
+|---|---|---|
+| `--mode` | `manual` / `auto` | Override `mode:` in config for this invocation only |
+| `--ip` | `common` / `trunk` / `all` | Override `ip_mode:` in config; `run` picks IP at run time, `deploy` bakes it |
 
 ### 2. Provision (once, or when accounts change)
 
@@ -304,4 +319,5 @@ prefix, so a new name is a fresh namespace that never overwrites the previous ro
 | `manage.csh` | `list` / `teardown` / `prune` from the manifest |
 | `scripts/setup_all.bash` | manual alternative for step 1-2 (outside CloudBees) |
 | `rxews_makefile/apply_makefile_mods.py` | applies S4 Makefile changes to both RXEWS dirs (backup, dry-run, idempotent) |
+| `jq.py` | JSON extractor helper: `bee ... --json \| python3 jq.py <key> [--default <val>]` |
 | `../complete.yml` | manifest (in the Cloudbees dir, next to `bee`): folder, cred-ids, node names, job names (written by provision/deploy) |
