@@ -87,6 +87,7 @@ async function getEmbedFn(): Promise<((text: string) => Promise<number[] | null>
           headers,
           body: JSON.stringify({ input: t.slice(0, 2048), model: EMBEDDING_MODEL }),
           signal: AbortSignal.timeout(30000),
+          tls: { rejectUnauthorized: false },
         });
         if (r.ok) {
           const j = (await r.json()) as { data?: Array<{ embedding: number[] }> };
