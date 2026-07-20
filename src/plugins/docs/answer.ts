@@ -169,6 +169,7 @@ export function stripThinkBlock(text: string): string {
  */
 export interface LMProvider {
   readonly name: string;
+  enableThinking: boolean;
   generate(prompt: string, maxTokens?: number): Promise<string>;
   generateWithUsage?(prompt: string, maxTokens?: number): Promise<{ text: string; usage?: TokenUsage }>;
   generateJson?(prompt: string): Promise<{ answer: LmAnswer; usage?: TokenUsage } | null>;
@@ -326,6 +327,23 @@ function getGraph(corpus: DocItem[]): CommandGraph {
  *    (not the whole corpus — tight grounding, no leakage) and ask the LM.
  * 4. On provider error, degrade gracefully to the BM25 hits.
  */
+/**
+ * Heuristic: does the user's query need LM reasoning, or is it just a
+ * greeting/simple question that can answered without chain-of-thought?
+ *
+ * Short queries with no technical terms → simple (no thinking needed).
+ * Queries that mention bee commands, flags, or operations → reasoning.
+ */
+function needsReasoning(query: string, contextHits: DocItem[]): boolean {
+  const technicalTerms = /job|node|credential|controller|auth|pipeline|plugin|config|build|deploy|agent|secret|key|token|role|user|group|permission|folder|view|queue|log|run|executor|cli|command|flag/i;
+  const greetingPattern = /^(hi|hello|hey|thanks|thank you|good morning|good afternoon|good evening|bye|goodbye|ok|okay|how are you|what'?s up|sup|yo|help|what can you do)\b/i;
+
+  if (query.length < 10 && greetingPattern.test(query.trim())) return false;
+  if (!technicalTerms.test(query)) return false;
+  if (contextHits.length === 0) return false;
+  return true;
+}
+
 export async function answer(
   query: string,
   corpus: DocItem[],
@@ -414,6 +432,9 @@ export async function answer(
   if (process.env.BEE_DEBUG_TRACEBACK) {
     process.stderr.write(`[bee ask] context hits: ${contextHits.map(h => h.id).join(", ")}\n`);
   }
+
+  // Auto-select thinking mode based on query content
+  provider.enableThinking = needsReasoning(query, contextHits);
 
   const prompt = buildUserPrompt(query, contextHits);
 

@@ -15,8 +15,15 @@
  */
 import { SYSTEM_PROMPT } from "../context";
 import type { LmAnswer, TokenUsage } from "../answer";
+
 export class OpenAICompatProvider {
   public readonly name: string;
+  /**
+   * Controls the `enable_thinking` parameter sent to the API.
+   * Set externally via setThinking() — answer.ts toggles this based on
+   * whether the user's query needs reasoning (complex) or not (greeting).
+   */
+  public enableThinking = false;
 
   public constructor(
     private readonly endpoint: string,
@@ -59,7 +66,7 @@ export class OpenAICompatProvider {
         ],
         temperature: 0,
         max_tokens: maxTokens,
-        enable_thinking: false,
+        enable_thinking: this.enableThinking,
       }),
       signal: AbortSignal.timeout(60000),
       tls: { rejectUnauthorized: false },
@@ -85,7 +92,7 @@ export class OpenAICompatProvider {
     const headers = this.headers();
     const response = await fetch(this.endpoint, {
       method: "POST", headers,
-      body: JSON.stringify({ model: this.model, messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }], temperature: 0, max_tokens: maxTokens, enable_thinking: false }),
+      body: JSON.stringify({ model: this.model, messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }], temperature: 0, max_tokens: maxTokens, enable_thinking: this.enableThinking }),
       signal: AbortSignal.timeout(60000),
       tls: { rejectUnauthorized: false },
     });
@@ -115,7 +122,7 @@ export class OpenAICompatProvider {
         ],
         temperature: 0,
         max_tokens: 2048,
-        enable_thinking: false,
+        enable_thinking: this.enableThinking,
         response_format: { type: "json_object" },
       }),
       signal: AbortSignal.timeout(60000),
@@ -171,7 +178,7 @@ export class OpenAICompatProvider {
         ],
         temperature: 0,
         max_tokens: 8192,
-        enable_thinking: false,
+        enable_thinking: this.enableThinking,
         stream: true,
       }),
       signal: AbortSignal.timeout(60000),

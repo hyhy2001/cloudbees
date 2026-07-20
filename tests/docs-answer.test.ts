@@ -124,7 +124,7 @@ describe("setProvider / getProvider", () => {
   });
 
   it("stores and retrieves a provider", () => {
-    const p: LMProvider = { name: "test", generate: async () => "hi" };
+    const p: LMProvider = { name: "test", enableThinking: false, generate: async () => "hi" };
     setProvider(p);
     expect(getProvider()).toBe(p);
   });
@@ -150,6 +150,7 @@ describe("answer() — with provider", () => {
   it("calls provider.generate and returns lm response", async () => {
     const p: LMProvider = {
       name: "mock",
+      enableThinking: false,
       generate: async (prompt) => {
         expect(prompt).toContain("run a job");
         expect(prompt).toContain("bee job run");
@@ -168,6 +169,7 @@ describe("answer() — with provider", () => {
   it("degrades to raw on provider error", async () => {
     const p: LMProvider = {
       name: "broken",
+      enableThinking: false,
       generate: async () => { throw new Error("connection refused"); },
     };
     setProvider(p);
@@ -178,7 +180,7 @@ describe("answer() — with provider", () => {
   });
 
   it("returns raw when hits empty even with provider set", async () => {
-    const p: LMProvider = { name: "mock", generate: async () => "should not be called" };
+    const p: LMProvider = { name: "mock", enableThinking: false, generate: async () => "should not be called" };
     setProvider(p);
     const result = await answer("run a job", []);
     expect(result.source).toBe("raw");
@@ -259,6 +261,7 @@ describe("answer() — strips invented commands from lm output", () => {
   it("removes a fake backtick command", async () => {
     const p: LMProvider = {
       name: "mock",
+      enableThinking: false,
       generate: async () => "Run it. Use: `bee job run <name>`, `bee job start <name>`",
     };
     setProvider(p);
