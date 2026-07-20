@@ -1,0 +1,10 @@
+Jul 15, 2026 1:35:59 PM hudson.remoting.Launcher createEngine
+INFO: Setting up agent: Test node
+Jul 15, 2026 1:35:59 PM hudson.remoting.Engine startEngine
+INFO: Using Remoting version: 3355.v388858a_47b_33
+Jul 15, 2026 1:35:59 PM org.jenkinsci.remoting.engine.WorkDirManager initializeWorkDir
+INFO: Using test_node/remoting as a remoting work directory
+Jul 15, 2026 1:36:00 PM hudson.remoting.Launcher$CuiListener status
+INFO: WebSocket connection open
+Jul 15, 2026 1:36:00 PM hudson.remoting.Launcher$CuiListener status
+INFO: Connected

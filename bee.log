@@ -1,0 +1,29 @@
+2026-07-08 18:33:25 bee cred create --id __wrap3__ --username wp --password wp --description RX_wp
+2026-07-08 18:33:26 bee cred delete __wrap3__ --yes
+2026-07-08 18:41:45 bee cred create --id __seq_c1__ --username u1 --password p1 --description RX_c1
+2026-07-08 18:41:46 bee node create __seq_n1__ --host 10.0.0.9 --port 22 --cred-id __seq_c1__ --remote-dir /tmp/x --executors 1
+2026-07-08 18:41:46 bee cred create --id __seq_c2__ --username u2 --password p2 --description RX_c2
+2026-07-08 18:42:03 bee node delete __seq_n1__ --yes
+2026-07-08 18:42:03 bee cred delete __seq_c1__ --yes
+2026-07-08 18:42:04 bee cred delete __seq_c2__ --yes
+2026-07-08 20:21:51 bee job get RX_AUTO/build_user01
+2026-07-08 20:21:52 bee job get RX_AUTO/build_user02
+2026-07-08 20:21:52 bee job get RX_AUTO/build_user03
+2026-07-08 20:21:53 bee job get RX_AUTO/rx_setup
+2026-07-08 20:26:42 bee job run RX_AUTO/rx_setup
+2026-07-09 15:48:20 bee job run RX_AUTO/rx_setup -p PHASE=all
+2026-07-10 10:02:03 bee job run RX_AUTO/build_user01 -p IP_MODE=common -p SPLIT_FILE=/path/custom_list_99
+2026-07-10 10:02:27 bee job run RX_AUTO/build_user01 -p IP_MODE=trunk -p SPLIT_FILE=/path/custom_99
+2026-07-10 10:02:27 bee job run RX_AUTO/build_user01 -p IP_MODE=common -p SPLIT_FILE=/path/custom_99
+2026-07-10 10:02:53 bee job run RX_AUTO/build_user01 -p IP_MODE=trunk -p SPLIT_FILE=/path/c_99
+2026-07-10 10:09:00 bee job run RX_AUTO/build_user01 -p IP_MODE=trunk -p SPLIT_FILE=/path/c_99
+2026-07-10 10:09:00 bee job run RX_AUTO/build_user01 -p IP_MODE=common -p SPLIT_FILE=/path/c_99
+2026-07-10 10:09:11 bee job run RX_AUTO/build_user01 -p IP_MODE=trunk -p SPLIT_FILE=/path/c_99
+2026-07-10 14:28:11 bee job get RX_AUTO/daily
+2026-07-10 14:28:12 bee job get RX_AUTO/rx_setup
+2026-07-10 14:28:13 bee job get RX_AUTO/daily_trunk
+2026-07-10 14:28:14 bee job get RX_AUTO/daily
+2026-07-10 14:28:14 bee job get RX_AUTO/daily_common
+2026-07-10 14:28:14 bee job get RX_AUTO/daily
+2026-07-10 14:28:15 bee job run RX_AUTO/rx_setup -p PHASE=all --wait --timeout 3600
+2026-07-14 12:41:43 bee --help

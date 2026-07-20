@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<title>RX AUTO Tool Guide</title>
+
+<style>
+:root {
+  --bg: #0f172a;
+  --card: #1e293b;
+  --card2: #334155;
+  --code: #020617;
+  --accent: #38bdf8;
+  --text: #e2e8f0;
+  --green: #22c55e;
+  --red: #ef4444;
+  --yellow: #eab308;
+  --btn: #3b82f6;
+  --dim: #94a3b8;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  margin: 0;
+}
+
+.wrapper { display: flex; min-height: 100vh; }
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 260px;
+  background: #020617;
+  padding: 16px;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  overflow-y: auto;
+  border-right: 1px solid #1e293b;
+  z-index: 50;
+}
+
+.sidebar h3 { color: var(--accent); margin-top: 0; font-size: 14px; }
+
+.sidebar a {
+  display: block;
+  color: var(--dim);
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.sidebar a:hover { background: var(--card); color: var(--accent); }
+.sidebar a.sub { padding-left: 20px; font-size: 12px; }
+.sidebar hr { border: none; border-top: 1px solid #1e293b; margin: 8px 0; }
+
+.sidebar .nav-edit-hint {
+  display: none;
+  color: var(--yellow);
+  font-size: 11px;
+  padding: 4px 8px;
+  margin-top: 6px;
+}
+
+body.edit-mode .nav-edit-hint { display: block; }
+
+/* ===== MAIN ===== */
+.main {
+  margin-left: 280px;
+  max-width: 900px;
+  padding: 20px;
+  flex: 1;
+}
+
+/* ===== CARD ===== */
+.card {
+  background: var(--card);
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 10px;
+  position: relative;
+}
+
+.card.sub-card {
+  background: var(--card2);
+  margin-left: 10px;
+  border-left: 3px solid var(--accent);
+}
+
+.card.editing { border: 1px dashed var(--yellow); }
+
+h1, h2, h3 { color: var(--accent); }
+h4 { color: var(--green); }
+
+pre {
+  background: var(--code);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 13px;
+}
+
+code { color: var(--green); }
+
+table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+
+th, td {
+  border: 1px solid #475569;
+  padding: 8px;
+  text-align: left;
+  font-size: 13px;
+}
+
+th { background: var(--code); color: var(--accent); }
+
+/* ===== BUTTONS ===== */
+button {
+  background: var(--btn);
+  border: none;
+  padding: 8px 14px;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+button:hover { filter: brightness(1.15); }
+button.danger { background: var(--red); }
+button.success { background: var(--green); color: #000; }
+button.warn { background: var(--yellow); color: #000; }
+button.ghost {
+  background: transparent;
+  border: 1px solid var(--dim);
+  color: var(--dim);
+}
+
+button.ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ===== TOPBAR ===== */
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.topbar h1 { margin: 0; }
+.topbar-btns button { margin-left: 6px; }
+
+.lock-badge {
+  background: var(--red);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.lock-badge.unlocked { background: var(--green); color: #000; }
+
+/* ===== EDIT CONTROLS ===== */
+.edit-ctrl {
+  display: none;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  gap: 6px;
+}
+
+.editing .edit-ctrl { display: flex; }
+
+.add-sub-btn {
+  display: none;
+  margin-top: 10px;
+}
+
+body.edit-mode .section:not(.sub-card) .add-sub-btn { display: inline-block; }
+
+body.edit-mode [contenteditable="true"] {
+  outline: 1px dashed var(--yellow);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+body.edit-mode [contenteditable="true"]:focus {
+  outline: 1px solid var(--accent);
+  background: rgba(56, 189, 248, 0.05);
+}
+
+#add-section-area {
+  display: none;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+body.edit-mode #add-section-area { display: block; }
+
+/* ===== FORMATTING TOOLBAR ===== */
+#fmt-toolbar {
+  display: none;
+  background: #020617;
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  border: 1px solid #1e293b;
+}
+
+body.edit-mode #fmt-toolbar { display: flex; }
+
+#fmt-toolbar button {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid #475569;
+}
+
+#fmt-toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+
+#fmt-toolbar .sep {
+  width: 1px;
+  height: 20px;
+  background: #475569;
+  margin: 0 4px;
+}
+
+#fmt-toolbar select {
+  padding: 4px;
+  font-size: 12px;
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid #475569;
+}
+
+/* ===== TAG ===== */
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  margin-right: 4px;
+}
+
+.tag.required { background: var(--red); color: white; }
+.tag.optional { background: #475569; color: var(--text); }
+.tag.generated { background: #7c3aed; color: white; }
+.tag.template { background: #0891b2; color: white; }
+.tag.entry { background: var(--green); color: #000; }
+
+/* ===== MOVE BUTTONS ===== */
+.edit-ctrl button.move {
+  background: #475569;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.edit-ctrl button.move:hover {
+  background: var(--accent);
+  color: #000;
+}
+
+/* ===== GO TO TOP ===== */
+#goTopBtn {
+  display: none;
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  z-index: 60;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--btn);
+  color: white;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  transition: opacity 0.3s;
+}
+
+#goTopBtn:hover { filter: brightness(1.2); }
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.7);
+  z-index: 100;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-overlay.show { display: flex; }
+
+.modal {
+  background: var(--card);
+  padding: 30px;
+  border-radius: 12px;
+  width: 350px;
+  text-align: center;
+}
+
+.modal input {
+  width: 90%;
+  padding: 8px;
+  margin: 12px 0;
+  border-radius: 6px;
+  border: none;
+  font-size: 14px;
+}
+
+.modal .error { color: var(--red); font-size: 13px; display: none; }
+
+@media (max-width: 800px) {
+  .sidebar { display: none; }
+  .main { margin-left: 0; }
+}
+</style>
+</head>
+
+<body class="">
+
+<!-- PASSWORD MODAL -->
+
+
+<!-- GO TO TOP -->
+
+
+<div class="wrapper">
+
+<!-- SIDEBAR -->
+<nav class="sidebar" id="sidebarNav">
+  <h3> RX AUTO Guide</h3>
+  <div id="sidebarLinks"><a href="#s1">1. Overview</a><hr><a href="#s2">2. Environment Variables</a><hr><a href="#s3">3. Core Architecture</a><hr><a href="#s4">4. RXEWS Makefile Modifications</a><hr><a href="#s5">5. Prerequisites</a><a href="#s5-ride" class="sub">ENTRY my_ride_setup</a><a href="#s5-cmd" class="sub">ENTRY my_cmd — Populate RXEWS (Trunk IP)</a><a href="#s5-common" class="sub">ENTRY my_cmd_for_common — Populate RXEWS (Common I</a><a href="#s5-perm" class="sub">ENTRY set_permission</a><hr><a href="#s6">6. Setup Scripts</a><a href="#s6-general" class="sub">general_setup.bash</a><a href="#s6-auto" class="sub">auto_setup.bash</a><a href="#s6-server" class="sub">server_setup.bash</a><hr><a href="#s7">7. RX_AUTO — Templates</a><a href="#s7-rx-run" class="sub">TEMPLATE _rx_run_core.bash</a><a href="#s7-rx-auto" class="sub">TEMPLATE _rx_auto_run_core.bash</a><a href="#s7-go" class="sub">TEMPLATE _go_rx_auto_template.bash</a><a href="#s7-detect-ip" class="sub">TEMPLATE _check_trunk_ip_template.bash</a><a href="#s7-detect-common" class="sub">TEMPLATE _check_trunk_common_template.bash</a><a href="#s7-queue" class="sub">TEMPLATE QUEUE_CTRL/_queue_ctrl_template.bash</a><a href="#s7-rxqor" class="sub">TEMPLATE UTLs/_run_rxqor_core.bash NEW</a><hr><a href="#s8">8. RX_AUTO — BIN</a><a href="#s8-bin" class="sub">GENERATED BIN/</a><a href="#s8-binv2" class="sub">BIN_V2/</a><hr><a href="#s9">9. RX_AUTO — Data Lists</a><a href="#s9-common" class="sub">COMMON_LIST/</a><a href="#s9-forusers" class="sub">FOR_USERS/</a><a href="#s9-runlist" class="sub">RUN_LIST/</a><hr><a href="#s10">10. RX_AUTO — UTLs (Utilities)</a><a href="#s10-auto-process" class="sub">UTLs/AUTO_PROCESS/</a><a href="#s10-extract" class="sub">UTLs/Extract_MMS/</a><a href="#s10-redmine" class="sub">UTLs/REDMINE_ITC/</a><a href="#s10-sv" class="sub">UTLs/SV_GUNICORN/</a><a href="#s10-userlib" class="sub">UTLs/SV_GUNICORN/USER_LIB/</a><a href="#s10-app7-extend" class="sub">How to Extend app7.py</a><a href="#s10-utils" class="sub">UTLs/ — Utility Scripts</a><hr><a href="#s11">11. RX_AUTO — Other Scripts</a><a href="#s11-checkrev" class="sub">check_module_rev.bash</a><hr><a href="#s12">12. Makefile Targets Reference</a><hr><a href="#s13">13. Execution Flow</a><hr><a href="#s14">14. How to Extend</a><hr><a href="#s15">15. Troubleshooting</a><hr><a href="#s16">16. Important Notes</a></div>
+  
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <h1> RX AUTO Tool Guide</h1>
+  
+</div>
+
+<!-- FORMATTING TOOLBAR -->
+
+
+<!-- SECTIONS -->
+<div id="sections"><div class="card section" data-id="s1" id="s1"><h2>1. Overview</h2><div class="section-body">
+  <p><b>Package V5</b> — RX AUTO is a modular automation framework for RX verification workflows. It orchestrates:</p>
+  <ul>
+    <li>RXEWS environment population (Trunk IP / Common IP)</li>
+    <li>RX run execution with SVN revision tracking</li>
+    <li>Queue-based job scheduling on LSF</li>
+    <li>Dashboard server generation (Gunicorn) with custom rxqor support</li>
+    <li>Redmine report integration and analysis</li>
+    <li>Module mapping and submit list management</li>
+    <li>Ticket panel for issue tracking and snapshot analysis</li>
+    <li>Custom rxqor wrapper via USER_LIB</li>
+  </ul>
+  <p>The system is driven by a <code>Makefile</code> + template bash scripts. Templates use <code>envsubst</code> to inject environment variables and produce runtime scripts. Users configure variables once in setup scripts, then all generated scripts are consistent.</p>
+  <p>For full variable reference, see <b>README.md</b> or run <code>make help</code></p>
+  </div></div><div class="card section" data-id="s2" id="s2"><h2>2. Environment Variables</h2><div class="section-body">
+  <p>All setup scripts share the same set of variables. You configure them <b>once</b> at the top of each setup script.</p>
+  <table>
+    <tbody><tr><th>Variable</th><th>Description</th><th>Example</th></tr>
+    <tr><td><code>RX_AUTO_ROOT</code></td><td><span class="tag required">REQUIRED</span> Location where RX_AUTO is copied to</td><td><code>/design01/.../RX_AUTO</code></td></tr>
+    <tr><td><code>TRUNK_IP_RXEWS_RUN_DIR_PATH</code></td><td><span class="tag required">REQUIRED</span> Full path to rxews_trunk_ip_VNET* folder</td><td><code>/work/.../rxews_trunk_ip_VNET_xxx</code></td></tr>
+    <tr><td><code>COMMON_RXEWS_RUN_DIR_PATH</code></td><td><span class="tag required">REQUIRED</span> Full path to rxews_trunk_VNET* folder</td><td><code>/work/.../rxews_trunk_VNET_xxx</code></td></tr>
+    <tr><td><code>DEDICATED_SV</code></td><td><span class="tag optional">OPTIONAL</span> LSF host group for job submission</td><td><code>HOSTGR_621910</code></td></tr>
+    <tr><td><code>RIDE_ENV_VER</code></td><td><span class="tag optional">OPTIONAL</span> RiDE environment version tag</td><td><code>WK18</code></td></tr>
+    <tr><td><code>TRUNK_IP_ENV_BASE</code></td><td><span class="tag required">REQUIRED</span> Full path to rxews_trunk_ip_VNET*/RxEnv-* folder</td><td><code>/work/.../rxews_trunk_ip_VNET_xxx/RxEnv-xxx</code></td></tr>
+    <tr><td><code>COMMON_ENV_BASE</code></td><td><span class="tag required">REQUIRED</span> Full path to rxews_trunk_VNET*/RxEnv-* folder</td><td><code>/work/.../rxews_trunk_VNET_xxx/RxEnv-xxx</code></td></tr>
+    <tr><td><code>DASHBOARD_DB_LOCATION</code></td><td><span class="tag required">REQUIRED</span> Path to store Dashboard database</td><td><code>/work/.../dashboard_db</code></td></tr>
+    <tr><td><code>USER_CUSTOM_SRC</code></td><td><span class="tag generated">GENERATED</span> Path to USER_LIB custom rxmetrics source</td><td><code>RX_AUTO/UTLs/SV_GUNICORN/USER_LIB</code></td></tr>
+    <tr><td><code>LOCAL_PYTHON</code></td><td><span class="tag optional">OPTIONAL</span> Python 3.10+ binary path</td><td><code>/design01/.../Python-3.10.0/bin/python3</code></td></tr>
+    <tr><td><code>LOCAL_PYTHON_BIN</code></td><td><span class="tag optional">OPTIONAL</span> Python bin directory</td><td><code>/design01/.../Python-3.10.0/bin</code></td></tr>
+    <tr><td><code>UPDATE_DB_SCHEDULES</code></td><td><span class="tag optional">OPTIONAL</span> Dashboard update schedule times</td><td><code>00:00,11:30</code></td></tr>
+    <tr><td><code>COMMON_RUN_TYPE</code></td><td>⚠️ Fixed value — do not change</td><td><code>Trunk</code></td></tr>
+  </tbody></table>
+  <h3>Validation</h3>
+  <p>The Makefile enforces validation via <code>check_var</code>:</p>
+  <ul>
+    <li>Variable must be defined</li>
+    <li>Variable must not be empty</li>
+    <li>Variable must not be <code>NA</code> (default placeholder)</li>
+  </ul>
+  </div></div><div class="card section" data-id="s3" id="s3"><h2>3. Core Architecture</h2><div class="section-body">
+  <h3>Template → Generate → Execute</h3>
+  <pre>Setup script (general_setup / auto_setup / server_setup)
+  ↓ calls
+Makefile target (setup_run_cmd / setup_for_auto / ...)
+  ↓ uses
+Template (*_core.bash / *_template.bash)
+  ↓ envsubst (inject variables)
+Generated script (01_*.bash / 02_*.bash)
+  ↓
+Runtime execution / Queue / Server</pre>
+
+  <h3>Dual Mode: Trunk IP vs Common IP</h3>
+  <p>Every setup script runs targets <b>twice</b>:</p>
+  <ol>
+    <li>For <b>Trunk IP</b> (default <code>RUN_TYPE=TrunkIP</code>)</li>
+    <li>For <b>Common IP</b> (<code>RUN_TYPE=Trunk</code>)</li>
+  </ol>
+  <p>When <code>RUN_TYPE=Trunk</code>, the Makefile overrides:</p>
+  <ul>
+    <li>SVN URLs → Common trunk paths</li>
+    <li>Run/detect/queue/go_rx_auto scripts → <code>02_*</code> variants</li>
+    <li>Dashboard server config → Common_IP server</li>
+    <li>Module lists → common module lists</li>
+    <li>AUTO_PROCESS dir → Common_IP</li>
+  </ul>
+
+  <h3>Directory Layout</h3>
+  <pre>|-- Makefile
+|-- README.md
+|-- RX_AUTO/
+|   |-- BIN/                          &lt;- generated mapping
+|   |   |-- common_ip_map.bash
+|   |   `-- normal_ip_map.bash
+|   |-- BIN_V2/                       &lt;- v2 run scripts
+|   |   |-- ride_run_cmd.bash
+|   |   |-- ride_run_cmd_lmem.bash
+|   |   |-- run_tessent_rtl_drc.bash
+|   |   `-- run_tessent_rtl_drc_lmem.bash
+|   |-- COMMON_LIST/                  &lt;- module/instance lists
+|   |   |-- instances_common
+|   |   |-- instances_normal
+|   |   |-- module_common
+|   |   `-- normal_module
+|   |-- FOR_USERS/                    &lt;- user data files
+|   |-- QUEUE_CTRL/                   &lt;- queue templates
+|   |-- RUN_LIST/                     &lt;- runtime lists
+|   |-- UTLs/
+|   |   |-- AUTO_PROCESS/             &lt;- scheduler
+|   |   |-- Extract_MMS/              &lt;- module extraction
+|   |   |-- REDMINE_ITC/              &lt;- report tools
+|   |   |   |-- redmine_auto_report/  &lt;- v1
+|   |   |   |-- redmine_auto_report_v2/ &lt;- v2 (active)
+|   |   |   `-- redmine_lib/          &lt;- shared API lib
+|   |   |-- SV_GUNICORN/
+|   |   |   |-- Trunk_IP/             &lt;- dashboard server
+|   |   |   |-- Common_IP/            &lt;- dashboard server
+|   |   |   |-- TICKET_PANEL/         &lt;- ticket panel server
+|   |   |   `-- USER_LIB/             &lt;- custom rxmetrics (NEW)
+|   |   |-- _gen_dashboard_db_core.bash
+|   |   |-- _run_rxqor_core.bash      &lt;- NEW rxqor template
+|   |   `-- run_rxqor.bash            &lt;- generated wrapper
+|   |-- _check_trunk_ip_template.bash
+|   |-- _check_trunk_common_template.bash
+|   |-- _go_rx_auto_template.bash
+|   |-- _rx_auto_run_core.bash
+|   |-- _rx_run_core.bash
+|   `-- check_module_rev.bash
+|-- auto_setup.bash
+|-- general_setup.bash
+|-- server_setup.bash
+|-- my_cmd / my_cmd_for_common
+|-- my_ride_setup
+`-- set_permission</pre>
+  </div></div><div class="card section" data-id="s4" id="s4"><h2>4. RXEWS Makefile Modifications</h2><div class="section-body">
+  <p>Before running setup, apply these modifications to the RXEWS environment Makefiles (Package V5):</p>
+
+  <h3>Common Changes (both Trunk IP and Common)</h3>
+  <table>
+    <tbody><tr><th>File</th><th>Variable</th><th>Old</th><th>New</th></tr>
+    <tr><td>rxews_*/Makefile</td><td><code>OS_TYPE_SETUP</code></td><td><code>"RHEL7"</code></td><td><code>"RHEL8"</code></td></tr>
+    <tr><td>rxews_*/makefile.vars</td><td><code>RDFS_ALTERNATIVE_CLOCK_GENERATION</code></td><td><code>0</code></td><td><code>1</code></td></tr>
+  </tbody></table>
+
+  <h3>Trunk IP rxews Makefile Changes</h3>
+  <table>
+    <tbody><tr><th>Variable</th><th>Old Value</th><th>New Value</th></tr>
+    <tr><td>RxEnv naming</td><td><code>RxEnv-${DATE_TAG}-${REV}</code></td><td><code>RxEnv-Trunk-IP-VNET-${REV}</code></td></tr>
+    <tr><td><code>GPUBASE</code></td><td><code>.../MASTER_RTL/GPU/BXS-32-1024-MC</code></td><td><code>.../MASTER_RTL_IP/GPU/DXS-48-1536-MC</code></td></tr>
+    <tr><td><code>MASTER_LIST</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_LIST</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_LIST_IP</code></td></tr>
+    <tr><td><code>MASTER_RTL</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_RTL</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_RTL_IP</code></td></tr>
+    <tr><td><code>MASTER_BBOX</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_BBOX</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_BBOX_IP</code></td></tr>
+    <tr><td><code>MASTER_RTL_RTVRAM</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_RTL</code></td><td><code>.../SEC_IP/MASTER_RTL_FOR_RELEASE</code></td></tr>
+    <tr><td><code>MASTER_LIST_VRAM</code></td><td><code>.../MASTER_LIST/u7808...</code></td><td><code>.../MASTER_LIST_IP/u7808...</code></td></tr>
+    <tr><td><code>MASTER_RTL_SEC</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_RTL</code></td><td><code>.../SEC_IP/MASTER_CONF_RTL_IP</code></td></tr>
+    <tr><td><code>MASTER_RTL_CR52</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_RTL</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_RTL_IP</code></td></tr>
+    <tr><td><code>MASTER_RTL_APU</code></td><td><code>.../MASTER_CONF_RTL/apcore_conf_rtl/apcore</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_RTL_IP/apu</code></td></tr>
+  </tbody></table>
+
+  <h3>Common IP rxews Makefile Changes</h3>
+  <table>
+    <tbody><tr><th>Variable</th><th>Old Value</th><th>New Value</th></tr>
+    <tr><td>RxEnv naming</td><td><code>RxEnv-${DATE_TAG}-${REV}</code></td><td><code>RxEnv-Trunk-VNET-${REV}</code></td></tr>
+    <tr><td><code>GPUBASE</code></td><td><code>.../GPU/BXS-32-1024-MC</code></td><td><code>.../GPU/DXS-48-1536-MC</code></td></tr>
+    <tr><td><code>MASTER_RTL_RTVRAM</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_RTL</code></td><td><code>.../SEC_IP/MASTER_RTL_FOR_RELEASE</code></td></tr>
+    <tr><td><code>MASTER_RTL_SEC</code></td><td><code>${EWS_LOCAL_REPO}/MASTER_RTL</code></td><td><code>.../SEC_IP/MASTER_CONF_RTL_IP</code></td></tr>
+  </tbody></table>
+  </div></div><div class="card section" data-id="s5" id="s5"><h2>5. Prerequisites</h2><div class="section-body">
+  <p>Before running setup scripts, apply RXEWS Makefile modifications (Section 4) and populate the RXEWS environment using the following scripts.</p>
+  </div></div><div class="card sub-card section" data-id="s5-ride" id="s5-ride"><h3><span class="tag entry">ENTRY</span> my_ride_setup</h3><div class="section-body">
+  <p>Activates the RiDE (Renesas Design Environment) shell environment.</p>
+  <pre>source /design01/shura_pd_vf/DE/shura_ride_wk22.git/src/ride/templates/ride/activate.csh</pre>
+  <p><b>Must be sourced</b> (not executed) before any RX operation.</p>
+  </div></div><div class="card sub-card section" data-id="s5-cmd" id="s5-cmd"><h3><span class="tag entry">ENTRY</span> my_cmd — Populate RXEWS (Trunk IP)</h3><div class="section-body">
+  <p>Creates and populates the RXEWS working directory for <b>Trunk IP</b> flow.</p>
+  <pre>#!/bin/sh
+set RXEWS_FOLDER = "rxews_trunk_ip_vnet_"
+
+mkdir ${RXEWS_FOLDER}
+source set_permission `pwd`/${RXEWS_FOLDER}
+rdfspop --workflow=pop_ews \
+  --module-filter=None \
+  --local-repo=/design01/shura_ipride_vf/trunk_IP/VNET \
+  --ews-dir=${PWD}/${RXEWS_FOLDER} \
+  --svn-repo=http://masl002.eda.renesas.com/svn/shura/common/shura/trunk_IP/VNET/ \
+  --pop-ip-units --use-ss-flist --is-ip-repo</pre>
+  <p>The resulting folder path becomes <code>TRUNK_IP_RXEWS_RUN_DIR_PATH</code>.</p>
+  </div></div><div class="card sub-card section" data-id="s5-common" id="s5-common"><h3><span class="tag entry">ENTRY</span> my_cmd_for_common — Populate RXEWS (Common IP)</h3><div class="section-body">
+  <p>Creates and populates the RXEWS working directory for <b>Common IP</b> flow.</p>
+  <pre>#!/bin/sh
+set RXEWS_FOLDER = "rxews_trunk_vnet_wk_"
+
+mkdir ${RXEWS_FOLDER}
+source set_permission `pwd`/${RXEWS_FOLDER}
+rdfspop --workflow=pop_ews \
+  --module-filter=None \
+  --local-repo=/design01/shura_ipride_vf/99_users/phongngo/trunk/VNET \
+  --ews-dir=${PWD}/${RXEWS_FOLDER} \
+  --svn-repo=http://masl002.eda.renesas.com/svn/shura/common/shura/trunk/VNET \
+  --pop-ip-units --use-ss-flist</pre>
+  <p>Note: <code>--is-ip-repo</code> is <b>not</b> used. Resulting path becomes <code>COMMON_RXEWS_RUN_DIR_PATH</code>.</p>
+  </div></div><div class="card sub-card section" data-id="s5-perm" id="s5-perm"><h3><span class="tag entry">ENTRY</span> set_permission</h3><div class="section-body">
+  <p>Sets correct file/directory permissions. Called by <code>my_cmd</code> and <code>my_cmd_for_common</code>.</p>
+  <pre>source set_permission /path/to/rxews_folder</pre>
+  </div></div><div class="card section" data-id="s6" id="s6"><h2>6. Setup Scripts</h2><div class="section-body">
+  <p><b>Recommended execution order:</b></p>
+  <ol>
+    <li><code>general_setup.bash</code> — Generate run + report scripts</li>
+    <li><code>auto_setup.bash</code> — Generate automation + queue scripts</li>
+    <li><code>server_setup.bash</code> — Generate dashboard + ticket panel server</li>
+  </ol>
+  </div></div><div class="card sub-card section" data-id="s6-general" id="s6-general"><h3>general_setup.bash</h3><div class="section-body">
+  <h4>What it calls:</h4>
+  <pre>make setup_run_cmd RX_AUTO_ROOT="${RX_AUTO_ROOT}" RXEWS_RUN_DIR_PATH="${TRUNK_IP_RXEWS_RUN_DIR_PATH}"
+make setup_run_cmd RX_AUTO_ROOT="${RX_AUTO_ROOT}" RXEWS_RUN_DIR_PATH="${COMMON_RXEWS_RUN_DIR_PATH}" RUN_TYPE="${COMMON_RUN_TYPE}"
+make setup_check_rp_cmd RX_AUTO_ROOT="${RX_AUTO_ROOT}"</pre>
+  <h4>What it generates:</h4>
+  <table>
+    <tbody><tr><th>Target</th><th>Generated Script</th></tr>
+    <tr><td>setup_run_cmd (TrunkIP)</td><td><code>01_rx_run_ip_unit.bash</code> + submit lists</td></tr>
+    <tr><td>setup_run_cmd (Trunk)</td><td><code>02_rx_run_common_ip_unit.bash</code></td></tr>
+    <tr><td>setup_check_rp_cmd</td><td><code>check_report_cmd.bash</code>, <code>all_report_check.bash</code></td></tr>
+  </tbody></table>
+  </div></div><div class="card sub-card section" data-id="s6-auto" id="s6-auto"><h3>auto_setup.bash</h3><div class="section-body">
+  <h4>What it calls:</h4>
+  <pre>make setup_for_auto RX_AUTO_ROOT="${RX_AUTO_ROOT}" RXEWS_RUN_DIR_PATH="${TRUNK_IP_RXEWS_RUN_DIR_PATH}"
+sleep 3
+make setup_for_auto RX_AUTO_ROOT="${RX_AUTO_ROOT}" RXEWS_RUN_DIR_PATH="${COMMON_RXEWS_RUN_DIR_PATH}" RUN_TYPE="${COMMON_RUN_TYPE}"</pre>
+  <h4>What it generates:</h4>
+  <table>
+    <tbody><tr><th>Target</th><th>Generated Scripts</th></tr>
+    <tr><td>setup_for_auto (TrunkIP)</td><td><code>01_queue_ctrl</code>, <code>check_trunk_ip</code>, <code>01_go_rx_auto</code>, <code>01_rx_run_ip_unit</code>, scheduler, mapping</td></tr>
+    <tr><td>setup_for_auto (Trunk)</td><td><code>02_queue_ctrl</code>, <code>check_trunk_common</code>, <code>02_go_rx_auto</code>, <code>02_rx_run_common_ip_unit</code>, scheduler, mapping</td></tr>
+  </tbody></table>
+  <p>Note: <code>setup_for_auto</code> internally calls <code>setup_run_cmd</code> + <code>setup_for_mapping</code>.</p>
+  </div></div><div class="card sub-card section" data-id="s6-server" id="s6-server"><h3>server_setup.bash</h3><div class="section-body">
+  <h4>What it calls:</h4>
+  <pre>make gen_dashboard_sv_core RX_AUTO_ROOT="${RX_AUTO_ROOT}" DASHBOARD_DB_LOCATION="${DASHBOARD_DB_LOCATION}" ENV_BASE="${TRUNK_IP_ENV_BASE}" RIDE_ENV_VER="${RIDE_ENV_VER}"
+make gen_dashboard_sv_core RX_AUTO_ROOT="${RX_AUTO_ROOT}" DASHBOARD_DB_LOCATION="${DASHBOARD_DB_LOCATION}" ENV_BASE="${COMMON_ENV_BASE}" RIDE_ENV_VER="${RIDE_ENV_VER}" RUN_TYPE="${COMMON_RUN_TYPE}"
+make gen_ticket_panel_sv_core RX_AUTO_ROOT="${RX_AUTO_ROOT}" DASHBOARD_DB_LOCATION="${DASHBOARD_DB_LOCATION}" TRUNK_IP_ENV_PATH="${TRUNK_IP_ENV_BASE}" COMMON_IP_ENV_PATH="${COMMON_ENV_BASE}"
+make gen_update_dashboard_script RX_AUTO_ROOT="${RX_AUTO_ROOT}" DASHBOARD_DB_LOCATION="${DASHBOARD_DB_LOCATION}" ENV_BASE="${TRUNK_IP_ENV_BASE}"
+make gen_update_dashboard_script RX_AUTO_ROOT="${RX_AUTO_ROOT}" DASHBOARD_DB_LOCATION="${DASHBOARD_DB_LOCATION}" ENV_BASE="${COMMON_ENV_BASE}" RUN_TYPE="${COMMON_RUN_TYPE}"
+make setup_dashboard_sv RX_AUTO_ROOT="${RX_AUTO_ROOT}" DASHBOARD_DB_LOCATION="${DASHBOARD_DB_LOCATION}"</pre>
+  <h4>What it generates:</h4>
+  <table>
+    <tbody><tr><th>Target</th><th>Output</th></tr>
+    <tr><td>gen_dashboard_sv_core</td><td>Gunicorn config + run_server (injects USER_CUSTOM_SRC)</td></tr>
+    <tr><td>gen_ticket_panel_sv_core</td><td>Ticket panel config + report_analyze script</td></tr>
+    <tr><td>gen_update_dashboard_script</td><td>DB update script + <b>run_rxqor.bash</b> (custom rxqor wrapper)</td></tr>
+    <tr><td>setup_dashboard_sv</td><td>Copies SV_GUNICORN to DASHBOARD_DB_LOCATION</td></tr>
+  </tbody></table>
+  </div></div><div class="card section" data-id="s7" id="s7"><h2>7. RX_AUTO — Templates</h2><div class="section-body">
+  <p>Template files contain <code>${VARIABLE}</code> placeholders. The Makefile uses <code>envsubst</code> to produce runtime scripts. <b>Never edit generated scripts directly</b> — always modify templates.</p>
+  </div></div><div class="card sub-card section" data-id="s7-rx-run" id="s7-rx-run"><h3><span class="tag template">TEMPLATE</span> _rx_run_core.bash</h3><div class="section-body">
+  <p>Core RX execution template. Generates the per-module run script.</p>
+  <pre>Generated → 01_rx_run_ip_unit.bash      (TrunkIP)
+Generated → 02_rx_run_common_ip_unit.bash (Trunk)</pre>
+  </div></div><div class="card sub-card section" data-id="s7-rx-auto" id="s7-rx-auto"><h3><span class="tag template">TEMPLATE</span> _rx_auto_run_core.bash</h3><div class="section-body"><p>Auto run core template used by the automation pipeline.</p></div></div><div class="card sub-card section" data-id="s7-go" id="s7-go"><h3><span class="tag template">TEMPLATE</span> _go_rx_auto_template.bash</h3><div class="section-body">
+  <p>Top-level orchestrator template. Chains: detect → queue → run.</p>
+  <pre>Generated → 01_go_rx_auto.bash (TrunkIP)
+Generated → 02_go_rx_auto.bash (Trunk)</pre>
+  </div></div><div class="card sub-card section" data-id="s7-detect-ip" id="s7-detect-ip"><h3><span class="tag template">TEMPLATE</span> _check_trunk_ip_template.bash</h3><div class="section-body"><p>Detects SVN revision changes for Trunk IP. Generated → <code>check_trunk_ip.bash</code></p></div></div><div class="card sub-card section" data-id="s7-detect-common" id="s7-detect-common"><h3><span class="tag template">TEMPLATE</span> _check_trunk_common_template.bash</h3><div class="section-body"><p>Detects SVN revision changes for Common trunk. Generated → <code>check_trunk_common.bash</code></p></div></div><div class="card sub-card section" data-id="s7-queue" id="s7-queue"><h3><span class="tag template">TEMPLATE</span> QUEUE_CTRL/_queue_ctrl_template.bash</h3><div class="section-body">
+  <p>Queue control template. Manages job queue to prevent LSF resource conflicts.</p>
+  <pre>Generated → QUEUE_CTRL/01_queue_ctrl.bash (TrunkIP)
+Generated → QUEUE_CTRL/02_queue_ctrl.bash (Trunk)</pre>
+  </div></div><div class="card sub-card section" data-id="s7-rxqor" id="s7-rxqor"><h3><span class="tag template">TEMPLATE</span> UTLs/_run_rxqor_core.bash <span class="tag entry">NEW</span></h3><div class="section-body">
+  <p>Custom rxqor wrapper template. Injects <code>USER_CUSTOM_SRC</code> path so the dashboard uses custom <code>new_rxmetrics.py</code> from USER_LIB instead of the original. No Python clone needed — uses original Python binary with injected PYTHONPATH.</p>
+  <pre>Generated → UTLs/run_rxqor.bash</pre>
+  <p>Generated by <code>make gen_update_dashboard_script</code>.</p>
+  </div></div><div class="card section" data-id="s8" id="s8"><h2>8. RX_AUTO — BIN</h2><div class="section-body"><p>Generated mapping scripts and execution binaries.</p></div></div><div class="card sub-card section" data-id="s8-bin" id="s8-bin"><h3><span class="tag generated">GENERATED</span> BIN/</h3><div class="section-body">
+  <pre>BIN/
+|-- common_ip_map.bash   &lt;- module → instance mapping (common)
+`-- normal_ip_map.bash   &lt;- module → instance mapping (normal/IP)</pre>
+  <p>Generated by <code>make setup_for_mapping</code>.</p>
+  </div></div><div class="card sub-card section" data-id="s8-binv2" id="s8-binv2"><h3>BIN_V2/</h3><div class="section-body">
+  <pre>BIN_V2/
+|-- ride_run_cmd.bash
+|-- ride_run_cmd_lmem.bash
+|-- run_tessent_rtl_drc.bash
+`-- run_tessent_rtl_drc_lmem.bash</pre>
+  <p>V2 execution binaries. Supports normal and low-memory (<code>lmem</code>) variants for RiDE run and Tessent RTL DRC.</p>
+  </div></div><div class="card section" data-id="s9" id="s9"><h2>9. RX_AUTO — Data Lists</h2><div class="section-body"><p>Static and generated data files used by the automation pipeline.</p></div></div><div class="card sub-card section" data-id="s9-common" id="s9-common"><h3>COMMON_LIST/</h3><div class="section-body">
+  <pre>COMMON_LIST/
+|-- instances_common
+|-- instances_normal
+|-- module_common        &lt;- generated by gen_submit_list
+`-- normal_module        &lt;- generated by gen_submit_list</pre>
+  </div></div><div class="card sub-card section" data-id="s9-forusers" id="s9-forusers"><h3>FOR_USERS/</h3><div class="section-body">
+  <pre>FOR_USERS/
+|-- all_module.txt
+|-- h169_module.dat
+|-- lmem_module.dat
+|-- skip_fbist_drc.dat
+`-- skip_rxtessent.dat</pre>
+  <p>User-configurable data files for module filtering and skip lists.</p>
+  </div></div><div class="card sub-card section" data-id="s9-runlist" id="s9-runlist"><h3>RUN_LIST/</h3><div class="section-body"><p>Runtime storage. Files timestamped with <code>LIST_PREFIX</code> (YYYY_MM_DD_HHMMSS).</p></div></div><div class="card section" data-id="s10" id="s10"><h2>10. RX_AUTO — UTLs (Utilities)</h2><div class="section-body"><p>Utility modules: scheduling, extraction, reporting, dashboard serving, and custom rxqor.</p></div></div><div class="card sub-card section" data-id="s10-auto-process" id="s10-auto-process"><h3>UTLs/AUTO_PROCESS/</h3><div class="section-body">
+  <pre>AUTO_PROCESS/
+`-- AUTO_PROCESS_CORE/
+    |-- _run_process_core   &lt;- template
+    `-- scheduler.py        &lt;- Python scheduler</pre>
+  <p>Periodic process scheduler. Template generates <code>run_process</code> per mode (Trunk_IP / Common_IP).</p>
+  </div></div><div class="card sub-card section" data-id="s10-extract" id="s10-extract"><h3>UTLs/Extract_MMS/</h3><div class="section-body">
+  <pre>Extract_MMS/
+|-- mms_net_check.py
+`-- run_extract.bash</pre>
+  <p>Extracts module lists from MMS. Called by <code>make gen_submit_list</code>.</p>
+  </div></div><div class="card sub-card section" data-id="s10-redmine" id="s10-redmine"><h3>UTLs/REDMINE_ITC/</h3><div class="section-body">
+  <pre>REDMINE_ITC/
+|-- ANALYZE_DATA/
+|-- Extract_MMS/
+|   |-- mms_net_check.py
+|   `-- run_extract.bash
+|-- RUN_DATA/
+|-- redmine_auto_report/          &lt;- v1
+|   |-- _all_report_check_core.bash
+|   |-- _check_report_cmd_core.bash
+|   |-- _report_analyze_core.bash
+|   |-- analyze_report.py
+|   |-- ignored_ticket
+|   |-- itc_redmine.bash
+|   |-- make_redmine_user_database.bash
+|   |-- mms_net_check.py
+|   |-- report_analyze.bash
+|   |-- run_extract.bash
+|   |-- user_info.dat
+|   `-- user_info.json
+|-- redmine_auto_report_v2/       &lt;- v2 (active)
+|   |-- _all_report_check_core.bash
+|   |-- _check_report_cmd_core.bash
+|   |-- _report_analyze_core.bash
+|   |-- all_report_check.bash     &lt;- generated
+|   |-- analyze_report.py &lt;- core analyze for judgement and create ticket
+|   |-- itc_redmine.bash
+|   |-- make_redmine_user_database.bash
+|   |-- mms_net_check.py
+|   |-- report_analyze.bash
+|   |-- run_extract.bash
+|   |-- user_info.dat
+|   `-- user_info.json
+`-- redmine_lib/                  &lt;- shared API library
+    |-- README.md
+    |-- __init__.py
+    |-- action_queue.py
+    |-- itc_redmine.bash
+    |-- itc_redmine.py
+    `-- redmine_helpers.py</pre>
+  </div></div><div class="card sub-card section" data-id="s10-sv" id="s10-sv"><h3>UTLs/SV_GUNICORN/</h3><div class="section-body">
+  <pre>SV_GUNICORN/
+|-- Trunk_IP/
+|   |-- _gunicorn.conf.core.py    &lt;- template
+|   |-- _run_server_core           &lt;- template
+|   |-- get_jobs_status.py
+|   |-- scheduler.py
+|   `-- static/
+|-- Common_IP/                     &lt;- same structure as Trunk_IP
+|-- TICKET_PANEL/
+|   |-- _gunicorn.conf.core.py
+|   |-- _run_server_core
+|   |-- action_worker.py
+|   |-- analyze_snapshot.py
+|   |-- data/
+|   |-- get_csv.bash
+|   |-- gunicorn.conf.py           &lt;- generated
+|   |-- itc_redmine.bash
+|   |-- queue_db.py
+|   |-- report_analyze.bash
+|   |-- run_server                  &lt;- generated
+|   |-- sync_issues.py
+|   |-- templates/index.html
+|   `-- ticket_panel.py
+`-- USER_LIB/                     &lt;- custom rxmetrics + dashboard app
+    |-- __init__.py
+    |-- new_rxmetrics.py
+    |-- old_rxmetrics.py
+    `-- templates/dashboard/       &lt;- see USER_LIB section below</pre>
+
+  <h4>Server Startup Flow</h4>
+  <p>Each server (Trunk_IP / Common_IP) uses <code>_run_server_core</code> template to generate <code>run_server</code>. The startup sequence is:</p>
+  <pre>run_server (generated from _run_server_core)
+  |-- 1. Set environment variables (JSON_BASE, ENV_BASE, etc.)
+  |-- 2. Start scheduler.py in background (periodic updates)
+  `-- 3. Start Gunicorn with app7:app
+       `-- On Gunicorn exit: kill scheduler</pre>
+
+  <h4>Environment Variables Set by run_server</h4>
+  <table>
+    <tbody><tr><th>Variable</th><th>Source</th><th>Purpose</th></tr>
+    <tr><td><code>JSON_BASE</code></td><td><code>${JSON_BASE}</code></td><td>Report JSON database path</td></tr>
+    <tr><td><code>ENV_BASE</code></td><td><code>${ENV_BASE}</code></td><td>RxEnv base path</td></tr>
+    <tr><td><code>CHECK_RP_CMD</code></td><td><code>${CHECK_RP_CMD}</code></td><td>Report check command script</td></tr>
+    <tr><td><code>RX_AUTO_DIR</code></td><td><code>${RX_AUTO_ROOT}/RX_AUTO</code></td><td>RX_AUTO root</td></tr>
+    <tr><td><code>RIDE_VERSION</code></td><td><code>${RIDE_ENV_VER}</code></td><td>RiDE version tag</td></tr>
+    <tr><td><code>SCRIPT_PATH</code></td><td><code>${UPDATE_DB_SCRIPT_PATH}</code></td><td>Dashboard DB update script</td></tr>
+    <tr><td><code>CREATE_TICKET_SCRIPT</code></td><td><code>${CHECK_ALL_RPT_SCRIPT}</code></td><td>Report check all script</td></tr>
+    <tr><td><code>JOB_SCHEDULES</code></td><td><code>${UPDATE_DB_SCHEDULES}</code></td><td>Scheduled update times</td></tr>
+    <tr><td><code>EX_MODULE_LIST</code></td><td><code>${EXTRACT_MODULE_LIST_PATH}</code></td><td>Module list for submit check</td></tr>
+    <tr><td><code>EX_GATE_RELEASE_MODULE_LIST</code></td><td><code>${EXTRACT_GATE_RELEASE_MODULE_LIST_PATH}</code></td><td>Gate release module list</td></tr>
+    <tr><td><code>CHECK_KW</code></td><td><code>${RXEWS_RUN_DIR_PATH}</code></td><td>RXEWS run dir for job status</td></tr>
+    <tr><td><code>SV_ROOT_DIR</code></td><td><code>${RUN_SV_ROOT_DIR}</code></td><td>Server root directory</td></tr>
+  </tbody></table>
+  </div></div><div class="card sub-card section" data-id="s10-userlib" id="s10-userlib"><h3>UTLs/SV_GUNICORN/USER_LIB/</h3><div class="section-body">
+
+  <h4>Directory Structure</h4>
+  <pre>USER_LIB/
+|-- __init__.py
+|-- new_rxmetrics.py              &lt;- custom rxqor implementation
+|-- old_rxmetrics.py              &lt;- backup of original rxmetrics
+`-- templates/
+    `-- dashboard/
+        |-- app/
+        |   |-- app7.py           &lt;- main Flask dashboard app
+        |   |-- index.html
+        |   `-- templates/
+        |       |-- ansi_viewer.html
+        |       |-- csv_to_table.html &lt;- custom html to show module revision
+        |       |-- home_page.html &lt;- custom html to show the path for each rxapp summary page
+        |       |-- index.html
+        |       |-- module.html
+        |       |-- module_details.html
+        |       |-- module_run_status.html &lt;- custom html to show jobs status
+        |       |-- module_submit_status.html &lt;- custom html to show Submitted/NY modules
+        |       |-- module_summary.html
+        |       |-- rdfs_dashboard.html
+        |       |-- rtl_lint_module.html
+        |       |-- rtl_lint_user_module.html
+        |       |-- rxfm_module.html
+        |       |-- rxlecg2g_module.html
+        |       |-- summary.html &lt;- from RiDE env with modification to add: return home, update button,...
+        |       |-- summary.py
+        |       |-- tcm_details.html
+        |       `-- tcm_module.html
+        `-- errorCode/
+            |-- dashboardErrorCode.xlsx
+            |-- errorcode.json
+            |-- old_jasper_fail_conditions.txt
+            `-- parse_error_code.py</pre>
+
+  <h4>Overview</h4>
+  <p><code>app7.py</code> is the main Flask dashboard application. It is called by Gunicorn via the generated <code>run_server</code> script (<code>gunicorn app7:app</code>). The server provides a web UI for viewing RX verification results across all supported tools and workflows.</p>
+
+  <h4>Supported RX Applications</h4>
+  <table>
+    <tbody><tr><th>Key</th><th>Tool</th><th>Workflow</th><th>JSON Path</th></tr>
+    <tr><td><code>rxvcs_rtl_elab</code></td><td>rxvcs</td><td>rtl_elab</td><td>RXVCS/Design.json</td></tr>
+    <tr><td><code>rxstylus_rtl_elab</code></td><td>rxstylus</td><td>rtl_elab</td><td>RXSTYLUS/Design.json</td></tr>
+    <tr><td><code>rxstylus_synthesis</code></td><td>rxstylus</td><td>synthesis</td><td>RXSTYLUS_SYNTHESIS/Design.json</td></tr>
+    <tr><td><code>rxfc_synthesis</code></td><td>rxfc</td><td>synthesis</td><td>RXFC/Design.json</td></tr>
+    <tr><td><code>rxrtla_rtl_elab</code></td><td>rxrtla</td><td>rtl_elab</td><td>RXRTLA/Design.json</td></tr>
+    <tr><td><code>rxtessent_dft_drc</code></td><td>rxtessent</td><td>dft_drc</td><td>RXTESSENT/Design.json</td></tr>
+    <tr><td><code>rxtessent_fbist_drc</code></td><td>rxtessent</td><td>fbist_drc</td><td>RXTESSENT_FBIST/Design.json</td></tr>
+    <tr><td><code>tcm_sdc_lint</code></td><td>tcm</td><td>sdc_lint</td><td>TCM/Design.json</td></tr>
+    <tr><td><code>vcst_cdc</code></td><td>vcst</td><td>cdc</td><td>VCST_CDC/Design.json</td></tr>
+    <tr><td><code>vcst_rtl_lint</code></td><td>vcst</td><td>rtl_lint</td><td>VCST_RTL_LINT/Design.json</td></tr>
+    <tr><td><code>rxcelium_rtl_elab</code></td><td>rxcelium</td><td>rtl_elab</td><td>RXCELIUM_RTL_ELAB/Design.json</td></tr>
+  </tbody></table>
+
+  <h4>Dashboard Routes</h4>
+  <table>
+    <tbody><tr><th>Route</th><th>Template</th><th>Purpose</th></tr>
+    <tr><td><code>/</code></td><td>home_page.html</td><td>Home page — all RX apps with submit counts</td></tr>
+    <tr><td><code>/summary/&lt;rx_app&gt;</code></td><td>summary.html</td><td>Per-tool summary (reads Design.json)</td></tr>
+    <tr><td><code>/module_summary/&lt;module_name&gt;</code></td><td>module_summary.html</td><td>Per-module live summary (calls <code>new_rxqor --local-report</code>)</td></tr>
+    <tr><td><code>/submit_status/&lt;rxapp&gt;</code></td><td>module_submit_status.html</td><td>Module submit status (Submitted/NY)</td></tr>
+    <tr><td><code>/run_job_status</code></td><td>module_run_status.html</td><td>LSF job status (calls <code>get_jobs_status.py</code>)</td></tr>
+    <tr><td><code>/update_table/&lt;csv_type&gt;</code></td><td>csv_to_table.html</td><td>CSV data viewer (ip_bom / common)</td></tr>
+    <tr><td><code>/rtl_lint_module</code></td><td>rtl_lint_module.html</td><td>RTL lint details per module</td></tr>
+    <tr><td><code>/rtl_lint_user_module</code></td><td>rtl_lint_user_module.html</td><td>RTL lint user module (from module_summary)</td></tr>
+    <tr><td><code>/run_dir_Summary</code></td><td>index.html / tcm_details.html</td><td>Run directory summary</td></tr>
+    <tr><td><code>/module_level_details</code></td><td>module_details.html</td><td>Module-level detail view</td></tr>
+    <tr><td><code>/file_viewer</code></td><td>—</td><td>Raw file viewer (text/CSV/binary)</td></tr>
+    <tr><td><code>/file_viewer_ansi</code></td><td>ansi_viewer.html</td><td>ANSI-colored log viewer</td></tr>
+  </tbody></table>
+
+  <h4>API Endpoints</h4>
+  <table>
+    <tbody><tr><th>Endpoint</th><th>Method</th><th>Purpose</th></tr>
+    <tr><td><code>/api/start</code></td><td>POST</td><td>Start update job (single-job with heartbeat lease)</td></tr>
+    <tr><td><code>/api/status</code></td><td>GET</td><td>Poll job status + tail output log</td></tr>
+    <tr><td><code>/api/heartbeat</code></td><td>POST</td><td>Owner heartbeat (prevents lease timeout)</td></tr>
+    <tr><td><code>/api/modules</code></td><td>GET</td><td>Module autocomplete search (<code>?q=keyword</code>)</td></tr>
+    <tr><td><code>/api/design</code></td><td>GET</td><td>Raw Design.json data</td></tr>
+    <tr><td><code>/api/get_update_time</code></td><td>GET</td><td>Last update timestamp</td></tr>
+    <tr><td><code>/data/&lt;csv_type&gt;</code></td><td>GET</td><td>CSV data (ip_bom / common_module_status)</td></tr>
+    <tr><td><code>/data/get_submit_status/&lt;rxapp&gt;</code></td><td>GET</td><td>Submit status JSON</td></tr>
+    <tr><td><code>/data/run_jobs_status_db</code></td><td>GET</td><td>MODULE_STATUS.json</td></tr>
+    <tr><td><code>/get_update_dashboard_status</code></td><td>GET</td><td>Check if update lock file exists</td></tr>
+    <tr><td><code>/healthz</code></td><td>GET</td><td>Health check</td></tr>
+  </tbody></table>
+
+  <h4>Job System (Update Dashboard Data)</h4>
+  <p>The dashboard supports <b>single-job execution</b> with heartbeat-based ownership:</p>
+  <pre>UI clicks "Update" for a tool/workflow
+  |
+  POST /api/start?tool=rxvcs&amp;workflow=rtl_elab&amp;reports_dir=...
+  |
+  Server: spawn Process(job_worker)
+    |-- Build cmd: python3 -u new_rxqor --local-report --tool=... --ws-dir=... --reports-dir=...
+    |-- Run subprocess with SIGTERM/SIGKILL on timeout
+    |-- Write output to /tmp/rx_update_jobs/&lt;job_id&gt;/output.log
+    `-- Write status to /tmp/rx_update_jobs/&lt;job_id&gt;/status.json
+  |
+  UI polls GET /api/status every few seconds (shows live log)
+  UI sends POST /api/heartbeat every HEARTBEAT_MS (default 5s)
+  |
+  If no heartbeat &gt; LEASE_SECONDS (120s) -&gt; auto-cancel (owner disconnected)
+  If runtime &gt; MAX_JOB_SECONDS (3600s) -&gt; timeout kill</pre>
+
+  <table>
+    <tbody><tr><th>Parameter</th><th>Default</th><th>Env Override</th></tr>
+    <tr><td>Max job time</td><td>3600s (1 hour)</td><td><code>JOB_TIMEOUT_SECONDS</code></td></tr>
+    <tr><td>Heartbeat lease</td><td>120s</td><td><code>JOB_LEASE_SECONDS</code></td></tr>
+    <tr><td>Heartbeat interval</td><td>5000ms</td><td><code>JOB_HEARTBEAT_MS</code></td></tr>
+    <tr><td>Log tail size</td><td>200KB</td><td><code>LOG_TAIL_BYTES</code></td></tr>
+    <tr><td>Job state dir</td><td>/tmp/rx_update_jobs</td><td><code>JOB_STATE_DIR</code></td></tr>
+  </tbody></table>
+
+  <h4>Module Summary Flow</h4>
+  <p>When user views <code>/module_summary/&lt;module_name&gt;</code>:</p>
+  <pre>1. Create temp dir: JSON_BASE/M_TEMP/&lt;module_name&gt;/
+2. Symlink module source: ENV_BASE/&lt;module_name&gt; -&gt; temp dir
+3. Run: new_rxqor --local-report --ws-dir=&lt;symlink&gt; --reports-dir=&lt;temp&gt;/M_RP
+4. Read generated Design.json
+5. Render module_summary.html
+6. Cleanup symlink</pre>
+
+  <h4>Custom rxqor Integration</h4>
+  <p><code>new_rxmetrics.py</code> provides the custom <code>rxqor</code> command used by:</p>
+  <ul>
+    <li><code>/module_summary/</code> route — calls <code>new_rxqor --local-report</code> per module</li>
+    <li><code>/api/start</code> job worker — calls <code>new_rxqor --local-report --tool=... --workflow=...</code> for batch updates</li>
+    <li><code>run_rxqor.bash</code> (generated wrapper) — used by scheduled DB updates via <code>scheduler.py</code></li>
+  </ul>
+  <p>The wrapper injects <code>USER_CUSTOM_SRC</code> into <code>PYTHONPATH</code> so Python resolves <code>new_rxmetrics</code> first. No Python clone needed.</p>
+
+  <h4>Error Code System</h4>
+  <pre>errorCode/
+|-- dashboardErrorCode.xlsx    &lt;- master error code definitions
+|-- errorcode.json             &lt;- parsed error codes (used by app)
+|-- old_jasper_fail_conditions.txt  &lt;- legacy fail conditions
+`-- parse_error_code.py        &lt;- xlsx -&gt; json parser</pre>
+
+  <h4>Jinja2 Templates</h4>
+  <table>
+    <tbody><tr><th>Template</th><th>Used By</th></tr>
+    <tr><td><code>home_page.html</code></td><td><code>/</code> — main landing page</td></tr>
+    <tr><td><code>summary.html</code></td><td><code>/summary/&lt;rx_app&gt;</code> — tool summary</td></tr>
+    <tr><td><code>module_summary.html</code></td><td><code>/module_summary/&lt;name&gt;</code> — single module</td></tr>
+    <tr><td><code>module_details.html</code></td><td><code>/module_level_details</code></td></tr>
+    <tr><td><code>module_run_status.html</code></td><td><code>/run_job_status</code></td></tr>
+    <tr><td><code>module_submit_status.html</code></td><td><code>/submit_status/&lt;rxapp&gt;</code></td></tr>
+    <tr><td><code>rtl_lint_module.html</code></td><td>RTL lint (rxvcs/rxstylus/rxrtla/vcst/rxcelium/rxfc)</td></tr>
+    <tr><td><code>rtl_lint_user_module.html</code></td><td>RTL lint from module_summary context</td></tr>
+    <tr><td><code>rxlecg2g_module.html</code></td><td>rxlec gate-to-gate comparison</td></tr>
+    <tr><td><code>rxfm_module.html</code></td><td>rxfm tool view</td></tr>
+    <tr><td><code>tcm_details.html</code></td><td>TCM sdc_lint details</td></tr>
+    <tr><td><code>csv_to_table.html</code></td><td><code>/update_table/&lt;csv_type&gt;</code></td></tr>
+    <tr><td><code>ansi_viewer.html</code></td><td><code>/file_viewer_ansi</code></td></tr>
+    <tr><td><code>index.html</code></td><td><code>/run_dir_Summary</code> — run dir details</td></tr>
+  </tbody></table>
+
+  </div></div><div class="card sub-card section" data-id="s10-app7-extend" id="s10-app7-extend"><h3>How to Extend app7.py</h3><div class="section-body">
+
+  <p>This section describes how to add a new RX application (tool/workflow), route, or HTML template to the dashboard.</p>
+
+  <h4>Step 1: Register New RX App</h4>
+  <p>Three places must be updated:</p>
+
+  <p><b>1a. Add to <code>get_home_items()</code></b> — this controls the home page cards:</p>
+  <pre># In app7.py -&gt; get_home_items()
+# Add a new entry to the list:
+{"key": "rxnewtool_new_wf",
+ "title": "rxnewtool new_wf",
+ "desc": "Summary for rxnewtool.",
+ "tool": "rxnewtool",
+ "workflow": "new_wf",
+ "json_len": 0,
+ "json_total": 0},</pre>
+  <p>Fields:</p>
+  <table>
+    <tbody><tr><th>Field</th><th>Purpose</th><th>Convention</th></tr>
+    <tr><td><code>key</code></td><td>Unique ID used in routes and config</td><td><code>{tool}_{workflow}</code></td></tr>
+    <tr><td><code>title</code></td><td>Display name on home page card</td><td><code>{tool} {workflow}</code></td></tr>
+    <tr><td><code>desc</code></td><td>Card description text</td><td><code>Summary for {tool}.</code></td></tr>
+    <tr><td><code>tool</code></td><td>RiDE tool name (matches Design.json structure)</td><td>lowercase</td></tr>
+    <tr><td><code>workflow</code></td><td>RiDE workflow name (matches Design.json structure)</td><td>lowercase with underscore</td></tr>
+    <tr><td><code>json_len</code></td><td>Submitted module count (auto-filled at runtime)</td><td>Always <code>0</code></td></tr>
+    <tr><td><code>json_total</code></td><td>Total module count (auto-filled at runtime)</td><td>Always <code>0</code></td></tr>
+  </tbody></table>
+
+  <p><b>1b. Add JSON path mapping in <code>init_html_json()</code></b>:</p>
+  <pre># In app7.py -&gt; init_html_json()
+# Add the config mapping (key must match get_home_items key):
+app.config["rxnewtool_new_wf"] = "RXNEWTOOL_NEW_WF/Design.json"</pre>
+  <p>Convention: folder name is <code>{TOOL}_{WORKFLOW}/Design.json</code> in uppercase.</p>
+
+  <p><b>1c. Create the JSON output folder</b> in your report DB location:</p>
+  <pre>mkdir -p ${DASHBOARD_DB_LOCATION}/${REPORT_DB_FOLDER}/RXNEWTOOL_NEW_WF</pre>
+  <p>The <code>new_rxqor --local-report</code> command will generate <code>Design.json</code> in this folder when the update job runs.</p>
+
+  <h4>Step 2: Verify Data Flow</h4>
+  <p>After registering, the existing code handles everything automatically:</p>
+  <pre>Home page (/)
+  |-- get_home_items() returns new entry
+  |-- check_submitted_module("rxnewtool_new_wf", "rxnewtool", "new_wf")
+  |     |-- Reads Design.json from RXNEWTOOL_NEW_WF/Design.json
+  |     |-- Counts submitted modules
+  |     `-- Writes submit status JSON to static/
+  `-- Renders card with submitted/total count
+
+Summary page (/summary/rxnewtool_new_wf)
+  |-- Reads app.config["rxnewtool_new_wf"] -&gt; RXNEWTOOL_NEW_WF/Design.json
+  |-- Loads Design.json
+  `-- Renders summary.html with tool="rxnewtool", workflow="new_wf"
+
+Submit status (/submit_status/rxnewtool_new_wf)
+  `-- Reads static/rxnewtool_new_wf_submit_status.json
+
+Update job (POST /api/start?tool=rxnewtool&amp;workflow=new_wf&amp;reports_dir=...)
+  |-- build_update_cmd() generates:
+  |     python3 -u new_rxqor --local-report --tool=rxnewtool --workflow=new_wf ...
+  `-- Writes output to RXNEWTOOL_NEW_WF/Design.json</pre>
+
+  <h4>Step 3: Add New Route (Optional)</h4>
+  <p>If your new tool needs a <b>custom view</b> beyond the standard summary/lint templates:</p>
+
+  <p><b>3a. Add route in <code>app7.py</code></b>:</p>
+  <pre># Pattern: follow existing route conventions
+@app.route('/newtool_custom_view')
+def newtool_custom_view():
+    # 1. Get query parameters
+    module = request.args.get('module')
+    directory = request.args.get('directory')
+    tool = request.args.get('tool')
+    workflow = request.args.get('workflow')
+    project_name = request.args.get('project').strip()
+    unit_type = request.args.get('unit').strip()
+
+    # 2. Load Design.json
+    json_base = app.config.get("JSON_BASE", "")
+    if not json_base:
+        return "Server misconfigured: JSON_BASE not set", 500
+
+    json_file_path = os.path.join(json_base, app.config[f"{tool}_{workflow}"])
+    try:
+        if os.path.exists(json_file_path):
+            with open(json_file_path, "r") as f:
+                design_data = json.load(f)
+        else:
+            design_data = None
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print("Error while parsing json file")
+
+    # 3. Render template with data
+    base_url = request.host_url.rstrip("/")
+    return render_template(
+        'newtool_custom.html',
+        design=design_data[project_name][unit_type][tool][workflow][directory],
+        run_dir=directory,
+        workflow=workflow,
+        tool=tool,
+        base_url=base_url,
+        project_name=project_name,
+        unit_type=unit_type
+    )</pre>
+
+  <p><b>3b. Route naming conventions</b>:</p>
+  <table>
+    <tbody><tr><th>Route Type</th><th>URL Pattern</th><th>Example</th></tr>
+    <tr><td>Tool summary</td><td><code>/summary/&lt;rx_app&gt;</code></td><td><code>/summary/rxnewtool_new_wf</code></td></tr>
+    <tr><td>Module summary</td><td><code>/module_summary/&lt;module_name&gt;</code></td><td><code>/module_summary/u7800hmod0top0</code></td></tr>
+    <tr><td>Submit status</td><td><code>/submit_status/&lt;rxapp&gt;</code></td><td><code>/submit_status/rxnewtool_new_wf</code></td></tr>
+    <tr><td>Module lint/detail</td><td><code>/rtl_lint_module?tool=...&amp;workflow=...</code></td><td>Query params</td></tr>
+    <tr><td>Custom view</td><td><code>/newtool_custom_view?tool=...&amp;...</code></td><td>Query params</td></tr>
+    <tr><td>File viewer</td><td><code>/file_viewer?file_path=...</code></td><td>Absolute path</td></tr>
+    <tr><td>Data endpoint</td><td><code>/data/&lt;type&gt;</code></td><td><code>/data/ip_bom</code></td></tr>
+  </tbody></table>
+
+  <h4>Step 4: Add New HTML Template</h4>
+  <p><b>4a. Create template file</b>:</p>
+  <pre>USER_LIB/templates/dashboard/app/templates/newtool_custom.html</pre>
+
+  <p><b>4b. Template skeleton</b> (Example):</p>
+  <pre>&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;meta charset="UTF-8"&gt;
+  &lt;title&gt;{{ tool }} {{ workflow }} - {{ run_dir }}&lt;/title&gt;
+  &lt;!-- Add your CSS here --&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;h1&gt;{{ tool }} {{ workflow }}&lt;/h1&gt;
+  &lt;p&gt;Run directory: {{ run_dir }}&lt;/p&gt;
+
+  &lt;!-- Navigation back to summary --&gt;
+  &lt;a href="{{ base_url }}/summary/{{ tool }}_{{ workflow }}"&gt;Back to Summary&lt;/a&gt;
+
+  &lt;!-- Data table from Design.json --&gt;
+  &lt;table&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Module&lt;/th&gt;
+      &lt;th&gt;Status&lt;/th&gt;
+      &lt;th&gt;Details&lt;/th&gt;
+    &lt;/tr&gt;
+    {% for module_name, module_data in design.items() %}
+    &lt;tr&gt;
+      &lt;td&gt;{{ module_name }}&lt;/td&gt;
+      &lt;td&gt;{{ module_data.get('status', 'N/A') }}&lt;/td&gt;
+      &lt;td&gt;
+        &lt;a href="{{ base_url }}/module_level_details?module_name={{ module_name }}&amp;run_dir={{ run_dir }}&amp;workflow={{ workflow }}&amp;tool={{ tool }}&amp;dir={{ run_dir }}&amp;project={{ project_name }}&amp;unit={{ unit_type }}"&gt;
+          View Details
+        &lt;/a&gt;
+      &lt;/td&gt;
+    &lt;/tr&gt;
+    {% endfor %}
+  &lt;/table&gt;
+
+  &lt;!-- File viewer link example --&gt;
+  &lt;!-- &lt;a href="{{ base_url }}/file_viewer?file_path=/path/to/log"&gt;View Log&lt;/a&gt; --&gt;
+  &lt;!-- &lt;a href="{{ base_url }}/file_viewer_ansi?file_path=/path/to/ansi.log"&gt;View ANSI Log&lt;/a&gt; --&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;</pre>
+
+  <p><b>4c. Common Jinja2 variables available in templates</b>:</p>
+  <table>
+    <tbody><tr><th>Variable</th><th>Type</th><th>Source</th></tr>
+    <tr><td><code>design</code></td><td>dict</td><td>Design.json data (filtered by project/unit/tool/workflow/dir)</td></tr>
+    <tr><td><code>design_data</code></td><td>dict</td><td>Full Design.json (all projects)</td></tr>
+    <tr><td><code>base_url</code></td><td>string</td><td><code>request.host_url</code> (e.g., <code>http://10.82.2.80:9090</code>)</td></tr>
+    <tr><td><code>run_dir</code></td><td>string</td><td>Run directory name</td></tr>
+    <tr><td><code>tool</code></td><td>string</td><td>Tool name (rxvcs, rxstylus, etc.)</td></tr>
+    <tr><td><code>workflow</code></td><td>string</td><td>Workflow name (rtl_elab, synthesis, etc.)</td></tr>
+    <tr><td><code>project_name</code></td><td>string</td><td>Project tag from Design.json</td></tr>
+    <tr><td><code>unit_type</code></td><td>string</td><td>IP unit type from Design.json</td></tr>
+    <tr><td><code>module_name</code></td><td>string</td><td>Module name (in module-level views)</td></tr>
+    <tr><td><code>csv_type</code></td><td>string</td><td><code>ip_bom</code> or <code>common</code> (CSV views)</td></tr>
+    <tr><td><code>ride_env_info</code></td><td>string</td><td>RiDE version (home page only)</td></tr>
+  </tbody></table>
+
+  <h4>Step 5: Add Tool-Specific Rendering Logic (Optional)</h4>
+  <p>If your tool needs special rendering (like rxlec has gate-to-gate comparison), add routing logic in <code>rtl_lint_module()</code>:</p>
+  <pre># In rtl_lint_module() route, add elif for your tool:
+if tool not in ["rxlec", "rxnewtool"]:
+    return render_template('rtl_lint_module.html', ...)
+elif tool == "rxnewtool":
+    return render_template('newtool_custom.html', ...)
+elif tool == "rxlec":
+    ...</pre>
+
+  <h4>Checklist: Add New RX App</h4>
+  <table>
+    <tbody><tr><th>#</th><th>Action</th><th>File</th><th>Required</th></tr>
+    <tr><td>1</td><td>Add entry to <code>get_home_items()</code></td><td>app7.py</td><td>Yes</td></tr>
+    <tr><td>2</td><td>Add config in <code>init_html_json()</code></td><td>app7.py</td><td>Yes</td></tr>
+    <tr><td>3</td><td>Create JSON output folder</td><td>DASHBOARD_DB_LOCATION</td><td>Yes</td></tr>
+    <tr><td>4</td><td>Add custom route</td><td>app7.py</td><td>Only if custom view needed</td></tr>
+    <tr><td>5</td><td>Create HTML template</td><td>templates/</td><td>Only if custom view needed</td></tr>
+    <tr><td>6</td><td>Add tool-specific routing</td><td>app7.py</td><td>Only if special rendering</td></tr>
+    <tr><td>7</td><td>Restart Gunicorn</td><td>run_server</td><td>Yes</td></tr>
+  </tbody></table>
+  <p>For standard tools (same structure as rxvcs/rxstylus), only steps 1-3 + 7 are needed — existing templates handle the rest automatically.</p>
+
+  <h4>Design.json Structure Reference</h4>
+  <p>The dashboard expects Design.json in this nested structure:</p>
+  <pre>{
+  "&lt;project_tag&gt;": {
+    "ip_units": {
+      "&lt;tool&gt;": {
+        "&lt;workflow&gt;": {
+          "&lt;run_dir&gt;": {
+            "&lt;module_name&gt;": {
+              "&lt;sub_dir&gt;": {
+                "module_level_details": { ... },
+                "status": "PASS/FAIL/...",
+                ...
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}</pre>
+  <p>Generated by <code>new_rxqor --local-report --tool=... --workflow=... --ws-dir=... --reports-dir=...</code></p>
+
+  </div></div><div class="card sub-card section" data-id="s10-utils" id="s10-utils"><h3>UTLs/ — Utility Scripts</h3><div class="section-body">
+  <table>
+    <tbody><tr><th>Script</th><th>Purpose</th></tr>
+    <tr><td><code>_gen_dashboard_db_core.bash</code></td><td><span class="tag template">TEMPLATE</span> Dashboard DB generation core</td></tr>
+    <tr><td><code>_run_rxqor_core.bash</code></td><td><span class="tag template">TEMPLATE</span> Custom rxqor wrapper template</td></tr>
+    <tr><td><code>run_rxqor.bash</code></td><td><span class="tag generated">GENERATED</span> Custom rxqor wrapper (injects USER_CUSTOM_SRC)</td></tr>
+    <tr><td><code>gen_module_maplist.bash</code></td><td>Generate module → master mapping list</td></tr>
+    <tr><td><code>gen_common_ip_dict.bash</code></td><td>Generate common IP dict → <code>BIN/common_ip_map.bash</code></td></tr>
+    <tr><td><code>gen_trunk_ip_dict.bash</code></td><td>Generate trunk IP dict → <code>BIN/normal_ip_map.bash</code></td></tr>
+    <tr><td><code>gen_instance_list.bash</code></td><td>Generate instance lists from module + master</td></tr>
+    <tr><td><code>split_values.bash</code></td><td>Split instance list values for processing</td></tr>
+  </tbody></table>
+  </div></div><div class="card section" data-id="s11" id="s11"><h2>11. RX_AUTO — Other Scripts</h2><div class="section-body"><p>Standalone scripts in RX_AUTO root.</p></div></div><div class="card sub-card section" data-id="s11-checkrev" id="s11-checkrev"><h3>check_module_rev.bash</h3><div class="section-body"><p>Checks current module SVN revision status.</p></div></div><div class="card section" data-id="s12" id="s12"><h2>12. Makefile Targets Reference</h2><div class="section-body">
+  <table>
+    <tbody><tr><th>Target</th><th>Called By</th><th>Purpose</th></tr>
+    <tr><td><code>help</code></td><td>User</td><td>Display README.md</td></tr>
+    <tr><td><code>setup_run_cmd</code></td><td>general_setup</td><td>Generate RX run scripts</td></tr>
+    <tr><td><code>setup_for_auto</code></td><td>auto_setup</td><td>Generate full auto pipeline</td></tr>
+    <tr><td><code>setup_check_rp_cmd</code></td><td>general_setup</td><td>Generate report check commands</td></tr>
+    <tr><td><code>all_setup_for_run</code></td><td>User</td><td>Shortcut: run + auto + report</td></tr>
+    <tr><td><code>gen_dashboard_sv_core</code></td><td>server_setup</td><td>Generate Gunicorn config (injects USER_CUSTOM_SRC)</td></tr>
+    <tr><td><code>gen_ticket_panel_sv_core</code></td><td>server_setup</td><td>Generate ticket panel + report_analyze</td></tr>
+    <tr><td><code>gen_update_dashboard_script</code></td><td>server_setup</td><td>Generate DB update script + run_rxqor.bash</td></tr>
+    <tr><td><code>setup_dashboard_sv</code></td><td>server_setup</td><td>Copy SV_GUNICORN to DB location</td></tr>
+    <tr><td><code>gen_submit_list</code></td><td>setup_run_cmd</td><td>Extract + split module lists</td></tr>
+    <tr><td><code>setup_for_mapping</code></td><td>setup_for_auto</td><td>Generate BIN/ mapping + instances</td></tr>
+  </tbody></table>
+  </div></div><div class="card section" data-id="s13" id="s13"><h2>13. Execution Flow</h2><div class="section-body">
+  <pre>+--------------------------------------------------+
+| 1. Prerequisites                                 |
+|    source my_ride_setup                          |
+|    ./my_cmd  OR  ./my_cmd_for_common             |
+|    Apply RXEWS Makefile modifications (Sec 4)    |
++--------------------------+-----------------------+
+                           v
++--------------------------------------------------+
+| 2. Setup Phase                                   |
+|    ./general_setup.bash  -&gt; run + report scripts |
+|    ./auto_setup.bash     -&gt; auto + queue scripts |
+|    ./server_setup.bash   -&gt; dashboard + ticket   |
+|                             + run_rxqor.bash     |
++--------------------------+-----------------------+
+                           v
++--------------------------------------------------+
+| 3. Runtime                                       |
+|    go_rx_auto (orchestrator)                     |
+|      -&gt; check_trunk_* (detect SVN changes)       |
+|      -&gt; queue_ctrl (manage job queue)            |
+|      -&gt; rx_run_* (execute per module on LSF)     |
++--------------------------+-----------------------+
+                           v
++--------------------------------------------------+
+| 4. Monitoring                                    |
+|    Dashboard server (Gunicorn + custom rxqor)    |
+|    Report checking -&gt; Redmine integration        |
+|    Ticket panel (sync, analyze, queue actions)   |
++--------------------------------------------------+</pre>
+  </div></div><div class="card section" data-id="s14" id="s14"><h2>14. How to Extend</h2><div class="section-body">
+  <h3>14.1 Add New Script Flow</h3>
+  <ol>
+    <li>Create template: <code>RX_AUTO/_new_template.bash</code> with <code>${VAR}</code> placeholders</li>
+    <li>Add Makefile target with <code>envsubst</code> generation</li>
+    <li>Add <code>chmod +x</code> for generated output</li>
+    <li>Add to parent target or setup script</li>
+  </ol>
+  <h3>14.2 Add New RUN_TYPE</h3>
+  <ol>
+    <li>Define new variable set in Makefile</li>
+    <li>Add <code>ifeq ($(RUN_TYPE),NewType)</code> block</li>
+    <li>Override all relevant variables</li>
+    <li>Add corresponding calls in setup scripts</li>
+  </ol>
+  <h3>14.3 Add New Dashboard Module</h3>
+  <ol>
+    <li>Create folder under <code>SV_GUNICORN/NewModule/</code></li>
+    <li>Add <code>_gunicorn.conf.core.py</code> + <code>_run_server_core</code> templates</li>
+    <li>Add Makefile target for generation</li>
+    <li>Add call to <code>server_setup.bash</code></li>
+  </ol>
+  <h3>14.4 Add New Report Tool</h3>
+  <ol>
+    <li>Create core template under <code>REDMINE_ITC/redmine_auto_report_v2/</code></li>
+    <li>Add <code>envsubst</code> generation in Makefile</li>
+    <li>Register in <code>setup_check_rp_cmd</code> if applicable</li>
+  </ol>
+  <h3>14.5 Add Custom rxqor Module</h3>
+  <ol>
+    <li>Place custom Python module in <code>SV_GUNICORN/USER_LIB/</code></li>
+    <li><code>_run_rxqor_core.bash</code> template auto-injects <code>USER_CUSTOM_SRC</code> path</li>
+    <li>Generated <code>run_rxqor.bash</code> uses original Python + custom PYTHONPATH</li>
+    <li>No Python clone needed — other users remain unaffected</li>
+  </ol>
+  </div></div><div class="card section" data-id="s15" id="s15"><h2>15. Troubleshooting</h2><div class="section-body">
+  <table>
+    <tbody><tr><th>Error</th><th>Cause</th><th>Fix</th></tr>
+    <tr><td><code>[MAKE] 'VAR' must not be NA</code></td><td>Required variable not set</td><td>Set variable in setup script</td></tr>
+    <tr><td><code>[MAKE] 'VAR' is empty</code></td><td>Variable defined but blank</td><td>Provide a valid path value</td></tr>
+    <tr><td>Permission denied</td><td>Missing execute permission</td><td>Run <code>./set_permission</code></td></tr>
+    <tr><td>Queue stuck</td><td>Stale lock or failed job</td><td>Check <code>QUEUE_CTRL/</code>, clean locks</td></tr>
+    <tr><td>Empty module list</td><td>MMS extraction failed</td><td>Re-run <code>make gen_submit_list</code></td></tr>
+    <tr><td>Server not starting</td><td>Wrong Python or port conflict</td><td>Verify <code>LOCAL_PYTHON</code></td></tr>
+    <tr><td>SVN connection failed</td><td>Network issue</td><td>Use <code>LOCAL_SVN_PATH</code></td></tr>
+    <tr><td>Mapping empty</td><td>MASTER_MOD_LIST missing</td><td>Re-run <code>make setup_for_mapping</code></td></tr>
+    <tr><td>rdfspop fails</td><td>RiDE not activated</td><td><code>source my_ride_setup</code> first</td></tr>
+    <tr><td>rxqor import error</td><td>USER_CUSTOM_SRC path wrong</td><td>Check USER_LIB/ exists and has new_rxmetrics.py</td></tr>
+    <tr><td>Dashboard shows old data</td><td>run_rxqor.bash not generated</td><td>Re-run <code>make gen_update_dashboard_script</code></td></tr>
+  </tbody></table>
+  </div></div><div class="card section" data-id="s16" id="s16"><h2>16. Important Notes</h2><div class="section-body">
+  <ul>
+    <li><b>Never edit generated scripts</b> (01_*, 02_*) — always modify templates</li>
+    <li><b>Makefile is the single source of truth</b> for all paths and logic</li>
+    <li>After changing any template, re-run the corresponding <code>make</code> target</li>
+    <li><code>COMMON_RUN_TYPE="Trunk"</code> is a fixed value — do not change</li>
+    <li>Keep <code>LOCAL_PYTHON</code> pointing to Python 3.10+</li>
+    <li>Use <code>make help</code> to display README.md in terminal</li>
+    <li>Setup scripts run targets for <b>both modes</b> automatically</li>
+    <li><b>USER_LIB/</b> contains custom rxmetrics — <code>run_rxqor.bash</code> injects this via PYTHONPATH, no Python clone needed</li>
+    <li>Apply RXEWS Makefile modifications (Section 4) <b>before</b> running setup scripts</li>
+  </ul>
+  </div></div></div>
+<!-- END SECTIONS -->
+<!-- END SECTIONS -->
+
+
+
+</div>
+<!-- END MAIN -->
+</div>
+<!-- END WRAPPER -->
+
+
+
+
+</body></html>

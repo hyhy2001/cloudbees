@@ -328,20 +328,13 @@ function getGraph(corpus: DocItem[]): CommandGraph {
  * 4. On provider error, degrade gracefully to the BM25 hits.
  */
 /**
- * Heuristic: does the user's query need LM reasoning, or is it just a
- * greeting/simple question that can answered without chain-of-thought?
- *
- * Short queries with no technical terms → simple (no thinking needed).
- * Queries that mention bee commands, flags, or operations → reasoning.
+ * Simple greeting patterns — short queries that are clearly social chat,
+ * not CLI questions. These skip the entire RAG pipeline for a fast response.
  */
-function needsReasoning(query: string, contextHits: DocItem[]): boolean {
-  const technicalTerms = /job|node|credential|controller|auth|pipeline|plugin|config|build|deploy|agent|secret|key|token|role|user|group|permission|folder|view|queue|log|run|executor|cli|command|flag/i;
-  const greetingPattern = /^(hi|hello|hey|thanks|thank you|good morning|good afternoon|good evening|bye|goodbye|ok|okay|how are you|what'?s up|sup|yo|help|what can you do)\b/i;
-
-  if (query.length < 10 && greetingPattern.test(query.trim())) return false;
-  if (!technicalTerms.test(query)) return false;
-  if (contextHits.length === 0) return false;
-  return true;
+function isGreeting(query: string): boolean {
+  const q = query.trim();
+  if (q.length >= 20) return false;
+  return /^(hi|hello|hey|thanks|thank ?you|good morning|good afternoon|good evening|good night|goodbye|bye|ok|okay|okey|how are you|what'?s up|sup|yo|hey there|hi there|hello there|nice to meet you|howdy|greetings)\b/i.test(q);
 }
 
 export async function answer(
@@ -362,6 +355,11 @@ export async function answer(
   const directHits = searchDocs(query, corpus, limit * 3, { gate: true, softGate: false });
   // Off-topic query — nothing passed the hard gate, skip the LM call entirely.
   if (directHits.length === 0) {
+    return { source: "raw", text: "", hits: [] };
+  }
+
+  // Greeting query — no RAG needed, return instantly without LM.
+  if (isGreeting(query)) {
     return { source: "raw", text: "", hits: [] };
   }
 
@@ -433,8 +431,8 @@ export async function answer(
     process.stderr.write(`[bee ask] context hits: ${contextHits.map(h => h.id).join(", ")}\n`);
   }
 
-  // Auto-select thinking mode based on query content
-  provider.enableThinking = needsReasoning(query, contextHits);
+  // Enable thinking only for technical queries with relevant context hits
+  provider.enableThinking = contextHits.length > 0 && /job|node|credential|controller|auth|pipeline|plugin|config|build|deploy|agent|secret|key|token|role|user|group|permission|folder|view|queue|log|run|executor|cli|command|flag/i.test(query);
 
   const prompt = buildUserPrompt(query, contextHits);
 
